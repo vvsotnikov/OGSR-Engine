@@ -23,6 +23,7 @@ private:
     bool m_first_time;
     u32 m_metrics_time = 0;
     u32 m_metrics_updates = 0;
+    u32 m_metrics_samples = 0;
     double m_metrics_switch_ms = 0;
     double m_metrics_scheduled_ms = 0;
     void report_metrics();

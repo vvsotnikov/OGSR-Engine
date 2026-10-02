@@ -7,6 +7,7 @@ param(
     [ValidateRange(0, 600)][int]$DelaySeconds = 30,
     [ValidatePattern('^[a-zA-Z0-9_-]+$')][string]$SaveName = 'vladimir_quicksave',
     [string]$SeedAppData = '_appdata_profiler_',
+    [switch]$Diagnostics,
     [switch]$PrepareOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -40,6 +41,7 @@ $fs | Set-Content -LiteralPath $fsPath -Encoding ascii
 # space-free path relative to InstallRoot even when InstallRoot has spaces.
 $argsText = '-fsltx captures\' + $id + '\fsgame.ltx -alife_metrics'
 if ($Mode -eq 'whole-map') { $argsText += ' -alife_whole_map' }
+if ($Diagnostics) { $argsText += ' -alife_diagnostics' }
 $argsText += " -start server($SaveName/single/alife/load) client(localhost)"
 $metadata = [ordered]@{
     session = $id; mode = $Mode; seconds = $Seconds; memoryPercent = $MemoryPercent
@@ -49,6 +51,7 @@ $metadata = [ordered]@{
     sourceCommitAtLaunch = (& git -C $repo rev-parse HEAD)
     sourceDirtyAtLaunch = [bool](& git -C $repo status --porcelain)
     arguments = $argsText; status = 'prepared'
+    diagnostics = [bool]$Diagnostics
 }
 if (Test-Path "$InstallRoot/bin_experiment/build.json") {
     $metadata.build = Get-Content -Raw "$InstallRoot/bin_experiment/build.json" | ConvertFrom-Json
@@ -58,9 +61,16 @@ if ($PrepareOnly) { Write-Output $session.FullName; return }
 # This is the interactive game the user is about to play; capture itself stays hidden.
 $game = Start-Process -FilePath $engine -ArgumentList $argsText -WorkingDirectory $InstallRoot -PassThru
 $metadata.gamePid = $game.Id
+$metadata.status = 'waiting-for-capture'
+$metadata | ConvertTo-Json -Depth 6 | Set-Content "$($session.FullName)/session.json" -Encoding utf8
 Write-Output "Game started. Capture begins in $DelaySeconds seconds and lasts up to $Seconds seconds. Session: $($session.FullName)"
 Start-Sleep -Seconds $DelaySeconds
-if ($game.HasExited) { throw 'Game exited before capture. Its log is in the session appdata directory.' }
+if ($game.HasExited) {
+    $metadata.status = 'game-exited-before-capture'
+    $metadata.gameExitCode = $game.ExitCode
+    $metadata | ConvertTo-Json -Depth 6 | Set-Content "$($session.FullName)/session.json" -Encoding utf8
+    throw 'Game exited before capture. Its log is in the session appdata directory.'
+}
 $captureArgs = '-a 127.0.0.1 -o "' + $session.FullName + '\capture.tracy" -s ' + $Seconds + ' -m ' + $MemoryPercent
 $recorder = Start-Process -FilePath $capture -ArgumentList $captureArgs -WindowStyle Hidden -PassThru `
     -RedirectStandardOutput "$($session.FullName)/capture.stdout.log" -RedirectStandardError "$($session.FullName)/capture.stderr.log"

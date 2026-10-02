@@ -116,6 +116,9 @@ void CALifeUpdateManager::update()
 void CALifeUpdateManager::report_metrics()
 {
     ZoneScopedN("ALife/metrics");
+    // Opt-in inventory after warmup, then every 30 samples. Keep verbose
+    // diagnostics out of performance comparisons.
+    const bool inventory = (++m_metrics_samples % 30 == 10) && strstr(Core.Params, "-alife_diagnostics");
     u32 online = 0, offline = 0, living_online = 0, living_offline = 0;
     for (const auto& entry : graph().level().objects())
     {
@@ -123,7 +126,20 @@ void CALifeUpdateManager::report_metrics()
         object->m_bOnline ? ++online : ++offline;
         const auto* creature = smart_cast<const CSE_ALifeCreatureAbstract*>(object);
         if (creature && creature->fHealth > 0 && object != graph().actor())
+        {
             object->m_bOnline ? ++living_online : ++living_offline;
+            if (inventory && !object->m_bOnline)
+            {
+                const auto* monster = smart_cast<const CSE_ALifeMonsterAbstract*>(object);
+                Msg("[ALife offline] game_ms=%u level=%u id=%u section=%s name=%s parent=%u group=%u "
+                    "can_online=%u matches=%u uses_ai=%u graph=%u node=%u flags=0x%08X health=%.3f",
+                    Device.dwTimeGlobal, u32(graph().level().level_id()), u32(object->ID), object->name(),
+                    object->name_replace() ? object->name_replace() : "", u32(object->ID_Parent),
+                    monster ? u32(monster->m_group_id) : 0xffffu, u32(object->can_switch_online()),
+                    u32(object->match_configuration()), u32(object->used_ai_locations()), u32(object->m_tGraphID),
+                    object->m_tNodeID, object->m_flags.get(), creature->fHealth);
+            }
+        }
     }
     Msg("[ALife metrics] game_ms=%u level=%u whole_map=%u online=%u offline=%u living_online=%u living_offline=%u "
         "spawns=%llu removals=%llu updates=%u switch_ms=%.3f scheduled_ms=%.3f",
