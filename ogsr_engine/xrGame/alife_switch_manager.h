@@ -21,6 +21,10 @@ protected:
     float m_switch_factor;
     float m_online_distance;
     float m_offline_distance;
+    bool m_whole_map_online;
+    bool m_alife_metrics;
+    u64 m_online_spawns = 0;
+    u64 m_offline_removals = 0;
 
 private:
     OBJECT_VECTOR m_saved_chidren;

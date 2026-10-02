@@ -94,8 +94,50 @@ void CALifeUpdateManager::update_scheduled(bool init_ef)
 
 void CALifeUpdateManager::update()
 {
+    CTimer timer;
+    if (m_alife_metrics)
+        timer.Start();
     update_switch();
+    if (m_alife_metrics)
+    {
+        m_metrics_switch_ms += timer.GetElapsed_sec() * 1000.0;
+        timer.Start();
+    }
     update_scheduled(false);
+    if (m_alife_metrics)
+    {
+        m_metrics_scheduled_ms += timer.GetElapsed_sec() * 1000.0;
+        ++m_metrics_updates;
+        if (Device.dwTimeGlobal - m_metrics_time >= 1000)
+            report_metrics();
+    }
+}
+
+void CALifeUpdateManager::report_metrics()
+{
+    ZoneScopedN("ALife/metrics");
+    u32 online = 0, offline = 0, living_online = 0, living_offline = 0;
+    for (const auto& entry : graph().level().objects())
+    {
+        const auto* object = entry.second;
+        object->m_bOnline ? ++online : ++offline;
+        const auto* creature = smart_cast<const CSE_ALifeCreatureAbstract*>(object);
+        if (creature && creature->fHealth > 0 && object != graph().actor())
+            object->m_bOnline ? ++living_online : ++living_offline;
+    }
+    Msg("[ALife metrics] game_ms=%u level=%u whole_map=%u online=%u offline=%u living_online=%u living_offline=%u "
+        "spawns=%llu removals=%llu updates=%u switch_ms=%.3f scheduled_ms=%.3f",
+        Device.dwTimeGlobal, u32(graph().level().level_id()), u32(m_whole_map_online), online, offline, living_online, living_offline,
+        m_online_spawns, m_offline_removals, m_metrics_updates, m_metrics_switch_ms, m_metrics_scheduled_ms);
+    TracyPlot("ALife/online objects", int64_t(online));
+    TracyPlot("ALife/living online", int64_t(living_online));
+    TracyPlot("ALife/living offline", int64_t(living_offline));
+    TracyPlot("ALife/switch ms per sample", m_metrics_switch_ms);
+    TracyPlot("ALife/scheduled ms per sample", m_metrics_scheduled_ms);
+    m_metrics_time = Device.dwTimeGlobal;
+    m_metrics_updates = 0;
+    m_metrics_switch_ms = 0;
+    m_metrics_scheduled_ms = 0;
 }
 
 void CALifeUpdateManager::shedule_Update(u32 dt)

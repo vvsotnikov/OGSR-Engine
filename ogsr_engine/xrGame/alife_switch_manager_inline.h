@@ -13,11 +13,18 @@ IC CALifeSwitchManager::CALifeSwitchManager(xrServer* server, LPCSTR section) : 
     m_switch_distance = pSettings->r_float(section, "switch_distance");
     m_switch_factor = pSettings->r_float(section, "switch_factor");
     set_switch_distance(m_switch_distance);
+    // Launch-only experiment: retain script eligibility and parent/group handling.
+    m_whole_map_online = strstr(Core.Params, "-alife_whole_map") != nullptr;
+    m_alife_metrics = strstr(Core.Params, "-alife_metrics") != nullptr;
+    Msg("* ALife policy: %s; metrics: %s; configured switch distance: %.1f",
+        m_whole_map_online ? "whole current map" : "distance", m_alife_metrics ? "on" : "off", m_switch_distance);
 }
 
-IC float CALifeSwitchManager::online_distance() const { return (m_online_distance); }
+// Only distance gates change. The level registry still limits switching to the
+// loaded map; explicit cannot-online flags continue to take precedence.
+IC float CALifeSwitchManager::online_distance() const { return m_whole_map_online ? flt_max : m_online_distance; }
 
-IC float CALifeSwitchManager::offline_distance() const { return (m_offline_distance); }
+IC float CALifeSwitchManager::offline_distance() const { return m_whole_map_online ? flt_max : m_offline_distance; }
 
 IC float CALifeSwitchManager::switch_distance() const { return (m_switch_distance); }
 

@@ -75,6 +75,7 @@ void CALifeSwitchManager::add_online(CSE_ALifeDynamicObject* object, bool update
 #endif
 
     object->add_online(update_registries);
+    ++m_online_spawns;
     STOP_PROFILE
 }
 
@@ -105,6 +106,7 @@ void CALifeSwitchManager::remove_online(CSE_ALifeDynamicObject* object, bool upd
 #endif
 
     object->add_offline(m_saved_chidren, update_registries);
+    ++m_offline_removals;
     STOP_PROFILE
 }
 
