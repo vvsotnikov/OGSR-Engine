@@ -69,3 +69,31 @@ For a clean non-Tracy Release executable driven by private Lua test scripts, see
 See `CADENCE-2026-10-03.md` for per-stalker deadlines, actual callback intervals, zero-update detection and a separate 20-fighter combat scenario. Its separate `bin_cadence` build uses `cadence-diagnostic.patch`, `CadenceStress.inl` and `SchedulerProbe.h`. Run the population harness with `-Cadence`; add `-Combat -Counts 20` for the encounter. `Summarize-Cadence.py` analyzes the buffered evidence without loading a Tracy trace. Do not combine the cadence and older stress diagnostic patches.
 
 See `STRESS-2026-10-03.md` for the dispersed Bar population sweep and detailed CPU-scope evidence. The stress hook is deliberately a separate diagnostic build: apply `stress-diagnostic.patch`, copy `StressValidation.inl` into `ogsr_engine/xrGame/`, build, and package into `bin_stress` with matching PDB/provenance. Do not combine it with the persistence diagnostic hook or deploy it as the normal playtest binary. `Run-PopulationStress.ps1` uses fresh private Bar save copies, spawns 0–400 extra generic stalkers, records buffered frame samples, and quits. `-CaptureTrace` records an additional detailed run; exclude connected-Tracy runs from the untraced comparison. The original save is never modified.
+
+## Distance-mode group cleanup
+
+The reconciliation fixture extracts the production manager method and checks its
+cleanup contract, including virtual switch attempts that leave an eligible group
+offline. Run it with CMake/CTest from `reconciliation-test`.
+
+For runtime coverage, apply `group-cleanup-diagnostic.patch` in a diagnostic
+checkout, copy `GroupCleanupValidation.inl` into `ogsr_engine/xrGame`, build Release,
+and package it as `bin_group_cleanup` with its `build.json`, PDB and source patch.
+Use the isolated installation created by `Prepare-RegularValidation.ps1`:
+
+```powershell
+./Run-GroupCleanupValidation.ps1 -InstallRoot $install -ToolRoot $tracy
+./Run-GroupCleanupValidation.ps1 -InstallRoot $install -ToolRoot $tracy -ReloadSession <first-session>
+```
+
+This creates a native online/offline group, checks empty/far-group client-data
+cleanup, activates and deactivates its stalker, then saves. A fresh process checks
+the saved group membership, offline state and cleared data. The runner adds a
+server-only section to the isolated installation's loose `misc/items.ltx`; saves
+are private to each session. Do not use these saves in a normal installation.
+
+After saving, the probe detaches its synthetic member before quitting. Without
+that teardown, registry destruction can delete the group before the stalker's
+`on_unregister` callback accesses it. Consequently this probe validates group
+switching and persistence, not safe teardown of populated groups. That failure is
+independent of client-data cleanup and remains unresolved.

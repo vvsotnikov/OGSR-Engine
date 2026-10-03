@@ -1,5 +1,7 @@
 // Disposable distance-mode group probe; never compiled into the normal package.
 #include "alife_simulator.h"
+#include "xrserver.h"
+#include "game_sv_single.h"
 #include "alife_object_registry.h"
 #include "alife_graph_registry.h"
 #include "level_graph.h"
@@ -15,7 +17,9 @@ static void RunGroupCleanupValidation()
     static unsigned stage = 0;
     static u16 group_id = 0xffff, member_id = 0xffff;
     static ULONGLONG deadline = 0;
-    auto& sim = ai().alife();
+    auto* game = smart_cast<game_sv_Single*>(Level().Server->game);
+    R_ASSERT(game);
+    auto& sim = game->alife();
     R_ASSERT(sim.uses_distance_switching());
     string_path ids_path;
     FS.update_path(ids_path, "$app_data_root$", "group-ids.txt");
@@ -29,7 +33,7 @@ static void RunGroupCleanupValidation()
             std::ifstream input(ids_path);
             R_ASSERT(bool(input >> g >> m));
             group_id = u16(g); member_id = u16(m);
-            auto* group = smart_cast<CSE_ALifeOnlineOfflineGroup*>(sim.objects().object(group_id));
+            auto* group = smart_cast<CSE_ALifeOnlineOfflineGroup*>(ai().alife().objects().object(group_id));
             R_ASSERT(group && group->member(member_id, true));
             R_ASSERT(!group->m_bOnline && group->client_data.empty());
             Msg("[group cleanup] restored group=%u member=%u offline=1 data_empty=1", g, m);
@@ -74,7 +78,7 @@ static void RunGroupCleanupValidation()
         return;
     }
     if (GetTickCount64() < deadline) return;
-    auto* group = smart_cast<CSE_ALifeOnlineOfflineGroup*>(sim.objects().object(group_id));
+    auto* group = smart_cast<CSE_ALifeOnlineOfflineGroup*>(ai().alife().objects().object(group_id));
     R_ASSERT(group && group->member(member_id, true));
     if (stage == 1)
     {
@@ -94,6 +98,9 @@ static void RunGroupCleanupValidation()
         R_ASSERT(group->client_data.empty());
         Console->Execute(stage == 2 ? "save group_validation" : "save group_reloaded");
         Msg("[group cleanup] complete mode=%s", stage == 2 ? "save" : "reload");
+        // Preserve the group in the save, then detach the synthetic member before
+        // registry teardown (which can destroy the group before its member).
+        group->unregister_member(member_id);
         stage = 5;
         Console->Execute("quit");
     }
