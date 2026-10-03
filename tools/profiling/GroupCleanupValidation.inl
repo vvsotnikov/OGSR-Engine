@@ -98,9 +98,6 @@ static void RunGroupCleanupValidation()
         R_ASSERT(group->client_data.empty());
         Console->Execute(stage == 2 ? "save group_validation" : "save group_reloaded");
         Msg("[group cleanup] complete mode=%s", stage == 2 ? "save" : "reload");
-        // Preserve the group in the save, then detach the synthetic member before
-        // registry teardown (which can destroy the group before its member).
-        group->unregister_member(member_id);
         stage = 5;
         Console->Execute("quit");
     }

@@ -15,14 +15,12 @@ CALifeObjectRegistry::CALifeObjectRegistry(LPCSTR section) {}
 
 CALifeObjectRegistry::~CALifeObjectRegistry()
 {
-    OBJECT_REGISTRY::iterator I = m_objects.begin();
-    OBJECT_REGISTRY::iterator E = m_objects.end();
-    for (; I != E; ++I)
-    {
-        // hack, should be revisited in case of not intended behaviour
-        (*I).second->on_unregister();
-        xr_delete((*I).second);
-    }
+    // Unregister callbacks can access other objects (for example, a stalker's
+    // group). Keep every object alive until all callbacks have completed.
+    for (auto& entry : m_objects)
+        entry.second->on_unregister();
+    for (auto& entry : m_objects)
+        xr_delete(entry.second);
     m_objects.clear();
 }
 

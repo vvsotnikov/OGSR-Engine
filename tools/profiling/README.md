@@ -92,8 +92,8 @@ the saved group membership, offline state and cleared data. The runner adds a
 server-only section to the isolated installation's loose `misc/items.ltx`; saves
 are private to each session. Do not use these saves in a normal installation.
 
-After saving, the probe detaches its synthetic member before quitting. Without
-that teardown, registry destruction can delete the group before the stalker's
-`on_unregister` callback accesses it. Consequently this probe validates group
-switching and persistence, not safe teardown of populated groups. That failure is
-independent of client-data cleanup and remains unresolved.
+The probe quits with its member still attached, exercising normal registry
+teardown after both save and reload. Unregister callbacks must be able to access
+other registered objects regardless of ID order; deletion starts only after all
+callbacks finish. The registry lifetime fixture extracts the production destructor
+and checks this contract, including empty and single-object registries.

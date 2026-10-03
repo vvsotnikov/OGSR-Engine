@@ -21,3 +21,7 @@ source = (root / 'ogsr_engine/xrGame/alife_switch_manager.cpp').read_text(encodi
 candidate = region(source, '\nvoid CALifeSwitchManager::try_switch_online(', '\nvoid CALifeSwitchManager::try_switch_offline(')
 candidate = candidate.replace('CALifeSwitchManager::', 'Manager::')
 Path(sys.argv[3]).write_text(candidate, encoding='utf-8')
+
+source = (root / 'ogsr_engine/xrGame/alife_object_registry.cpp').read_text(encoding='utf-8')
+candidate = region(source, '\nCALifeObjectRegistry::~CALifeObjectRegistry()', '\nvoid CALifeObjectRegistry::save(IWriter& memory_stream,')
+Path(sys.argv[4]).write_text(candidate, encoding='utf-8')
