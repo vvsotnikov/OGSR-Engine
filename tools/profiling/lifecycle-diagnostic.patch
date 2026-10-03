@@ -1,0 +1,42 @@
+diff --git a/ogsr_engine/xrGame/alife_simulator_base.cpp b/ogsr_engine/xrGame/alife_simulator_base.cpp
+index 134eb08b6..b689245cb 100644
+--- a/ogsr_engine/xrGame/alife_simulator_base.cpp
++++ b/ogsr_engine/xrGame/alife_simulator_base.cpp
+@@ -251,6 +251,16 @@ void CALifeSimulatorBase::create(CSE_ALifeObject* object)
+ 
+ void CALifeSimulatorBase::release(CSE_Abstract* abstract, bool alife_query)
+ {
++    if (strstr(Core.Params, "-alife_diagnostics"))
++    {
++        if (const auto* creature = smart_cast<const CSE_ALifeCreatureAbstract*>(abstract))
++        {
++            Msg("[ALife lifecycle] event=release game_ms=%u id=%u name=%s section=%s graph=%u health=%.3f alife_query=%u",
++                Device.dwTimeGlobal, u32(abstract->ID), abstract->name_replace(), abstract->name(), u32(creature->m_tGraphID),
++                creature->fHealth, u32(alife_query));
++            LogStackTrace("[ALife lifecycle] release caller", false);
++        }
++    }
+ #ifdef DEBUG
+     if (psAI_Flags.test(aiALife))
+     {
+diff --git a/ogsr_engine/xrGame/alife_switch_manager.cpp b/ogsr_engine/xrGame/alife_switch_manager.cpp
+index 4b0f6cc8b..1bd288704 100644
+--- a/ogsr_engine/xrGame/alife_switch_manager.cpp
++++ b/ogsr_engine/xrGame/alife_switch_manager.cpp
+@@ -82,6 +82,16 @@ void CALifeSwitchManager::add_online(CSE_ALifeDynamicObject* object, bool update
+ void CALifeSwitchManager::remove_online(CSE_ALifeDynamicObject* object, bool update_registries)
+ {
+     START_PROFILE("ALife/switch/remove_online")
++    if (strstr(Core.Params, "-alife_diagnostics"))
++    {
++        if (const auto* creature = smart_cast<const CSE_ALifeCreatureAbstract*>(object))
++        {
++            Msg("[ALife lifecycle] event=remove_online game_ms=%u id=%u name=%s section=%s graph=%u health=%.3f update_registries=%u",
++                Device.dwTimeGlobal, u32(object->ID), object->name_replace(), object->name(), u32(object->m_tGraphID),
++                creature->fHealth, u32(update_registries));
++            LogStackTrace("[ALife lifecycle] remove_online caller", false);
++        }
++    }
+     object->m_bOnline = false;
+ 
+     m_saved_chidren = object->children;

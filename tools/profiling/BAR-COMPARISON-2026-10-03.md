@@ -31,6 +31,8 @@ There were 11 add-online zones in normal mode; whole-map mode had 7 add-online a
 
 ## Correctness follow-up
 
+Subsequent investigation resolved the initial ten removals as cross-map NPC travel; see [the lifecycle investigation](BAR-LIFECYCLE-2026-10-03.md). The paragraph below records the original observation and uncertainty before that investigation.
+
 Whole-map startup initially reported 79 living online and 45 offline (124 total) at game_ms 14664. At game_ms 15666 this became 69 online and 45 offline, with 10 cumulative removals. These events precede the Tracy recording. The repeated activation-associated population reduction seen in smoke runs also occurred here. This is an unresolved entity-lifecycle difference, not proof of death, deletion, or a defect. Identify those ten entities and trace the removal reason before claiming behavioral equivalence or enabling the policy by default.
 
 This remains one human-controlled run pair under heavy instrumentation: the normal trace contains about 285 million zones and whole-map about 623 million. Rendering/view differences and profiler overhead are confounders. Zone timings include children and descheduling; do not sum parallel or nested zones as total frame cost. No statistical significance or performance guarantee is claimed.
