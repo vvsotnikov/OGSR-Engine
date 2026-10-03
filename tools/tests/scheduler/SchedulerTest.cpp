@@ -386,6 +386,101 @@ void normal_cancels_rt()
         check(w.calls == (again ? std::vector<int>{1} : std::vector<int>{}), "RT cancellation and re-registration from normal phase");
     }
 }
+void needed_lifecycle()
+{
+    for (bool again : {false, true})
+    {
+        World w;
+        NPC a(1, w.calls), b(2, w.calls);
+        unsigned scales = 0;
+        a.scaleAction = [&] { ++scales; };
+        a.neededAction = [&] {
+            w.scheduler.Unregister(&a);
+            if (again)
+                w.scheduler.Register(&a);
+        };
+        w.add(a);
+        w.add(b);
+        w.tick(100);
+        check(scales == 0 && a.elapsed.empty(), "needed cancellation suppresses scale and update");
+        check(w.calls == std::vector<int>{2}, "needed cancellation preserves neighbor dispatch");
+        check(std::count_if(w.scheduler.Items.begin(), w.scheduler.Items.end(), [&](const auto& item) { return item.Object == &a; }) == (again ? 1 : 0),
+              "needed cancellation leaves exactly the requested membership");
+        a.neededAction = {};
+        w.calls.clear();
+        w.tick(101);
+        check(w.calls == (again ? std::vector<int>{1} : std::vector<int>{}), "needed re-registration dispatches once on next pass");
+    }
+}
+
+void callback_budget()
+{
+    for (bool prefetch : {false, true})
+        for (int phase : {0, 1, 2})
+            for (int outcome : {0, 1, 2, 3})
+            {
+                if (outcome == 3 && phase != 0)
+                    continue;
+                context = "phase=" + std::to_string(phase) + " outcome=" + std::to_string(outcome) + " prefetch=" + std::to_string(prefetch);
+                World w;
+                NPC a(1, w.calls), b(2, w.calls), c(3, w.calls);
+                w.add(a);
+                w.add(b);
+                w.add(c);
+                unsigned callbacks = 0;
+                for (auto* npc : {&a, &b, &c})
+                {
+                    auto action = [&, npc] {
+                        ++callbacks;
+                        clock_ms += 100;
+                        if (outcome == 2)
+                            throw std::runtime_error("expensive callback");
+                        if (outcome == 3)
+                            npc->needed = false;
+                        else
+                        {
+                            w.scheduler.Unregister(npc);
+                            if (outcome == 1)
+                                w.scheduler.Register(npc);
+                        }
+                    };
+                    if (phase == 0)
+                        npc->neededAction = action;
+                    else if (phase == 1)
+                        npc->scaleAction = action;
+                    else
+                        npc->action = action;
+                }
+                psShedulerMax = 100.f;
+                Device.dwPrecacheFrame = prefetch ? 1 : 0;
+                w.tick(100);
+                check(callbacks == (prefetch ? 3u : 1u), "every callback exit honors budget except during prefetch");
+                check(clock_ms == (prefetch ? 300u : 100u), "only one indivisible callback may overrun normal budget");
+                if (!prefetch)
+                {
+                    check(b.neededCalls == 0 && c.neededCalls == 0, "budget stop leaves remaining objects untouched");
+                    check(psShedulerTarget > 10.f, "canceled or failed work still counts as budget exhaustion");
+                    if (outcome == 1)
+                        w.order({2, 3, 1});
+                    else
+                        w.order({2, 3});
+                    a.neededAction = {};
+                    a.scaleAction = {};
+                    a.action = {};
+                    b.neededAction = {};
+                    b.scaleAction = {};
+                    b.action = {};
+                    c.neededAction = {};
+                    c.scaleAction = {};
+                    c.action = {};
+                    w.calls.clear();
+                    w.tick(101);
+                    check(w.calls == (outcome == 1 ? std::vector<int>{2, 3, 1} : std::vector<int>{2, 3}), "budget survivors run first on next pass");
+                }
+            }
+    context.clear();
+}
+
 void scale_lifecycle()
 {
     for (int mode : {0, 1, 2})
@@ -748,7 +843,11 @@ int main(int argc, char** argv)
             return failures ? 1 : 0;
         }
 #endif
-        if (name == "normal_cancels_rt")
+        if (name == "needed_lifecycle")
+            needed_lifecycle();
+        else if (name == "callback_budget")
+            callback_budget();
+        else if (name == "normal_cancels_rt")
             normal_cancels_rt();
         else if (name == "scale_lifecycle")
             scale_lifecycle();

@@ -43,11 +43,11 @@ void CSheduler::internal_Registration()
             // register if non-paired
             if (!bFoundAndErased)
             {
-                //Msg("SCHEDULER: internal register [%s][%x][%s]", *R.Object->shedule_Name(), R.Object, R.RT ? "true" : "false");
+                // Msg("SCHEDULER: internal register [%s][%x][%s]", *R.Object->shedule_Name(), R.Object, R.RT ? "true" : "false");
                 internal_Register(R.Object, R.RT);
             }
-            //else
-            //    Msg("SCHEDULER: internal register skipped, because unregister found [%s][%x][%s]", "unknown", R.Object, R.RT ? "true" : "false");
+            // else
+            //     Msg("SCHEDULER: internal register skipped, because unregister found [%s][%x][%s]", "unknown", R.Object, R.RT ? "true" : "false");
         }
         else
         {
@@ -130,9 +130,7 @@ bool CSheduler::Registered(ISheduled* object) const
     // Membership includes the detached current callback and the temporary
     // processed queue, then pending operations in the order they were requested.
     size_t count = m_current_step_obj == object ? 1 : 0;
-    const auto matches = [object](const xr_vector<Item>& items) {
-        return std::count_if(items.begin(), items.end(), [object](const Item& item) { return item.Object == object; });
-    };
+    const auto matches = [object](const xr_vector<Item>& items) { return std::count_if(items.begin(), items.end(), [object](const Item& item) { return item.Object == object; }); };
     count += matches(ItemsRT) + matches(Items);
     if (m_debug_processed)
         count += matches(*m_debug_processed);
@@ -158,7 +156,7 @@ void CSheduler::Register(ISheduled* A, BOOL RT)
     R.Object = A;
     R.Object->shedule.b_RT = RT;
 
-    //Msg("SCHEDULER: register [%s][%x]", *A->shedule_Name(), A);
+    // Msg("SCHEDULER: register [%s][%x]", *A->shedule_Name(), A);
 }
 
 void CSheduler::Unregister(ISheduled* A, bool force)
@@ -190,7 +188,7 @@ void CSheduler::ProcessStep()
     m_debug_processed = &ItemsProcessed;
 #endif
     bool stopped{};
-    //size_t cnt{};
+    // size_t cnt{};
     CTimer t_total;
     t_total.Start();
 
@@ -217,57 +215,64 @@ void CSheduler::ProcessStep()
             }
         }
 
+        if (!Items[it - 1].Object) // The needed callback may unregister (and destroy) this object.
+            skip = true;
+
         // Hide processed slots from Unregister just as erasing them would.
         // Remove the tombstones together below, preserving survivor order.
         Items[it - 1].Object = nullptr;
 
-        if (skip || !shed_need)
+        // All callback exits converge on the budget check below.
+        do
         {
-            continue;
-        }
-
-        __try
-        {
-            m_current_step_obj = curr.Object;
-
-            // Calc next update interval
-            const u32 dwMin = std::max(30u, curr.Object->shedule.t_min);
-            const u32 dwMax = (1000u + curr.Object->shedule.t_max) / 2;
-
-            const float scale = curr.Object->shedule_Scale();
-            if (!m_current_step_obj) // Scale callbacks may unregister (and destroy) the object.
-                continue;
-
-            u32 dwUpdate = dwMin + iFloor(float(dwMax - dwMin) * scale);
-            clamp(dwUpdate, std::max(dwMin, 20u), dwMax);
-
-            const u32 elapsed = dwTime - curr.dwTimeOfLastExecute;
-
-            // if (!Core.DebugFlags.test(xrCore::dbg_DisableObjectsScheduler))
-            curr.Object->shedule_Update(std::clamp(elapsed, 1u, std::max(curr.Object->shedule.t_max, 1000u)));
-
-            if (!m_current_step_obj)
+            if (skip || !shed_need)
             {
-                continue;
+                break;
             }
 
-            m_current_step_obj = nullptr;
+            __try
+            {
+                m_current_step_obj = curr.Object;
 
-            // Fill item structure
-            auto& next = ItemsProcessed.emplace_back();
-            next.dwTimeForExecute = dwTime + dwUpdate;
-            next.dwTimeOfLastExecute = dwTime;
-            next.Object = curr.Object;
-            next.scheduled_name = curr.Object->shedule_Name();
+                // Calc next update interval
+                const u32 dwMin = std::max(30u, curr.Object->shedule.t_min);
+                const u32 dwMax = (1000u + curr.Object->shedule.t_max) / 2;
 
-            //cnt++;
-        }
-        __except (ExceptStackTrace("[CSheduler::ProcessStep2] stack trace:\n"))
-        {
-            Msg("Scheduler tried to update object %s", *curr.scheduled_name);
-            m_current_step_obj = nullptr;
-            continue;
-        }
+                const float scale = curr.Object->shedule_Scale();
+                if (!m_current_step_obj) // Scale callbacks may unregister (and destroy) the object.
+                    break;
+
+                u32 dwUpdate = dwMin + iFloor(float(dwMax - dwMin) * scale);
+                clamp(dwUpdate, std::max(dwMin, 20u), dwMax);
+
+                const u32 elapsed = dwTime - curr.dwTimeOfLastExecute;
+
+                // if (!Core.DebugFlags.test(xrCore::dbg_DisableObjectsScheduler))
+                curr.Object->shedule_Update(std::clamp(elapsed, 1u, std::max(curr.Object->shedule.t_max, 1000u)));
+
+                if (!m_current_step_obj)
+                {
+                    break;
+                }
+
+                m_current_step_obj = nullptr;
+
+                // Fill item structure
+                auto& next = ItemsProcessed.emplace_back();
+                next.dwTimeForExecute = dwTime + dwUpdate;
+                next.dwTimeOfLastExecute = dwTime;
+                next.Object = curr.Object;
+                next.scheduled_name = curr.Object->shedule_Name();
+
+                // cnt++;
+            }
+            __except (ExceptStackTrace("[CSheduler::ProcessStep2] stack trace:\n"))
+            {
+                Msg("Scheduler tried to update object %s", *curr.scheduled_name);
+                m_current_step_obj = nullptr;
+                break;
+            }
+        } while (false);
 
         if (!prefetch && t_total.GetElapsed_ms() > static_cast<u32>(std::floor(psShedulerCurrent)))
         {
@@ -277,8 +282,8 @@ void CSheduler::ProcessStep()
             // if (Core.DebugFlags.test(xrCore::dbg_TraceScheduler))
             {
                 // Msg("Break ProcessStep. Processed: [%u], left in queue: [%u]", ItemsProcessed.size(), Items.size());
-                if (ItemsProcessed.size() == 1) // кто то жрет все время на кадре
-                    Msg("! Single item [%s] took whole update frame!!!", ItemsProcessed.front().scheduled_name.c_str());
+                if (ItemsProcessed.size() == 1)
+                    Msg("! Scheduler budget exhausted after [%s]", curr.scheduled_name.c_str());
             }
 
             stopped = true;
@@ -286,11 +291,11 @@ void CSheduler::ProcessStep()
         }
     }
 
-    //if (/*Core.DebugFlags.test(xrCore::dbg_TraceScheduler) &&*/ !prefetch && t_total.GetElapsed_ms() > 20)
-    //    Msg("Long ProcessStep !!! duration [%u]ms. updated: [%u] objects!", t_total.GetElapsed_ms(), cnt);
+    // if (/*Core.DebugFlags.test(xrCore::dbg_TraceScheduler) &&*/ !prefetch && t_total.GetElapsed_ms() > 20)
+    //     Msg("Long ProcessStep !!! duration [%u]ms. updated: [%u] objects!", t_total.GetElapsed_ms(), cnt);
 
-    //if (prefetch)
-    //    Msg("Prefetch frame, updated: [%u] objects!", cnt);
+    // if (prefetch)
+    //     Msg("Prefetch frame, updated: [%u] objects!", cnt);
 
     // Push "processed" back
     Items.erase(std::remove_if(Items.begin(), Items.end(), [](const Item& item) { return !item.Object; }), Items.end());
