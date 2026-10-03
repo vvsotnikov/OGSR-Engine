@@ -39,11 +39,17 @@ template <class... Args>
 void Msg(Args...)
 {}
 uint64_t clock_ms = 0;
+bool throwTimer = false;
 struct CTimer
 {
     uint64_t start;
     void Start() { start = clock_ms; }
-    u32 GetElapsed_ms() const { return u32(clock_ms - start); }
+    u32 GetElapsed_ms() const
+    {
+        if (throwTimer)
+            throw std::runtime_error("timer");
+        return u32(clock_ms - start);
+    }
 };
 struct Stat
 {
@@ -98,9 +104,15 @@ struct NPC : ISheduled
     std::vector<u32> elapsed;
     std::function<void()> action;
     std::function<void()> neededAction;
+    std::function<void()> scaleAction;
     std::vector<int>* calls;
     NPC(int id, std::vector<int>& calls) : id(id), calls(&calls) {}
-    float shedule_Scale() override { return scale; }
+    float shedule_Scale() override
+    {
+        if (scaleAction)
+            scaleAction();
+        return scale;
+    }
     bool shedule_Needed() override
     {
         ++neededCalls;
@@ -130,6 +142,7 @@ struct World
         Device.dwTimeGlobal = 0;
         Device.dwPrecacheFrame = 0;
         clock_ms = 0;
+        throwTimer = false;
         psShedulerCurrent = 10;
         psShedulerTarget = 10;
         psShedulerMax = 10;
@@ -353,6 +366,105 @@ void realtime()
     w.tick(180);
     check(w.calls.empty(), "external RT unregister removes callback");
 }
+
+void normal_cancels_rt()
+{
+    for (bool again : {false, true})
+    {
+        World w;
+        NPC rt(1, w.calls), normal(2, w.calls);
+        w.scheduler.Register(&rt, true);
+        w.add(normal);
+        normal.action = [&] {
+            w.scheduler.Unregister(&rt);
+            if (again)
+                w.scheduler.Register(&rt, true);
+        };
+        w.tick(100);
+        check(w.scheduler.ItemsRT.size() == (again ? 1u : 0u), "RT removals in normal phase compact in same tick");
+        for (const auto& item : w.scheduler.ItemsRT)
+            check(item.Object != nullptr, "no RT tombstones between updates");
+        normal.action = {};
+        w.calls.clear();
+        w.tick(101);
+        check(w.calls == (again ? std::vector<int>{1} : std::vector<int>{}), "RT cancellation and re-registration from normal phase");
+    }
+}
+void scale_lifecycle()
+{
+    for (int mode : {0, 1, 2})
+    {
+        World w;
+        NPC a(1, w.calls), b(2, w.calls);
+        a.scaleAction = [&] {
+#ifdef DEBUG
+            check(w.scheduler.Registered(&a), "scale callback belongs to scheduler");
+#endif
+            if (mode == 2)
+                throw std::runtime_error("scale");
+            w.scheduler.Unregister(&a);
+            if (mode == 1)
+                w.scheduler.Register(&a);
+        };
+        w.add(a);
+        w.add(b);
+        w.tick(100);
+        check(w.calls == std::vector<int>{2}, "canceled/throwing scale callback must not update");
+        check(w.scheduler.m_current_step_obj == nullptr, "scale exit clears current callback");
+        a.scaleAction = {};
+        w.calls.clear();
+        w.tick(101);
+        check(w.calls == (mode == 1 ? std::vector<int>{1} : std::vector<int>{}), "scale re-registration deferred");
+    }
+}
+void step_cleanup()
+{
+    World w;
+    NPC a(1, w.calls);
+    w.add(a);
+    throwTimer = true;
+    bool caught = false;
+    try
+    {
+        w.tick(100);
+    }
+    catch (const std::runtime_error&)
+    {
+        caught = true;
+    }
+    throwTimer = false;
+    check(caught, "injected failure outside callback handlers escaped");
+    check(w.scheduler.m_current_step_obj == nullptr, "escaped failure clears current callback");
+#ifdef DEBUG
+    check(w.scheduler.m_debug_processed == nullptr, "escaped failure clears temporary queue observer");
+#endif
+}
+#ifdef DEBUG
+void registered_consistency()
+{
+    World w;
+    NPC a(1, w.calls);
+    w.add(a);
+    w.scheduler.ItemsRT.push_back(w.scheduler.Items.front());
+    unsigned before = failures;
+    w.scheduler.Registered(&a);
+    unsigned detected = failures - before;
+    failures = before;
+    check(detected > 0, "duplicate membership must assert");
+    w.scheduler.ItemsRT.clear();
+    w.scheduler.Items.clear();
+    auto& operation = w.scheduler.Registration.emplace_back();
+    operation.Object = &a;
+    operation.OP = false;
+    operation.RT = false;
+    before = failures;
+    w.scheduler.Registered(&a);
+    detected = failures - before;
+    failures = before;
+    check(detected > 0, "unregister of absent object must assert");
+    w.scheduler.Registration.clear();
+}
+#endif
 
 void rt_mutation()
 {
@@ -587,7 +699,7 @@ void stress_test()
                 instance.Register(&npc, true);
                 npc.registered = true;
             }
-            // RT mutations are excluded: their vector invalidation is a separate existing issue.
+            // Retire this RT participant; mutation cases are exercised by the focused tests.
             if (frame == 9)
             {
                 if (npcs[95].registered)
@@ -651,13 +763,24 @@ int main(int argc, char** argv)
     try
     {
 #ifdef DEBUG
+        if (name == "registered_consistency")
+        {
+            registered_consistency();
+            return failures ? 1 : 0;
+        }
         if (name == "registered_state")
         {
             registered_state();
             return failures ? 1 : 0;
         }
 #endif
-        if (name == "exception_cleanup")
+        if (name == "normal_cancels_rt")
+            normal_cancels_rt();
+        else if (name == "scale_lifecycle")
+            scale_lifecycle();
+        else if (name == "step_cleanup")
+            step_cleanup();
+        else if (name == "exception_cleanup")
             exception_cleanup();
         else if (name == "rt_mutation")
             rt_mutation();

@@ -129,15 +129,22 @@ bool CSheduler::Registered(ISheduled* object) const
 {
     // Membership includes the detached current callback and the temporary
     // processed queue, then pending operations in the order they were requested.
-    bool registered = m_current_step_obj == object;
-    const auto contains = [object](const xr_vector<Item>& items) {
-        return std::any_of(items.begin(), items.end(), [object](const Item& item) { return item.Object == object; });
+    size_t count = m_current_step_obj == object ? 1 : 0;
+    const auto matches = [object](const xr_vector<Item>& items) {
+        return std::count_if(items.begin(), items.end(), [object](const Item& item) { return item.Object == object; });
     };
-    registered = registered || contains(ItemsRT) || contains(Items) || (m_debug_processed && contains(*m_debug_processed));
+    count += matches(ItemsRT) + matches(Items);
+    if (m_debug_processed)
+        count += matches(*m_debug_processed);
+    VERIFY(count <= 1);
     for (const auto& operation : Registration)
-        if (operation.Object == object)
-            registered = operation.OP;
-    return registered;
+    {
+        if (operation.Object != object)
+            continue;
+        VERIFY(operation.OP ? count == 0 : count == 1);
+        count = operation.OP ? 1 : 0;
+    }
+    return count != 0;
 }
 #endif // DEBUG
 
@@ -170,9 +177,31 @@ void CSheduler::Unregister(ISheduled* A, bool force)
     R.Object = A;
 }
 
+void CSheduler::FinishStep()
+{
+#ifdef DEBUG
+    m_debug_processed = nullptr;
+#endif
+    m_current_step_obj = nullptr;
+}
+
 void CSheduler::ProcessStep()
 {
-    ZoneScoped;
+    // Keep native SEH cleanup outside the function owning C++ temporaries.
+    // Cleanup must also run when a failure escapes the callback handlers.
+    __try
+    {
+        ProcessStepInternal();
+    }
+    __finally
+    {
+        FinishStep();
+    }
+}
+
+void CSheduler::ProcessStepInternal()
+{
+    ZoneScopedN("CSheduler::ProcessStep");
 
     // Normal priority
     u32 dwTime = Device.dwTimeGlobal;
@@ -221,18 +250,20 @@ void CSheduler::ProcessStep()
 
         __try
         {
+            m_current_step_obj = curr.Object;
+
             // Calc next update interval
             const u32 dwMin = std::max(30u, curr.Object->shedule.t_min);
             const u32 dwMax = (1000u + curr.Object->shedule.t_max) / 2;
 
             const float scale = curr.Object->shedule_Scale();
+            if (!m_current_step_obj) // Scale callbacks may unregister (and destroy) the object.
+                continue;
 
             u32 dwUpdate = dwMin + iFloor(float(dwMax - dwMin) * scale);
             clamp(dwUpdate, std::max(dwMin, 20u), dwMax);
 
             const u32 elapsed = dwTime - curr.dwTimeOfLastExecute;
-
-            m_current_step_obj = curr.Object;
 
             // if (!Core.DebugFlags.test(xrCore::dbg_DisableObjectsScheduler))
             curr.Object->shedule_Update(std::clamp(elapsed, 1u, std::max(curr.Object->shedule.t_max, 1000u)));
@@ -287,10 +318,6 @@ void CSheduler::ProcessStep()
     Items.erase(std::remove_if(Items.begin(), Items.end(), [](const Item& item) { return !item.Object; }), Items.end());
     Items.insert(Items.end(), std::make_move_iterator(ItemsProcessed.begin()), std::make_move_iterator(ItemsProcessed.end()));
 
-#ifdef DEBUG
-    m_debug_processed = nullptr;
-#endif
-
     if (!stopped)
     {
         // always try to decrease target
@@ -337,8 +364,6 @@ void CSheduler::Update()
         }
     }
 
-    ItemsRT.erase(std::remove_if(ItemsRT.begin(), ItemsRT.end(), [](const Item& item) { return !item.Object; }), ItemsRT.end());
-
     // Normal (sheduled)
     ProcessStep();
 
@@ -347,6 +372,7 @@ void CSheduler::Update()
     psShedulerCurrent = 0.9f * psShedulerCurrent + 0.1f * psShedulerTarget;
     Device.Statistic->fShedulerLoad = psShedulerCurrent;
 
+    ItemsRT.erase(std::remove_if(ItemsRT.begin(), ItemsRT.end(), [](const Item& item) { return !item.Object; }), ItemsRT.end());
     m_processing_now = false;
 
     internal_Registration();
