@@ -70,7 +70,7 @@ void R_occlusion::occq_begin(u32& ID, const u32 context_id)
         const auto hr = CreateQuery(q.Q.GetAddressOf(), D3DQUERYTYPE_OCCLUSION);
         if (FAILED(hr))
         {
-            Msg("!![%s] CreateQuery returns error: [%s]; used [%u] queries.", __FUNCTION__, Debug.DXerror2string(hr), used.size());
+            Msg("!![%s] CreateQuery returns error: [%s]; used [%u] queries.", __FUNCTION__, Debug.DXerror2string(hr).c_str(), used.size());
             ID = iInvalidHandle;
             return;
         }
@@ -134,7 +134,7 @@ R_occlusion::occq_result R_occlusion::occq_get(u32& ID)
 
     if (hr != S_FALSE && hr != S_OK)
     {
-        Msg("!![%s] GetData returns error: [%s]", __FUNCTION__, Debug.DXerror2string(hr));
+        Msg("!![%s] GetData returns error: [%s]", __FUNCTION__, Debug.DXerror2string(hr).c_str());
         fragments = OCC_NOT_AVAIL;
     }
 
@@ -171,7 +171,7 @@ R_occlusion::occq_result R_occlusion::occq_free(const u32 ID, const bool get_dat
             }
             if (hr != S_FALSE && hr != S_OK)
             {
-                Msg("!![%s] GetData returns error: [%s]", __FUNCTION__, Debug.DXerror2string(hr));
+                Msg("!![%s] GetData returns error: [%s]", __FUNCTION__, Debug.DXerror2string(hr).c_str());
             }
         }
 
