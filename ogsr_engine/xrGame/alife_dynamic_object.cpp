@@ -145,7 +145,7 @@ CSE_ALifeDynamicObject::OnlineSwitchDecision CSE_ALifeDynamicObject::evaluate_on
 
 void CSE_ALifeDynamicObject::try_switch_online()
 {
-    // Maintenance must run even when activation remains denied or queued.
+    // Maintenance must run even when activation remains denied.
     maintain_offline_schedule();
     const OnlineSwitchDecision decision = evaluate_online_switch();
     if (decision == OnlineSwitchDecision::denied)

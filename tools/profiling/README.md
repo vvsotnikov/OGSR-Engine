@@ -20,6 +20,18 @@ The experimental engine accepts these launch-only flags:
 
 This is an experimental distance-policy change, not a completed whole-map simulation implementation. Script eligibility, parent ownership, group logic, location validation and existing switch budgets remain in force. Off-map registries are unchanged. The living counters count server creature entities excluding the actor, not a guaranteed count of distinct visible NPCs: group representatives and script-disabled entities require inspection. Save/load, level transitions and campaign behavior still need broader testing.
 
+Whole-map mode expresses a location policy rather than a large radius: changing
+`switch_distance` or its hysteresis factor cannot put a distant current-map NPC
+offline. Those setters retain the normal-mode setting exposed to scripts; they
+do not override the launch-selected whole-map policy.
+
+Current prepare, launch, capture and validation scripts default to
+`bin_whole_lifecycle` and accept `-Package` explicitly. Direct Tracy capture requires
+a package whose manifest says `tracyEnabled: true`; regular builds use
+`-PrepareOnly` or the regular runner. Historical compaction/activation switches
+are accepted only for named historical packages. Their dated reports are not
+instructions for running the current build.
+
 ## Build the tools
 
 Run `Build-TracyTools.ps1 -ToolRoot <tools-directory>` from PowerShell with Git, CMake and VS 2022 C++ build tools available. It builds capture, CSV export and our frame/zone projection utility. Tracy is pinned to upstream commit `4a5a21cdb08c3b554bf1857b4f2f33d7f7db0207`; its version, protocol and queue headers match the embedded client. OGSR has other client modifications, so this is a compatibility match, not a claim that every client source file is identical. Both reading the original GUI trace and recording a live engine session have been tested.
@@ -29,8 +41,8 @@ Run `Build-TracyTools.ps1 -ToolRoot <tools-directory>` from PowerShell with Git,
 Package the profiling engine under `<install>/bin_experiment`. The installation needs `fsgame-profiler.ltx` and the original SoC resources. The default seed settings/save come from `<install>/_appdata_profiler_`.
 
 ```powershell
-./Capture-Session.ps1 -InstallRoot $install -ToolRoot $tracy -Mode distance
-./Capture-Session.ps1 -InstallRoot $install -ToolRoot $tracy -Mode whole-map
+./Capture-Session.ps1 -InstallRoot $install -ToolRoot $tracy -Package bin_experiment -Mode distance
+./Capture-Session.ps1 -InstallRoot $install -ToolRoot $tracy -Package bin_experiment -Mode whole-map
 ```
 
 Exit the first game before launching the second. Each run copies the same seed save and settings into a unique `captures/<timestamp>-<mode>/appdata` directory. It disables the loading-screen key gate in that copy only. Recording starts after 30 seconds and ends after 60 seconds, or earlier at the capture memory limit (20% of physical RAM). The game stays open. The manifest records the save and executable hashes, command line, capture status and optional packaged build provenance. Do not change the seed save between the two runs.

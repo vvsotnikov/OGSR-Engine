@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory)][string]$InstallRoot,
     [Parameter(Mandatory)][string]$ToolRoot,
+    [ValidatePattern('^bin_[a-zA-Z0-9_]+$')][string]$Package = 'bin_whole_lifecycle',
     [ValidateSet('distance', 'whole-map')][string]$Mode = 'distance',
     [ValidateRange(5, 300)][int]$Seconds = 60,
     [ValidateRange(1, 50)][int]$MemoryPercent = 20,
@@ -14,14 +15,19 @@ $ErrorActionPreference = 'Stop'
 $InstallRoot = (Resolve-Path $InstallRoot).Path
 $ToolRoot = (Resolve-Path $ToolRoot).Path
 $repo = (Resolve-Path "$PSScriptRoot/../..").Path
-$engine = Join-Path $InstallRoot 'bin_experiment/xrEngine.exe'
+$engine = Join-Path $InstallRoot "$Package/xrEngine.exe"
 $capture = Join-Path $ToolRoot 'bin/tracy-capture.exe'
 $seed = Join-Path $InstallRoot $SeedAppData
-foreach ($required in @($engine, $capture, "$seed/savedgames/$SaveName.sav", "$InstallRoot/fsgame-profiler.ltx")) {
+foreach ($required in @($engine, "$seed/savedgames/$SaveName.sav", "$InstallRoot/fsgame-profiler.ltx")) {
     if (!(Test-Path -LiteralPath $required)) { throw "Missing: $required" }
 }
 if (Get-Process xrEngine, tracy-capture, tracy-profiler-AVX -ErrorAction SilentlyContinue) {
     throw 'Close the existing game/profiler first so the capture connects to the intended process.'
+}
+if (!$PrepareOnly) {
+    if (!(Test-Path $capture)) { throw 'Missing Tracy capture tool' }
+    $build = Get-Content -Raw "$InstallRoot/$Package/build.json" | ConvertFrom-Json
+    if (!$build.tracyEnabled) { throw 'Trace capture requires a Tracy-enabled package; use -PrepareOnly for a regular build' }
 }
 $id = (Get-Date -Format 'yyyy-MM-dd_HH-mm-ss-fff') + '-' + $Mode
 $session = New-Item -ItemType Directory (Join-Path $InstallRoot "captures/$id")
@@ -33,7 +39,7 @@ Copy-Item -Path "$seed/user*.ltx" -Destination $appdata.FullName
 Add-Content -LiteralPath "$($appdata.FullName)/user_ogsr.ltx" -Value "`nkeypress_on_start off" -Encoding ascii
 Get-ChildItem -LiteralPath "$seed/savedgames" -File | Where-Object { $_.BaseName -eq $SaveName } |
     Copy-Item -Destination "$($appdata.FullName)/savedgames"
-$fs = Get-Content -LiteralPath "$InstallRoot/fsgame-profiler.ltx"
+$fs = @(Get-Content -LiteralPath "$InstallRoot/fsgame-profiler.ltx")
 $fs[0] = '$app_data_root$ = true| false| $fs_root$| captures\' + $id + '\appdata\'
 $fsPath = "$($session.FullName)/fsgame.ltx"
 $fs | Set-Content -LiteralPath $fsPath -Encoding ascii
@@ -44,7 +50,7 @@ if ($Mode -eq 'whole-map') { $argsText += ' -alife_whole_map' }
 if ($Diagnostics) { $argsText += ' -alife_diagnostics' }
 $argsText += " -start server($SaveName/single/alife/load) client(localhost)"
 $metadata = [ordered]@{
-    session = $id; mode = $Mode; seconds = $Seconds; memoryPercent = $MemoryPercent
+    package = $Package; session = $id; mode = $Mode; seconds = $Seconds; memoryPercent = $MemoryPercent
     delaySeconds = $DelaySeconds; seedSave = "$seed/savedgames/$SaveName.sav"
     seedSha256 = (Get-FileHash "$seed/savedgames/$SaveName.sav").Hash
     engineSha256 = (Get-FileHash $engine).Hash
@@ -53,8 +59,8 @@ $metadata = [ordered]@{
     arguments = $argsText; status = 'prepared'
     diagnostics = [bool]$Diagnostics
 }
-if (Test-Path "$InstallRoot/bin_experiment/build.json") {
-    $metadata.build = Get-Content -Raw "$InstallRoot/bin_experiment/build.json" | ConvertFrom-Json
+if (Test-Path "$InstallRoot/$Package/build.json") {
+    $metadata.build = Get-Content -Raw "$InstallRoot/$Package/build.json" | ConvertFrom-Json
 }
 $metadata | ConvertTo-Json -Depth 6 | Set-Content "$($session.FullName)/session.json" -Encoding utf8
 if ($PrepareOnly) { Write-Output $session.FullName; return }

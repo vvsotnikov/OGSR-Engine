@@ -1,0 +1,20 @@
+--- a/ogsr_engine/xrGame/GamePersistent.cpp
++++ b/ogsr_engine/xrGame/GamePersistent.cpp
+@@ -517,6 +517,8 @@
+ extern CUISequencer* g_tutorial2;
+ extern bool RESET_SECTORS_HACK;
+ 
++#include "GroupCleanupValidation.inl"
++
+ void CGamePersistent::OnFrame()
+ {
+     if (g_tutorial2)
+@@ -562,6 +564,8 @@
+         return;
+     if (!g_pGameLevel->bReady)
+         return;
++
++    RunGroupCleanupValidation();
+ 
+     if (Device.Paused())
+     {

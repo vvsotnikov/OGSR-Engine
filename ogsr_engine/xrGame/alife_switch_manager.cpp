@@ -196,7 +196,6 @@ void CALifeSwitchManager::try_switch_online(CSE_ALifeDynamicObject* I)
             make_string("frame [%d] time [%d] object [%s] with id [%d] is offline, but is on the level", Device.dwFrame, Device.dwTimeGlobal, I->name_replace(), I->ID));
 
     I->try_switch_online();
-    if (!I->can_switch_online())
 
     if (!I->m_bOnline && !I->keep_saved_data_anyway())
         I->client_data.clear();
@@ -251,7 +250,6 @@ void CALifeSwitchManager::evaluate_switch(CSE_ALifeDynamicObject* I)
         try_switch_offline(I);
     else
         try_switch_online(I);
-
 }
 
 void CALifeSwitchManager::maintain_after_switch(CSE_ALifeDynamicObject* I)

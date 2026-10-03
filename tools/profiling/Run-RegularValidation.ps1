@@ -5,7 +5,7 @@ param(
     [ValidateRange(0,10)][int]$BudgetMs = 0,
     [switch]$CompactQueue,
     [switch]$SaveSnapshot,
-    [ValidateSet('bin_experiment','bin_policy','bin_activation','bin_activation_tracy','bin_reconcile','bin_dynamic_policy','bin_group','bin_core','bin_whole_lifecycle')][string]$Package = 'bin_experiment',
+    [ValidateSet('bin_experiment','bin_policy','bin_activation','bin_activation_tracy','bin_reconcile','bin_dynamic_policy','bin_group','bin_core','bin_whole_lifecycle')][string]$Package = 'bin_whole_lifecycle',
     [switch]$ReconcileMetrics,
     [switch]$Transitions,
     [switch]$ActivationQueue,
@@ -19,21 +19,22 @@ param(
     [string]$SaveName = 'bar_center'
 )
 $ErrorActionPreference = 'Stop'
-if ($Package -eq 'bin_core' -and ($CompactQueue -or $ActivationQueue -or $SavePending)) { throw 'Core package excludes scheduler compaction and deferred activation; use their separate experiment builds' }
-if ($Package -eq 'bin_whole_lifecycle' -and ($CompactQueue -or $ActivationQueue -or $SavePending)) { throw 'Whole-map lifecycle package has unconditional compaction and no deferred activation; omit experiment switches' }
+# These switches reproduce archived experiments; current builds must not accept them silently.
+if ($CompactQueue -and $Package -notin @('bin_experiment','bin_policy','bin_activation','bin_activation_tracy','bin_reconcile','bin_dynamic_policy','bin_group')) { throw 'CompactQueue requires a historical opt-in compaction package' }
+if (($ActivationQueue -or $SavePending) -and $Package -notin @('bin_activation','bin_activation_tracy','bin_reconcile','bin_dynamic_policy','bin_group')) { throw 'Activation switches require a historical activation package' }
 . "$PSScriptRoot/ValidationLog.ps1"
 $engine = Join-Path $InstallRoot "$Package/xrEngine.exe"
 if (!(Test-Path $engine) -or !(Test-Path "$InstallRoot/$Package/build.json")) { throw "Missing package or manifest: $engine" }
 if ($Mode -eq 'distance' -and ($Count -ne 0 -or $Eligibility)) { throw 'Population and eligibility fixtures require whole-map mode' }
 if ($Transitions -and ($Count -ne 0 -or $Eligibility -or $SavePending -or $SaveSnapshot -or $VerifySession -or $CaptureTrace)) { throw 'Transition fixture must run by itself' }
 $session = & "$PSScriptRoot/Capture-Session.ps1" -InstallRoot $InstallRoot -ToolRoot $ToolRoot `
-    -Mode $Mode -SeedAppData $SeedAppData -SaveName $SaveName -PrepareOnly
+    -Package $Package -Mode $Mode -SeedAppData $SeedAppData -SaveName $SaveName -PrepareOnly
 $path = Join-Path $session 'session.json'
 $meta = Get-Content -Raw $path | ConvertFrom-Json
 $meta.arguments = $meta.arguments.Replace(' -alife_metrics', '')
 $meta.engineSha256 = (Get-FileHash $engine).Hash
 $meta.build = Get-Content -Raw "$InstallRoot/$Package/build.json" | ConvertFrom-Json
-$meta | Add-Member package $Package
+$meta.package = $Package
 $meta | Add-Member eligibilityRequested ([bool]$Eligibility)
 if ($CompactQueue) { $meta.arguments += ' -scheduler_compact' }
 if ($ActivationQueue) { $meta.arguments += ' -alife_activation_queue' }

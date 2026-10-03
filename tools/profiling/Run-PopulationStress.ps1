@@ -17,7 +17,7 @@ if ($Combat -and (!$Cadence -or $Counts.Count -ne 1 -or $Counts[0] -ne 20)) { th
 $engine = Join-Path $InstallRoot "$package/xrEngine.exe"
 foreach ($count in $Counts) {
     $session = & "$PSScriptRoot/Capture-Session.ps1" -InstallRoot $InstallRoot -ToolRoot $ToolRoot `
-        -SeedAppData 'seeds/bar-2026-10-03' -SaveName bar_center -Mode whole-map -PrepareOnly
+        -Package $package -SeedAppData 'seeds/bar-2026-10-03' -SaveName bar_center -Mode whole-map -PrepareOnly
     $path = Join-Path $session 'session.json'
     $meta = Get-Content -Raw $path | ConvertFrom-Json
     $meta.arguments += " -alife_stress $count"

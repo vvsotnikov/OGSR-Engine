@@ -13,7 +13,7 @@ $ErrorActionPreference = 'Stop'
 $session = $ExistingSession
 if (!$session) {
     $session = & "$PSScriptRoot/Capture-Session.ps1" -InstallRoot $InstallRoot -ToolRoot $ToolRoot `
-        -Mode whole-map -SeedAppData $SeedAppData -SaveName $SaveName -PrepareOnly
+        -Package bin_validation -Mode whole-map -SeedAppData $SeedAppData -SaveName $SaveName -PrepareOnly
 }
 $metaPath = Join-Path $session 'session.json'
 $meta = Get-Content -Raw $metaPath | ConvertFrom-Json
