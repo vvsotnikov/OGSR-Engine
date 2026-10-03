@@ -25,6 +25,10 @@ Whole-map mode expresses a location policy rather than a large radius: changing
 offline. Those setters retain the normal-mode setting exposed to scripts; they
 do not override the launch-selected whole-map policy.
 
+Diagnostic counters, timers and registry scans run only with their corresponding
+metrics flag enabled. `-alife_diagnostics` adds the inventory to population metrics;
+it does not enable collection by itself.
+
 Current prepare, launch, capture and validation scripts default to
 `bin_whole_lifecycle` and accept `-Package` explicitly. Direct Tracy capture requires
 a package whose manifest says `tracyEnabled: true`; regular builds use
@@ -76,10 +80,21 @@ The reconciliation fixture extracts the production manager method and checks its
 cleanup contract, including virtual switch attempts that leave an eligible group
 offline. Run it with CMake/CTest from `reconciliation-test`.
 
-For runtime coverage, apply `group-cleanup-diagnostic.patch` in a diagnostic
-checkout, copy `GroupCleanupValidation.inl` into `ogsr_engine/xrGame`, build Release,
-and package it as `bin_group_cleanup` with its `build.json`, PDB and source patch.
-Use the isolated installation created by `Prepare-RegularValidation.ps1`:
+For runtime coverage, first create an isolated installation using the ordinary
+Release package. `Prepare-RegularValidation.ps1` deliberately rejects patched
+packages; it prepares the resources and baseline, not the diagnostic executable:
+
+```powershell
+./Prepare-RegularValidation.ps1 -BaselineRoot $baseline -InstallRoot $install -Package bin_whole_lifecycle
+```
+
+In a separate diagnostic checkout, apply `group-cleanup-diagnostic.patch`, copy
+`GroupCleanupValidation.inl` into `ogsr_engine/xrGame`, and build Release. Create
+`$install/bin_group_cleanup` and copy that build's `xrEngine.exe`, PDB and runtime
+DLLs there. Add `build.json` with `configuration`, `tracyEnabled: false`,
+`baseCommit`, executable `sha256`, `probeSha256`, and `sourcePatch` pointing to a
+copy of the applied patch in the package. Keep the matching probe source there
+as well. Then run:
 
 ```powershell
 ./Run-GroupCleanupValidation.ps1 -InstallRoot $install -ToolRoot $tracy
@@ -89,8 +104,11 @@ Use the isolated installation created by `Prepare-RegularValidation.ps1`:
 This creates a native online/offline group, checks empty/far-group client-data
 cleanup, activates and deactivates its stalker, then saves. A fresh process checks
 the saved group membership, offline state and cleared data. The runner adds a
-server-only section to the isolated installation's loose `misc/items.ltx`; saves
-are private to each session. Do not use these saves in a normal installation.
+server-only section to the isolated installation's loose `misc/items.ltx` and
+restores its original bytes after the process exits, including failed runs.
+Each session retains a backup for recovery if the runner itself is forcibly
+terminated. Saves are private to each session. Do not use these saves in a normal
+installation: loading them requires the temporary group section.
 
 The probe quits with its member still attached, exercising normal registry
 teardown after both save and reload. Unregister callbacks must be able to access

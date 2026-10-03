@@ -15,10 +15,8 @@ if ($ReloadSession) {
 $session = & "$PSScriptRoot/Capture-Session.ps1" -InstallRoot $InstallRoot -ToolRoot $ToolRoot -Package $package -Mode distance -SeedAppData $seed -SaveName $save -PrepareOnly
 # Only the isolated validation installation receives this server-only test section.
 $config = "$InstallRoot/gamedata/config/misc/items.ltx"
-if (!(Select-String -LiteralPath $config -SimpleMatch '[validation_online_group]' -Quiet)) {
-    Copy-Item $config "$session/items-before-group-test.ltx"
-    Add-Content -LiteralPath $config -Value "`n[validation_online_group]`nclass = ON_OFF_G`n" -Encoding ascii
-}
+$originalConfig = [IO.File]::ReadAllBytes($config)
+[IO.File]::WriteAllBytes("$session/items-before-group-test.ltx", $originalConfig)
 $metaPath = "$session/session.json"
 $meta = Get-Content -Raw $metaPath | ConvertFrom-Json
 $meta.arguments = $meta.arguments.Replace(' -alife_metrics','') + ' -group_cleanup_validation'
@@ -27,11 +25,15 @@ if ($ReloadSession) {
     $meta.arguments += ' -group_cleanup_reload'
 }
 $meta.status = 'group-cleanup-running'
-$game = Start-Process "$InstallRoot/$package/xrEngine.exe" -ArgumentList $meta.arguments -WorkingDirectory $InstallRoot -PassThru
-$meta | Add-Member gamePid $game.Id
-$meta | ConvertTo-Json -Depth 8 | Set-Content $metaPath -Encoding utf8
-Write-Output "START group cleanup session=$session"
+$game = $null
 try {
+    if (!(Select-String -LiteralPath $config -SimpleMatch '[validation_online_group]' -Quiet)) {
+        Add-Content -LiteralPath $config -Value "`n[validation_online_group]`nclass = ON_OFF_G`n" -Encoding ascii
+    }
+    $game = Start-Process "$InstallRoot/$package/xrEngine.exe" -ArgumentList $meta.arguments -WorkingDirectory $InstallRoot -PassThru
+    $meta | Add-Member gamePid $game.Id
+    $meta | ConvertTo-Json -Depth 8 | Set-Content $metaPath -Encoding utf8
+    Write-Output "START group cleanup session=$session"
     if (!$game.WaitForExit(120000)) { Stop-Process -Id $game.Id; throw 'Group cleanup test timed out' }
     $logs = @(Get-ChildItem "$session/appdata/logs" -Filter '*.log')
     if ($logs.Count -ne 1) { throw 'Expected one log' }
@@ -48,5 +50,13 @@ try {
     $meta | Add-Member failure $_.Exception.Message
     throw
 } finally {
-    $meta | ConvertTo-Json -Depth 8 | Set-Content $metaPath -Encoding utf8
+    try {
+        if ($game -and !$game.HasExited) {
+            Stop-Process -Id $game.Id
+            $game.WaitForExit()
+        }
+    } finally {
+        [IO.File]::WriteAllBytes($config, $originalConfig)
+        $meta | ConvertTo-Json -Depth 8 | Set-Content $metaPath -Encoding utf8
+    }
 }

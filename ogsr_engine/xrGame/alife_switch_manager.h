@@ -23,6 +23,7 @@ protected:
     float m_offline_distance;
     bool m_whole_map_online;
     bool m_alife_metrics;
+    bool m_alife_diagnostics;
     bool m_reconcile_metrics = false;
     bool m_reconcile_sample = false;
     u32 m_reconcile_passes = 0;

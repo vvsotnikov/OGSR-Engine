@@ -16,6 +16,7 @@ IC CALifeSwitchManager::CALifeSwitchManager(xrServer* server, LPCSTR section) : 
     // Launch-only experiment: retain script eligibility and parent/group handling.
     m_whole_map_online = strstr(Core.Params, "-alife_whole_map") != nullptr;
     m_alife_metrics = strstr(Core.Params, "-alife_metrics") != nullptr;
+    m_alife_diagnostics = strstr(Core.Params, "-alife_diagnostics") != nullptr;
     m_reconcile_metrics = strstr(Core.Params, "-alife_reconcile_metrics") != nullptr;
     if (m_reconcile_metrics)
         Msg("* ALife reconciliation timing: pass totals; stage sampling every 64 passes");

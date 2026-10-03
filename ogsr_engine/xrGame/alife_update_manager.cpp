@@ -78,11 +78,16 @@ void CALifeUpdateManager::update_switch()
     init_ef_storage();
 
     START_PROFILE("ALife/switch");
-    begin_reconciliation();
-    CTimer reconcile_timer;
-    if (m_reconcile_metrics) reconcile_timer.Start();
-    graph().level().update(CSwitchPredicate(this));
-    finish_reconciliation(m_reconcile_metrics ? reconcile_timer.GetElapsed_sec() * 1000.0 : 0.0);
+    if (m_reconcile_metrics)
+    {
+        begin_reconciliation();
+        CTimer reconcile_timer;
+        reconcile_timer.Start();
+        graph().level().update(CSwitchPredicate(this));
+        finish_reconciliation(reconcile_timer.GetElapsed_sec() * 1000.0);
+    }
+    else
+        graph().level().update(CSwitchPredicate(this));
     STOP_PROFILE
 }
 
@@ -98,23 +103,23 @@ void CALifeUpdateManager::update_scheduled(bool init_ef)
 
 void CALifeUpdateManager::update()
 {
+    if (!m_alife_metrics)
+    {
+        update_switch();
+        update_scheduled(false);
+        return;
+    }
+
     CTimer timer;
-    if (m_alife_metrics)
-        timer.Start();
+    timer.Start();
     update_switch();
-    if (m_alife_metrics)
-    {
-        m_metrics_switch_ms += timer.GetElapsed_sec() * 1000.0;
-        timer.Start();
-    }
+    m_metrics_switch_ms += timer.GetElapsed_sec() * 1000.0;
+    timer.Start();
     update_scheduled(false);
-    if (m_alife_metrics)
-    {
-        m_metrics_scheduled_ms += timer.GetElapsed_sec() * 1000.0;
-        ++m_metrics_updates;
-        if (Device.dwTimeGlobal - m_metrics_time >= 1000)
-            report_metrics();
-    }
+    m_metrics_scheduled_ms += timer.GetElapsed_sec() * 1000.0;
+    ++m_metrics_updates;
+    if (Device.dwTimeGlobal - m_metrics_time >= 1000)
+        report_metrics();
 }
 
 void CALifeUpdateManager::report_metrics()
@@ -122,7 +127,7 @@ void CALifeUpdateManager::report_metrics()
     ZoneScopedN("ALife/metrics");
     // Opt-in inventory after warmup, then every 30 samples. Keep verbose
     // diagnostics out of performance comparisons.
-    const bool inventory = (++m_metrics_samples % 30 == 10) && strstr(Core.Params, "-alife_diagnostics");
+    const bool inventory = (++m_metrics_samples % 30 == 10) && m_alife_diagnostics;
     u32 online = 0, offline = 0, living_online = 0, living_offline = 0;
     for (const auto& entry : graph().level().objects())
     {
