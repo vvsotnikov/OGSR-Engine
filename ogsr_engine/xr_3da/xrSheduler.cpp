@@ -226,9 +226,6 @@ void CSheduler::ProcessStep()
     u32 dwTime = Device.dwTimeGlobal;
 
     const bool prefetch = Device.dwPrecacheFrame > 0;
-    // Experimental queue maintenance only: keep the existing dispatch order,
-    // deadlines and budget policy. Null slots remain visible to Unregister.
-    static const bool compact_queue = strstr(Core.Params, "-scheduler_compact") != nullptr;
     decltype(Items) ItemsProcessed;
     bool stopped{};
     //size_t cnt{};
@@ -258,10 +255,9 @@ void CSheduler::ProcessStep()
             }
         }
 
-        if (compact_queue)
-            Items[it - 1].Object = nullptr;
-        else
-            Items.erase(Items.begin() + (--it));
+        // Hide processed slots from Unregister just as erasing them would.
+        // Remove the tombstones together below, preserving survivor order.
+        Items[it - 1].Object = nullptr;
 
         if (skip || !shed_need)
         {
@@ -333,8 +329,7 @@ void CSheduler::ProcessStep()
     //    Msg("Prefetch frame, updated: [%u] objects!", cnt);
 
     // Push "processed" back
-    if (compact_queue)
-        Items.erase(std::remove_if(Items.begin(), Items.end(), [](const Item& item) { return !item.Object; }), Items.end());
+    Items.erase(std::remove_if(Items.begin(), Items.end(), [](const Item& item) { return !item.Object; }), Items.end());
     Items.insert(Items.end(), std::make_move_iterator(ItemsProcessed.begin()), std::make_move_iterator(ItemsProcessed.end()));
 
     if (!stopped)

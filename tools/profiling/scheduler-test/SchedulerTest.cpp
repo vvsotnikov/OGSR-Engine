@@ -19,7 +19,6 @@ struct shared_str : std::string { using std::string::string; const char* operato
 template<class T> void clamp(T& value, T low, T high) { value = std::clamp(value, low, high); }
 int iFloor(float value) { return int(std::floor(value)); }
 template<class... Args> void Msg(Args...) {}
-struct { const char* Params; } Core;
 uint64_t clock_ms = 0;
 struct CTimer { uint64_t start; void Start() { start = clock_ms; } u32 GetElapsed_ms() const { return u32(clock_ms-start); } };
 struct Stat { struct { void Begin() {} void End() {} } Sheduler; float fShedulerLoad; } statistics;
@@ -67,8 +66,7 @@ struct NPC : ISheduled {
         }
     }
 };
-int main(int argc, char**) {
-    Core.Params=argc>1 ? "-scheduler_compact" : "";
+int main() {
     for(u32 seed=0; seed<200; ++seed) {
         CSheduler instance; scheduler=&instance; instance.Initialize();
         std::vector<NPC> npcs; population=&npcs; npcs.reserve(96);
