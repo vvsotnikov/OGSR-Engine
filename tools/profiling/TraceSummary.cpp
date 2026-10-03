@@ -32,7 +32,8 @@ int main(int argc, char** argv)
             const std::string name = worker.GetString(location.name.active ? location.name : location.function);
             if (name != "ALife/switch" && name != "ALife/scheduled" && name != "CLevel::script_gc" &&
                 name != "ALife/switch/add_online" && name != "ALife/switch/remove_online" &&
-                name != "CSheduler::Update" && name != "CSheduler::ProcessStep" && name != "CSheduler::ProcessStep2") continue;
+                name != "CSheduler::Update" && name != "CSheduler::ProcessStep" && name != "CSheduler::ProcessStep2" &&
+                name.rfind("stalker/", 0) != 0) continue;
             for (const auto& event : entry.second.zones)
             {
                 const auto* zone = event.Zone();

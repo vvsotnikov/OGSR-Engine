@@ -1,0 +1,23 @@
+diff --git a/ogsr_engine/xrGame/GamePersistent.cpp b/ogsr_engine/xrGame/GamePersistent.cpp
+index 2c2029ec4..d87f9857e 100644
+--- a/ogsr_engine/xrGame/GamePersistent.cpp
++++ b/ogsr_engine/xrGame/GamePersistent.cpp
+@@ -517,6 +517,8 @@ extern CUISequencer* g_tutorial;
+ extern CUISequencer* g_tutorial2;
+ extern bool RESET_SECTORS_HACK;
+ 
++#include "StressValidation.inl"
++
+ void CGamePersistent::OnFrame()
+ {
+     if (g_tutorial2)
+@@ -563,6 +565,9 @@ void CGamePersistent::OnFrame()
+     if (!g_pGameLevel->bReady)
+         return;
+ 
++    if (Device.dwPrecacheFrame == 0 && !load_screen_renderer.b_registered)
++        RunPopulationStress();
++
+     if (Device.Paused())
+     {
+ #ifndef MASTER_GOLD
