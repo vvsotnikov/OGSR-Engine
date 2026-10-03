@@ -383,6 +383,23 @@ void rt_mutation()
     check(w.scheduler.ItemsRT.size() == 1, "RT needed removal compacts queue");
 }
 
+void exception_cleanup()
+{
+    World w;
+    NPC a(1, w.calls);
+    a.throwUpdate = true;
+    w.add(a); w.tick(100);
+    check(w.scheduler.m_current_step_obj == nullptr, "exception leaves no current object");
+    // A stale current pointer must not swallow cancellation of a pending registration.
+    a.throwUpdate = false;
+    w.scheduler.Register(&a);
+    w.scheduler.Unregister(&a, true);
+    w.calls.clear(); w.tick(200);
+    check(w.calls.empty() && w.scheduler.Items.empty(), "pending registration canceled after exception");
+    w.scheduler.Register(&a); w.tick(201); w.tick(202);
+    check(w.calls == std::vector<int>{1}, "object can register again after exception");
+}
+
 void exceptions()
 {
     for (bool inNeeded : {true, false})
@@ -585,7 +602,9 @@ int main(int argc, char** argv)
     const std::string name = argv[1];
     try
     {
-        if (name == "rt_mutation")
+        if (name == "exception_cleanup")
+            exception_cleanup();
+        else if (name == "rt_mutation")
             rt_mutation();
         else if (name == "ordering")
             ordering();

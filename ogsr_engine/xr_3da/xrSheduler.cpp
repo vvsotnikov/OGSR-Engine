@@ -306,7 +306,7 @@ void CSheduler::ProcessStep()
         __except (ExceptStackTrace("[CSheduler::ProcessStep2] stack trace:\n"))
         {
             Msg("Scheduler tried to update object %s", *curr.scheduled_name);
-            curr.Object = nullptr;
+            m_current_step_obj = nullptr;
             continue;
         }
 
