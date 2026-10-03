@@ -39,15 +39,12 @@ template <class... Args>
 void Msg(Args...)
 {}
 uint64_t clock_ms = 0;
-bool throwTimer = false;
 struct CTimer
 {
     uint64_t start;
     void Start() { start = clock_ms; }
     u32 GetElapsed_ms() const
     {
-        if (throwTimer)
-            throw std::runtime_error("timer");
         return u32(clock_ms - start);
     }
 };
@@ -142,7 +139,6 @@ struct World
         Device.dwTimeGlobal = 0;
         Device.dwPrecacheFrame = 0;
         clock_ms = 0;
-        throwTimer = false;
         psShedulerCurrent = 10;
         psShedulerTarget = 10;
         psShedulerMax = 10;
@@ -416,28 +412,6 @@ void scale_lifecycle()
         w.tick(101);
         check(w.calls == (mode == 1 ? std::vector<int>{1} : std::vector<int>{}), "scale re-registration deferred");
     }
-}
-void step_cleanup()
-{
-    World w;
-    NPC a(1, w.calls);
-    w.add(a);
-    throwTimer = true;
-    bool caught = false;
-    try
-    {
-        w.tick(100);
-    }
-    catch (const std::runtime_error&)
-    {
-        caught = true;
-    }
-    throwTimer = false;
-    check(caught, "injected failure outside callback handlers escaped");
-    check(w.scheduler.m_current_step_obj == nullptr, "escaped failure clears current callback");
-#ifdef DEBUG
-    check(w.scheduler.m_debug_processed == nullptr, "escaped failure clears temporary queue observer");
-#endif
 }
 #ifdef DEBUG
 void registered_consistency()
@@ -778,8 +752,6 @@ int main(int argc, char** argv)
             normal_cancels_rt();
         else if (name == "scale_lifecycle")
             scale_lifecycle();
-        else if (name == "step_cleanup")
-            step_cleanup();
         else if (name == "exception_cleanup")
             exception_cleanup();
         else if (name == "rt_mutation")

@@ -29,8 +29,8 @@ slots behind. Re-registration is deferred; it cannot invalidate active traversal
 
 An ordinary object remains registered during both scale and update callbacks.
 Cancellation during scale suppresses the subsequent update, including when the
-object re-registers itself for a later pass. No object access may follow a scale
-callback that cancels and destroys its object.
+object re-registers itself for a later pass. The scheduler must not access the object
+after a scale callback cancels and destroys it.
 
 After an ordinary callback exception, there is no current callback. Otherwise a
 stale pointer could consume an unregister meant to cancel a pending registration.
@@ -39,9 +39,9 @@ re-registering is a DEBUG contract violation.
 
 DEBUG membership includes queued, current and processed objects, with pending
 operations applied in request order. Duplicate membership and operations against
-the wrong prior state must assert. The temporary processed-queue observer must be
-cleared on every exit from the step, including failures outside callback handlers.
-This cleanup does not promise recovery of an entire aborted engine update.
+the wrong prior state must assert. The temporary processed-queue observer is
+valid only during the step and is cleared before normal return. Failures outside
+the callback handlers abort the update; scheduler recovery is not supported.
 
 ## Running
 
@@ -58,8 +58,8 @@ ctest --test-dir <build-directory> -C Release --output-on-failure
 The tests compile the production scheduler with mock objects and a clock advanced
 by callbacks. They do not measure queue-maintenance cost or validate the real
 interface ABI and shared-string reference counting. C++ catches substitute for
-Windows SEH handlers and an exact C++ cleanup expansion substitutes for the native
-finally block. Exception cases validate adapted control flow, not native SEH recovery.
+Windows SEH handlers. Exception cases validate adapted control flow, not native
+SEH recovery.
 
 The fixture builds both Release semantics and a DEBUG-defined variant with
 registration assertions active. This exercises scheduler DEBUG code, not the full

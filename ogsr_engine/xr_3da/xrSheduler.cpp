@@ -177,29 +177,7 @@ void CSheduler::Unregister(ISheduled* A, bool force)
     R.Object = A;
 }
 
-void CSheduler::FinishStep()
-{
-#ifdef DEBUG
-    m_debug_processed = nullptr;
-#endif
-    m_current_step_obj = nullptr;
-}
-
 void CSheduler::ProcessStep()
-{
-    // Keep native SEH cleanup outside the function owning C++ temporaries.
-    // Cleanup must also run when a failure escapes the callback handlers.
-    __try
-    {
-        ProcessStepInternal();
-    }
-    __finally
-    {
-        FinishStep();
-    }
-}
-
-void CSheduler::ProcessStepInternal()
 {
     ZoneScopedN("CSheduler::ProcessStep");
 
@@ -317,6 +295,9 @@ void CSheduler::ProcessStepInternal()
     // Push "processed" back
     Items.erase(std::remove_if(Items.begin(), Items.end(), [](const Item& item) { return !item.Object; }), Items.end());
     Items.insert(Items.end(), std::make_move_iterator(ItemsProcessed.begin()), std::make_move_iterator(ItemsProcessed.end()));
+#ifdef DEBUG
+    m_debug_processed = nullptr;
+#endif
 
     if (!stopped)
     {
@@ -359,8 +340,7 @@ void CSheduler::Update()
 
             const u32 elapsed = dwTime - curr.dwTimeOfLastExecute;
             curr.Object->shedule_Update(elapsed);
-            if (curr.Object)
-                curr.dwTimeOfLastExecute = dwTime;
+            curr.dwTimeOfLastExecute = dwTime;
         }
     }
 
