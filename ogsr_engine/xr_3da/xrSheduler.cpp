@@ -93,7 +93,12 @@ bool CSheduler::internal_Unregister(const ISheduled* object, BOOL RT)
         {
             if (ItemsRT[i].Object == object)
             {
-                ItemsRT.erase(ItemsRT.begin() + i);
+                // Callbacks may remove this entry or a neighbor during RT dispatch.
+                // Keep vector references stable until traversal has finished.
+                if (m_processing_now)
+                    ItemsRT[i].Object = nullptr;
+                else
+                    ItemsRT.erase(ItemsRT.begin() + i);
                 return true;
             }
         }
@@ -358,9 +363,14 @@ void CSheduler::Update()
         // Realtime priority
         for (auto& curr : ItemsRT)
         {
-            R_ASSERT(curr.Object);
+            if (!curr.Object)
+                continue;
 
-            if (!curr.Object->shedule_Needed())
+            const bool needed = curr.Object->shedule_Needed();
+            if (!curr.Object) // The needed callback may unregister this entry.
+                continue;
+
+            if (!needed)
             {
                 curr.dwTimeOfLastExecute = dwTime;
                 continue;
@@ -368,9 +378,12 @@ void CSheduler::Update()
 
             const u32 elapsed = dwTime - curr.dwTimeOfLastExecute;
             curr.Object->shedule_Update(elapsed);
-            curr.dwTimeOfLastExecute = dwTime;
+            if (curr.Object)
+                curr.dwTimeOfLastExecute = dwTime;
         }
     }
+
+    ItemsRT.erase(std::remove_if(ItemsRT.begin(), ItemsRT.end(), [](const Item& item) { return !item.Object; }), ItemsRT.end());
 
     // Normal (sheduled)
     ProcessStep();

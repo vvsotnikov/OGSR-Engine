@@ -92,12 +92,14 @@ struct NPC : ISheduled
     u32 cost = 0, neededCalls = 0;
     std::vector<u32> elapsed;
     std::function<void()> action;
+    std::function<void()> neededAction;
     std::vector<int>* calls;
     NPC(int id, std::vector<int>& calls) : id(id), calls(&calls) {}
     float shedule_Scale() override { return scale; }
     bool shedule_Needed() override
     {
         ++neededCalls;
+        if (neededAction) neededAction();
         if (throwNeeded)
             throw std::runtime_error("needed");
         return needed;
@@ -346,6 +348,41 @@ void realtime()
     check(w.calls.empty(), "external RT unregister removes callback");
 }
 
+void rt_mutation()
+{
+    for (int removed : {1, 2, 3}) {
+        for (bool again : {false, true}) {
+            World w;
+            NPC a(1, w.calls), b(2, w.calls), c(3, w.calls);
+            NPC* victim = removed == 1 ? &a : removed == 2 ? &b : &c;
+            for (auto* npc : {&a, &b, &c}) w.scheduler.Register(npc, true);
+            b.action = [&] {
+                w.scheduler.Unregister(victim);
+                if (again) w.scheduler.Register(victim, true);
+            };
+            w.tick(100);
+            check(w.calls == (removed == 3 ? std::vector<int>{1, 2} : std::vector<int>{1, 2, 3}), "RT removal changes current-pass dispatch");
+            check(w.scheduler.ItemsRT.size() == (again ? 3u : 2u), "RT removal/re-registration membership");
+            b.action = {};
+            w.calls.clear();
+            w.tick(150);
+            std::vector<int> expected;
+            for (int id : {1, 2, 3}) if (id != removed) expected.push_back(id);
+            if (again) expected.push_back(removed);
+            check(w.calls == expected, "RT survivor and re-registration order");
+            if (again) check(victim->elapsed.back() == 50, "RT re-registration timestamp");
+        }
+    }
+    // A needed callback can unregister its own entry before Update dereferences it.
+    World w;
+    NPC a(1, w.calls), b(2, w.calls);
+    w.scheduler.Register(&a, true); w.scheduler.Register(&b, true);
+    a.neededAction = [&] { w.scheduler.Unregister(&a); };
+    w.tick(100);
+    check(w.calls == std::vector<int>{2}, "RT needed self-removal suppresses update");
+    check(w.scheduler.ItemsRT.size() == 1, "RT needed removal compacts queue");
+}
+
 void exceptions()
 {
     for (bool inNeeded : {true, false})
@@ -548,7 +585,9 @@ int main(int argc, char** argv)
     const std::string name = argv[1];
     try
     {
-        if (name == "ordering")
+        if (name == "rt_mutation")
+            rt_mutation();
+        else if (name == "ordering")
             ordering();
         else if (name == "compaction")
             compaction();
