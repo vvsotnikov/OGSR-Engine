@@ -17,7 +17,7 @@ Fox's flags were `0xFFFFFFF3`, all others `0xFFFFFFBF`. Both values contain `flS
 
 ## Input change
 
-The input fix described below was subsequently extracted unchanged into [PR #5](https://github.com/vvsotnikov/OGSR-Engine/pull/5) and removed from the whole-map branch. This section records the historical diagnostic build; retained binaries and captures still include that fix.
+The input fix described below was subsequently extracted into [PR #5](https://github.com/vvsotnikov/OGSR-Engine/pull/5), simplified, and merged into main. PR #3 now includes that merged fix and the message-lifetime correction from PR #6. This section records the earlier diagnostic build, not the final input implementation.
 
 The October 2 dump identifies an unchecked failed DirectInput `CreateDevice` call followed by a null dereference. Release-mode `CHK_DX` does not validate HRESULTs. Initialization now checks DirectInput creation, device creation, data format, cooperative level and buffer setup, reports operation/HRESULT, and exits if the error handler returns. The existing cooperative-level `E_NOTIMPL` exception is preserved. Keyboard/mouse identity is logged immediately before setup.
 

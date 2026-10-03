@@ -5,7 +5,7 @@ param(
     [ValidateRange(0,10)][int]$BudgetMs = 0,
     [switch]$CompactQueue,
     [switch]$SaveSnapshot,
-    [ValidateSet('bin_experiment','bin_policy','bin_activation','bin_activation_tracy','bin_reconcile','bin_dynamic_policy')][string]$Package = 'bin_experiment',
+    [ValidateSet('bin_experiment','bin_policy','bin_activation','bin_activation_tracy','bin_reconcile','bin_dynamic_policy','bin_group')][string]$Package = 'bin_experiment',
     [switch]$ReconcileMetrics,
     [switch]$Transitions,
     [switch]$ActivationQueue,

@@ -123,6 +123,43 @@ void CSE_ALifeGroupAbstract::try_switch_online()
     I->try_switch_online();
 }
 
+namespace
+{
+// This is the legacy scan's early-exit policy, not the final group decision.
+bool stops_group_offline_scan(CSE_ALifeMonsterAbstract* member, CSE_ALifeDynamicObject* group)
+{
+    if (!member->can_switch_offline())
+        return false;
+    if (!member->can_switch_online())
+        return true;
+    return !group->alife().uses_distance_switching() ||
+        group->alife().graph().actor()->o_Position.distance_to(member->o_Position) <= group->alife().offline_distance();
+}
+
+void detach_dead_group_member(CSE_ALifeGroupAbstract& group, u32 index, CSE_ALifeMonsterAbstract* member, CSE_ALifeDynamicObject* object)
+{
+    member->fHealth = 0.f;
+    member->m_bDirectControl = true;
+    group.m_tpMembers.erase(group.m_tpMembers.begin() + index);
+    member->m_bOnline = false;
+    CSE_ALifeInventoryItem* item = smart_cast<CSE_ALifeInventoryItem*>(member);
+    if (item && item->attached())
+    {
+        CSE_ALifeDynamicObject* parent = ai().alife().objects().object(member->ID_Parent, true);
+        if (parent)
+            parent->detach(item);
+    }
+    // Register the separate object, then remove its graph-point membership
+    // while retaining current-level membership. Recheck attachment after registration.
+    object->alife().register_object(member);
+    CSE_ALifeInventoryItem* inventory_item = smart_cast<CSE_ALifeInventoryItem*>(member);
+    if (!inventory_item || !inventory_item->attached())
+        object->alife().graph().remove(member, member->m_tGraphID, false);
+    member->m_bOnline = true;
+    --group.m_wCount;
+}
+}
+
 void CSE_ALifeGroupAbstract::try_switch_offline()
 {
     // checking if group is not empty
@@ -148,48 +185,15 @@ void CSE_ALifeGroupAbstract::try_switch_offline()
         // check if monster is not dead
         if (tpGroupMember->g_Alive())
         {
-            // so, monster is not dead
-            // checking if the object is _not_ ready to switch offline
-            if (!tpGroupMember->can_switch_offline())
-                continue;
-
-            if (!tpGroupMember->can_switch_online())
-                // so, it is not ready, breaking a cycle, because we can't
-                // switch group offline since not all the group members are ready
-                // to switch offline
-                break;
-
-            if (!I->alife().uses_distance_switching() || I->alife().graph().actor()->o_Position.distance_to(tpGroupMember->o_Position) <= I->alife().offline_distance())
-                // so, it is not ready, breaking a cycle, because we can't
-                // switch group offline since not all the group members are ready
-                // to switch offline
+            if (stops_group_offline_scan(tpGroupMember, I))
                 break;
 
             continue;
         }
 
-        // detach object from the group
-        tpGroupMember->fHealth = 0.f;
-        tpGroupMember->m_bDirectControl = true;
-        m_tpMembers.erase(m_tpMembers.begin() + i);
-        tpGroupMember->m_bOnline = false;
-        CSE_ALifeInventoryItem* item = smart_cast<CSE_ALifeInventoryItem*>(tpGroupMember);
-        if (item && item->attached())
-        {
-            CSE_ALifeDynamicObject* object = ai().alife().objects().object(tpGroupMember->ID_Parent, true);
-            if (object)
-                object->detach(item);
-        }
-        // store the __new separate object into the registries
-        I->alife().register_object(tpGroupMember);
-
-        // and remove it from the graph point but do not remove it from the current level map
-        CSE_ALifeInventoryItem* l_tpALifeInventoryItem = smart_cast<CSE_ALifeInventoryItem*>(tpGroupMember);
-        if (!l_tpALifeInventoryItem || !l_tpALifeInventoryItem->attached())
-            I->alife().graph().remove(tpGroupMember, tpGroupMember->m_tGraphID, false);
-
-        tpGroupMember->m_bOnline = true;
-        --m_wCount;
+        // Keep cleanup in traversal order: an earlier live member may stop the
+        // scan before this member. A separate full cleanup pass changes behavior.
+        detach_dead_group_member(*this, i, tpGroupMember, I);
         --i;
         --N;
     }

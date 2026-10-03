@@ -20,6 +20,6 @@ Create a separately named save, reload it, and compare identities and switching 
 
 ## Input initialization
 
-This separate validation belongs to [DirectInput PR #5](https://github.com/vvsotnikov/OGSR-Engine/pull/5), not the whole-map PR. The guard is no longer included in the whole-map branch.
+This separate validation belongs to [DirectInput PR #5](https://github.com/vvsotnikov/OGSR-Engine/pull/5), now merged and included via main. Its failure injection passed; PR #6 subsequently fixed and verified readable HRESULT text. The procedure below is retained for future regression checks, not an outstanding whole-map gate.
 
 The release build must check DirectInput creation, device creation, data format, cooperative level and buffer setup. Preserve the existing E_NOTIMPL cooperative-level exception. A failure should identify the operation and HRESULT and stop before registering frame callbacks. Successful launches do not validate the failure path or prove the USB switcher's involvement. Test failure handling separately using a debugger-induced HRESULT failure; never disable physical input devices or change their registration for this test.
