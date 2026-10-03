@@ -35,8 +35,6 @@ private:
     void internal_Register(ISheduled* A, BOOL RT = FALSE);
     bool internal_Unregister(const ISheduled* A, BOOL RT);
     void internal_Registration();
-    void ProcessStepInternal();
-    void FinishStep();
 
 public:
     void ProcessStep();
