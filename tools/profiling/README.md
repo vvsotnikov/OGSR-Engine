@@ -40,4 +40,6 @@ For large zone projections, `python Summarize-TraceStream.py <prefix> <start-sec
 
 ## Population stress
 
+See `CADENCE-2026-10-03.md` for per-stalker deadlines, actual callback intervals, zero-update detection and a separate 20-fighter combat scenario. Its separate `bin_cadence` build uses `cadence-diagnostic.patch`, `CadenceStress.inl` and `SchedulerProbe.h`. Run the population harness with `-Cadence`; add `-Combat -Counts 20` for the encounter. `Summarize-Cadence.py` analyzes the buffered evidence without loading a Tracy trace. Do not combine the cadence and older stress diagnostic patches.
+
 See `STRESS-2026-10-03.md` for the dispersed Bar population sweep and detailed CPU-scope evidence. The stress hook is deliberately a separate diagnostic build: apply `stress-diagnostic.patch`, copy `StressValidation.inl` into `ogsr_engine/xrGame/`, build, and package into `bin_stress` with matching PDB/provenance. Do not combine it with the persistence diagnostic hook or deploy it as the normal playtest binary. `Run-PopulationStress.ps1` uses fresh private Bar save copies, spawns 0–400 extra generic stalkers, records buffered frame samples, and quits. `-CaptureTrace` records an additional detailed run; exclude connected-Tracy runs from the untraced comparison. The original save is never modified.

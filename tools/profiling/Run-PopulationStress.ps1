@@ -2,22 +2,30 @@ param(
     [ValidateRange(0,400)][int[]]$Counts = @(0,50,100,200,400),
     [string]$InstallRoot = 'D:\Games\OGSR-Baseline',
     [string]$ToolRoot = 'C:\Users\vladimir\Documents\Codex\tools\tracy',
-    [switch]$CaptureTrace
+    [switch]$CaptureTrace,
+    [switch]$Cadence,
+    [switch]$Combat
 )
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/ValidationLog.ps1"
-$engine = Join-Path $InstallRoot 'bin_stress/xrEngine.exe'
+$package = if ($Cadence) { 'bin_cadence' } else { 'bin_stress' }
+if ($Combat -and (!$Cadence -or $Counts.Count -ne 1 -or $Counts[0] -ne 20)) { throw 'Combat requires -Cadence -Counts 20' }
+$engine = Join-Path $InstallRoot "$package/xrEngine.exe"
 foreach ($count in $Counts) {
     $session = & "$PSScriptRoot/Capture-Session.ps1" -InstallRoot $InstallRoot -ToolRoot $ToolRoot `
         -SeedAppData 'seeds/bar-2026-10-03' -SaveName bar_center -Mode whole-map -PrepareOnly
     $path = Join-Path $session 'session.json'
     $meta = Get-Content -Raw $path | ConvertFrom-Json
     $meta.arguments += " -alife_stress $count"
+    if ($Cadence) { $meta.arguments += ' -alife_cadence' }
+    if ($Combat) { $meta.arguments += ' -alife_combat' }
     $meta.engineSha256 = (Get-FileHash $engine).Hash
-    $meta.build = Get-Content -Raw "$InstallRoot/bin_stress/build.json" | ConvertFrom-Json
+    $meta.build = Get-Content -Raw "$InstallRoot/$package/build.json" | ConvertFrom-Json
     $meta.status = 'stress-running'
     $meta | Add-Member requestedExtraStalkers $count
     $meta | Add-Member traceRequested ([bool]$CaptureTrace)
+    $meta | Add-Member cadenceRequested ([bool]$Cadence)
+    $meta | Add-Member scenario $(if ($Combat) { 'combat' } else { 'dispersed' })
     $collector = $null
     $game = Start-Process $engine -ArgumentList $meta.arguments -WorkingDirectory $InstallRoot -PassThru
     $meta | Add-Member gamePid $game.Id
