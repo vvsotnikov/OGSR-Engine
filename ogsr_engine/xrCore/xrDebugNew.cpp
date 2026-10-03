@@ -212,7 +212,11 @@ void xrDebug::backend(const char* expression, const char* description, const cha
         DEBUG_INVOKE;
 }
 
-const char* xrDebug::DXerror2string(const HRESULT code) const { return _com_error{code}.ErrorMessage(); }
+std::string xrDebug::DXerror2string(const HRESULT code) const
+{
+    // Copy the text while its owning _com_error is still alive.
+    return _com_error{code}.ErrorMessage();
+}
 
 const char* xrDebug::error2string(const DWORD code) const
 {
@@ -221,11 +225,11 @@ const char* xrDebug::error2string(const DWORD code) const
     return desc_storage;
 }
 
-void xrDebug::error(const HRESULT hr, const char* expr, const char* file, int line, const char* function) { backend(DXerror2string(hr), expr, 0, 0, file, line, function); }
+void xrDebug::error(const HRESULT hr, const char* expr, const char* file, int line, const char* function) { backend(DXerror2string(hr).c_str(), expr, 0, 0, file, line, function); }
 
 void xrDebug::error(const HRESULT hr, const char* expr, const char* e2, const char* file, int line, const char* function)
 {
-    backend(DXerror2string(hr), expr, e2, 0, file, line, function);
+    backend(DXerror2string(hr).c_str(), expr, e2, 0, file, line, function);
 }
 
 void xrDebug::fail(const char* e1, const char* file, int line, const char* function) { backend("assertion failed", e1, 0, 0, file, line, function); }

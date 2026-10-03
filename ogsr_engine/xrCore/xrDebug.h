@@ -14,7 +14,7 @@ public:
     crashhandler* get_crashhandler() const { return handler; };
     void set_crashhandler(crashhandler* handler) { this->handler = handler; };
 
-    const char* DXerror2string(const HRESULT code) const;
+    std::string DXerror2string(const HRESULT code) const;
     const char* error2string(const DWORD code) const;
 
     void fail(const char* e1, const char* file, int line, const char* function);

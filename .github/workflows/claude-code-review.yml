@@ -1,0 +1,51 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code Review
+        id: claude-review
+        uses: anthropics/claude-code-action@9ca9355b36297178e28d37c799d1c9c8a28e6507 # v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          track_progress: true
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Review this PR. Use GH CLI and other tools that are available.
+
+            When reviewing, always start from critically reading what PR says. The very common failure modes are:
+
+            1) Incorrectly stating a problem and/or stating a symptom instead of the root cause - such PRs should be reconsidered and/or closed.
+            2) Suggesting/implementing a completely incorrect solution for the problem.
+            3) Coming up with incorrect architecture.
+            4) Making up requirements/limitations that don't actually exist.
+            5) Over-engineering things.
+            6) Defining an incorrect scope.
+            7) Putting too many things into a single PR.
+
+            The list is not exhaustive.
+
+            Conduct an exhaustive review, then write down all problems from most to least critical.
+            Use structured markdown — headers, subheaders, tables, emojis wherever they make the findings easier to scan.
+
+          claude_args: |
+            --max-turns 500 --model claude-opus-5-5 --allowedTools "Read,Grep,Glob,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue view:*)"
