@@ -23,6 +23,8 @@ protected:
     float m_offline_distance;
     bool m_whole_map_online;
     bool m_alife_metrics;
+    bool m_activation_queue_enabled = false;
+    bool m_collect_activations = false;
     u64 m_online_spawns = 0;
     u64 m_offline_removals = 0;
 
@@ -44,6 +46,8 @@ public:
     IC CALifeSwitchManager(xrServer* server, LPCSTR section);
     virtual ~CALifeSwitchManager();
     void switch_object(CSE_ALifeDynamicObject* object);
+    void begin_activation_collection();
+    void finish_activation_collection();
     IC bool uses_distance_switching() const;
     IC float online_distance() const;
     IC float offline_distance() const;

@@ -33,6 +33,7 @@ return function(cfg)
     end, now, cfg.budget_ms, cfg.budget_ms > 0 and 8 or 400)
     local stage, deadline, last, last_frame, last_stage, sample = 0, 0, nil, nil, 0, 0
     local creation_start, creation_end, work_total, all_online = nil, nil, 0, false
+    local creation_frame, saved_pending = nil, false
     local function tick()
         local d = device()
         if not db.actor or not app_ready() or d.precache_frame ~= 0 then return end
@@ -56,6 +57,7 @@ return function(cfg)
             batches:write(string.format("%d,%d,%.6f\n", d.frame, count, work))
             if done then
                 creation_end = now()
+                creation_frame = d.frame
                 stage, deadline = 3, creation_end + 15000
                 log1(string.format("[regular] create_end count=%d wall_ms=%.3f work_ms=%.3f online_at_creation=%d", #ids, creation_end-creation_start, work_total, online_at_creation))
             end
@@ -64,11 +66,24 @@ return function(cfg)
             log1("[regular] measure_begin")
         elseif stage == 4 and time >= deadline then
             assert(#ids == cfg.count and all_online, "Incomplete creation/activation")
+            assert(not cfg.save_pending or saved_pending, "No pending-activation save was made")
             log1("[regular] measure_end")
+            if cfg.verify_ids and #cfg.verify_ids > 0 then log1("[regular] verified_restored count=" .. #cfg.verify_ids) end
             frames:close(); batches:close(); populations:close()
             if cfg.save then get_console():execute("save regular_validation") end
             get_console():execute("quit")
             return
+        end
+        if cfg.save_pending and not saved_pending and creation_frame and d.frame >= creation_frame + 2 then
+            local offline = 0
+            for _, id in ipairs(ids) do
+                local object = assert(alife():object(id))
+                if not object.online then offline = offline + 1 end
+            end
+            assert(offline > 0, "Activation backlog drained before pending-save fixture")
+            log1(string.format("[regular] save_pending offline=%d frame=%d", offline, d.frame))
+            get_console():execute("save activation_pending")
+            saved_pending = true
         end
         if time >= sample then
             local retained, online, client, living = 0, 0, 0, 0
@@ -87,6 +102,12 @@ return function(cfg)
                 log1(string.format("[regular] all_online count=%d after_create_ms=%.3f", #ids, now()-creation_end))
             end
             if stage == 4 then assert(retained == cfg.count and online == cfg.count and client == cfg.count, "Lost/offline spawned object") end
+            if stage == 4 then
+                for _, id in ipairs(cfg.verify_ids or {}) do
+                    local object = assert(alife():object(id), "Missing restored ID " .. id)
+                    assert(object.online and level.object_by_id(id), "Restored ID offline or without client " .. id)
+                end
+            end
             sample = time + 1000
         end
         last, last_frame, last_stage = time, d.frame, stage

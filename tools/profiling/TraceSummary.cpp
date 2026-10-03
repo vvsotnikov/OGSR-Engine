@@ -16,11 +16,20 @@ int main(int argc, char** argv)
     {
         auto file = std::unique_ptr<tracy::FileRead>(tracy::FileRead::Open(argv[1]));
         if (!file) return 2;
-        tracy::Worker worker(*file, tracy::EventType::None);
+        tracy::Worker worker(*file, tracy::EventType::Plots);
         while (!worker.IsBackgroundDone()) std::this_thread::sleep_for(std::chrono::milliseconds(100));
         std::ofstream frames(std::string(argv[2]) + "-frames.tsv");
         std::ofstream zones(std::string(argv[2]) + "-zones.tsv");
-        if (!frames || !zones) return 3;
+        std::ofstream plots(std::string(argv[2]) + "-plots.tsv");
+        if (!frames || !zones || !plots) return 3;
+        plots << "name\ttime_ns\tvalue\n";
+        for (const auto* plot : worker.GetPlots())
+        {
+            const std::string name = worker.GetString(plot->name);
+            if (name != "activation/gc_budget_us" && name != "ALife/pending activation") continue;
+            for (const auto& point : plot->data)
+                plots << name << '\t' << point.time.Val() << '\t' << point.val << '\n';
+        }
         frames << "index\tstart_ns\tduration_ns\n";
         const auto* base = worker.GetFramesBase();
         for (size_t i = 0; i < worker.GetFullFrameCount(*base); ++i)
@@ -31,6 +40,9 @@ int main(int argc, char** argv)
             const auto& location = worker.GetSourceLocation(entry.first);
             const std::string name = worker.GetString(location.name.active ? location.name : location.function);
             if (name != "ALife/switch" && name != "ALife/scheduled" && name != "CLevel::script_gc" &&
+                name != "ALife/activation_queue" && name != "WaitSecondThread" && name != "Render process" &&
+                name != "DoRender" && name != "DoRender End" && name != "seqParallel" && name != "seqFrameMT" &&
+                name != "activation/client_packet" && name != "activation/client_spawn" && name != "activation/client_queue" &&
                 name != "ALife/switch/add_online" && name != "ALife/switch/remove_online" &&
                 name != "CSheduler::Update" && name != "CSheduler::ProcessStep" && name != "CSheduler::ProcessStep2" &&
                 name.rfind("stalker/", 0) != 0) continue;
@@ -41,9 +53,10 @@ int main(int argc, char** argv)
                 zones << name << '\t' << zone->Start() << '\t' << zone->End() - zone->Start() << '\t' << event.Thread() << '\n';
             }
         }
-        std::cout << "capture_unix=" << worker.GetCaptureTime() << " last_ns=" << worker.GetLastTime() << '\n';
-        frames.flush(); zones.flush();
-        return frames && zones ? 0 : 4;
+        std::cout << "capture_unix=" << worker.GetCaptureTime() << " last_ns=" << worker.GetLastTime()
+                  << " frame_offset=" << worker.GetFrameOffset() << '\n';
+        frames.flush(); zones.flush(); plots.flush();
+        return frames && zones && plots ? 0 : 4;
     }
     catch (const std::exception& e) { std::cerr << "Trace read failed: " << e.what() << '\n'; return 5; }
 }

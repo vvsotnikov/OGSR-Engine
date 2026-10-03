@@ -49,8 +49,11 @@ def summarize(session):
     if int(creation[1]) != count or int(online[1]) != count:
         raise ValueError('Log population count mismatch')
     result = dict(session=meta['session'], engineSha256=meta['engineSha256'], extras=count,
+                  activationQueue=meta.get('activationQueue', False), traceRequested=meta.get('traceRequested', False),
+                  savePendingRequested=meta.get('savePendingRequested', False), verifiedIds=len(meta.get('verifyIds', [])),
                   compact=meta['compactQueue'], budgetMs=meta['spawnBudgetMs'], frameMs=cadence.stats(times),
                   seconds=sum(times)/1000, creationWarmupMaxFrameMs=max(warmup),
+                  postCreationMaxFrameMs=max(float(r['frame_ms']) for r in frames if r['stage']=='3'),
                   creationWallMs=float(creation[2]), creationWorkMs=float(creation[3]),
                   onlineAtCreation=int(creation[4]), allOnlineAfterCreateMs=float(online[2]),
                   batches=len(batches), batchWorkMs=cadence.stats([float(r['work_ms']) for r in batches]),

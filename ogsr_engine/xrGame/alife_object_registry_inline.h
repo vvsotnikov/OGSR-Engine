@@ -28,6 +28,7 @@ IC void CALifeObjectRegistry::remove(const ALife::_OBJECT_ID& id, bool no_assert
         return;
     }
 
+    activation_queue.cancel(id);
     m_objects.erase(I);
 }
 

@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.16)
+project(activation-test LANGUAGES CXX)
+add_executable(activation-test ActivationTest.cpp)
+target_compile_features(activation-test PRIVATE cxx_std_17)
+enable_testing()
+add_test(NAME activation-lifetime-and-budget COMMAND activation-test)
