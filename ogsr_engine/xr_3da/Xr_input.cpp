@@ -25,7 +25,7 @@ CInput::CInput(bool bExclusive, int deviceForInit)
     iCapture(&dummyController);
 
     if (!pDI)
-        CHK_DX(DirectInput8Create(GetModuleHandle(NULL), DIRECTINPUT_VERSION, IID_IDirectInput8, (void**)&pDI, NULL));
+        R_CHK(DirectInput8Create(GetModuleHandle(NULL), DIRECTINPUT_VERSION, IID_IDirectInput8, (void**)&pDI, NULL));
 
     // KEYBOARD
     if (deviceForInit & keyboard_device_key)
@@ -73,12 +73,12 @@ HRESULT CInput::CreateInputDevice(LPDIRECTINPUTDEVICE8* device, GUID guidDevice,
 {
     // Obtain an interface to the input device
     //.	CHK_DX( pDI->CreateDeviceEx( guidDevice, IID_IDirectInputDevice8, (void**)device, NULL ) );
-    CHK_DX(pDI->CreateDevice(guidDevice, /*IID_IDirectInputDevice8,*/ device, NULL));
+    R_CHK(pDI->CreateDevice(guidDevice, /*IID_IDirectInputDevice8,*/ device, NULL));
 
     // Set the device data format. Note: a data format specifies which
     // controls on a device we are interested in, and how they should be
     // reported.
-    CHK_DX((*device)->SetDataFormat(pdidDataFormat));
+    R_CHK((*device)->SetDataFormat(pdidDataFormat));
 
     // Set the cooperativity level to let DirectInput know how this device
     // should interact with the system and with other DirectInput applications.
@@ -96,7 +96,7 @@ HRESULT CInput::CreateInputDevice(LPDIRECTINPUTDEVICE8* device, GUID guidDevice,
     dipdw.diph.dwHow = DIPH_DEVICE;
     dipdw.dwData = buf_size;
 
-    CHK_DX((*device)->SetProperty(DIPROP_BUFFERSIZE, &dipdw.diph));
+    R_CHK((*device)->SetProperty(DIPROP_BUFFERSIZE, &dipdw.diph));
 
     return S_OK;
 }
