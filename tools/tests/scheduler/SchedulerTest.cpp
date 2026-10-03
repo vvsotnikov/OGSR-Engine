@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <iostream>
 #include <string>
@@ -9,7 +10,11 @@
 #include <stdexcept>
 #include <set>
 #define ENGINE_API
+#ifdef DEBUG
+#define VERIFY(value) check(bool(value), "VERIFY: " #value)
+#else
 #define VERIFY(...)
+#endif
 void check(bool value, const std::string& message);
 #define R_ASSERT(value) check(bool(value), "R_ASSERT: " #value)
 #define ZoneScoped
@@ -31,15 +36,29 @@ void clamp(T& value, T low, T high)
     value = std::clamp(value, low, high);
 }
 int iFloor(float value) { return int(std::floor(value)); }
+std::vector<std::string> messages;
 template <class... Args>
-void Msg(Args...)
-{}
+void Msg(const char* format, Args... args)
+{
+    char buffer[4096];
+    std::snprintf(buffer, sizeof(buffer), format, args...);
+    messages.emplace_back(buffer);
+}
+size_t budget_messages()
+{
+    return std::count_if(messages.begin(), messages.end(), [](const std::string& message) {
+        return message.find("budget exhausted") != std::string::npos || message.find("took whole update frame") != std::string::npos;
+    });
+}
 uint64_t clock_ms = 0;
 struct CTimer
 {
     uint64_t start;
     void Start() { start = clock_ms; }
-    u32 GetElapsed_ms() const { return u32(clock_ms - start); }
+    u32 GetElapsed_ms() const
+    {
+        return u32(clock_ms - start);
+    }
 };
 struct Stat
 {
@@ -74,13 +93,14 @@ struct ISheduled
 #include "scheduler-under-test.cpp"
 
 unsigned failures = 0;
+std::string context;
 void check(bool value, const std::string& message)
 {
     if (!value)
     {
         ++failures;
         if (failures < 20)
-            std::cerr << message << "\n";
+            std::cerr << context << " " << message << "\n";
     }
 }
 struct NPC : ISheduled
@@ -92,12 +112,21 @@ struct NPC : ISheduled
     u32 cost = 0, neededCalls = 0;
     std::vector<u32> elapsed;
     std::function<void()> action;
+    std::function<void()> neededAction;
+    std::function<void()> scaleAction;
     std::vector<int>* calls;
     NPC(int id, std::vector<int>& calls) : id(id), calls(&calls) {}
-    float shedule_Scale() override { return scale; }
+    float shedule_Scale() override
+    {
+        if (scaleAction)
+            scaleAction();
+        return scale;
+    }
     bool shedule_Needed() override
     {
         ++neededCalls;
+        if (neededAction)
+            neededAction();
         if (throwNeeded)
             throw std::runtime_error("needed");
         return needed;
@@ -122,6 +151,7 @@ struct World
         Device.dwTimeGlobal = 0;
         Device.dwPrecacheFrame = 0;
         clock_ms = 0;
+        messages.clear();
         psShedulerCurrent = 10;
         psShedulerTarget = 10;
         psShedulerMax = 10;
@@ -346,6 +376,302 @@ void realtime()
     check(w.calls.empty(), "external RT unregister removes callback");
 }
 
+void normal_cancels_rt()
+{
+    for (bool again : {false, true})
+    {
+        World w;
+        NPC rt(1, w.calls), normal(2, w.calls);
+        w.scheduler.Register(&rt, true);
+        w.add(normal);
+        normal.action = [&] {
+            w.scheduler.Unregister(&rt);
+            if (again)
+                w.scheduler.Register(&rt, true);
+        };
+        w.tick(100);
+        check(w.scheduler.ItemsRT.size() == (again ? 1u : 0u), "RT removals in normal phase compact in same tick");
+        for (const auto& item : w.scheduler.ItemsRT)
+            check(item.Object != nullptr, "no RT tombstones between updates");
+        normal.action = {};
+        w.calls.clear();
+        w.tick(101);
+        check(w.calls == (again ? std::vector<int>{1} : std::vector<int>{}), "RT cancellation and re-registration from normal phase");
+    }
+}
+void needed_lifecycle()
+{
+    for (bool again : {false, true})
+    {
+        World w;
+        NPC a(1, w.calls), b(2, w.calls);
+        unsigned scales = 0;
+        a.scaleAction = [&] { ++scales; };
+        a.neededAction = [&] {
+            w.scheduler.Unregister(&a);
+            if (again)
+                w.scheduler.Register(&a);
+        };
+        w.add(a);
+        w.add(b);
+        w.tick(100);
+        check(scales == 0 && a.elapsed.empty(), "needed cancellation suppresses scale and update");
+        check(w.calls == std::vector<int>{2}, "needed cancellation preserves neighbor dispatch");
+        check(std::count_if(w.scheduler.Items.begin(), w.scheduler.Items.end(), [&](const auto& item) { return item.Object == &a; }) == (again ? 1 : 0),
+              "needed cancellation leaves exactly the requested membership");
+        a.neededAction = {};
+        w.calls.clear();
+        w.tick(101);
+        check(w.calls == (again ? std::vector<int>{1} : std::vector<int>{}), "needed re-registration dispatches once on next pass");
+    }
+}
+
+void callback_budget()
+{
+    for (bool prefetch : {false, true})
+        for (int phase : {0, 1, 2})
+            for (int outcome : {0, 1, 2, 3})
+            {
+                if (outcome == 3 && phase != 0)
+                    continue;
+                context = "phase=" + std::to_string(phase) + " outcome=" + std::to_string(outcome) + " prefetch=" + std::to_string(prefetch);
+                World w;
+                NPC a(1, w.calls), b(2, w.calls), c(3, w.calls);
+                w.add(a);
+                w.add(b);
+                w.add(c);
+                unsigned callbacks = 0;
+                for (auto* npc : {&a, &b, &c})
+                {
+                    auto action = [&, npc] {
+                        ++callbacks;
+                        clock_ms += 100;
+                        if (outcome == 2)
+                            throw std::runtime_error("expensive callback");
+                        if (outcome == 3)
+                            npc->needed = false;
+                        else
+                        {
+                            w.scheduler.Unregister(npc);
+                            if (outcome == 1)
+                                w.scheduler.Register(npc);
+                        }
+                    };
+                    if (phase == 0)
+                        npc->neededAction = action;
+                    else if (phase == 1)
+                        npc->scaleAction = action;
+                    else
+                        npc->action = action;
+                }
+                psShedulerMax = 100.f;
+                Device.dwPrecacheFrame = prefetch ? 1 : 0;
+                w.tick(100);
+                check(budget_messages() == (prefetch ? 0u : 1u), "single expensive object logs even on cancellation, rejection or exception");
+                check(callbacks == (prefetch ? 3u : 1u), "every callback exit honors budget except during prefetch");
+                check(clock_ms == (prefetch ? 300u : 100u), "only one indivisible callback may overrun normal budget");
+                if (!prefetch)
+                {
+                    check(b.neededCalls == 0 && c.neededCalls == 0, "budget stop leaves remaining objects untouched");
+                    check(psShedulerTarget > 10.f, "canceled or failed work still counts as budget exhaustion");
+                    if (outcome == 1)
+                        w.order({2, 3, 1});
+                    else
+                        w.order({2, 3});
+                    for (auto* npc : {&a, &b, &c})
+                    {
+                        npc->neededAction = {};
+                        npc->scaleAction = {};
+                        npc->action = {};
+                    }
+                    w.calls.clear();
+                    w.tick(101);
+                    check(w.calls == (outcome == 1 ? std::vector<int>{2, 3, 1} : std::vector<int>{2, 3}), "budget survivors run first on next pass");
+                }
+            }
+    context.clear();
+}
+
+void budget_diagnostics()
+{
+    // Both objects contribute to the stop, regardless of whether they are requeued.
+    for (int outcome : {0, 1, 2, 3})
+    {
+        World w;
+        NPC a(1, w.calls), b(2, w.calls);
+        w.add(a);
+        w.add(b);
+        for (auto* npc : {&a, &b})
+            npc->neededAction = [&, npc] {
+                clock_ms += 6;
+                if (outcome == 1) w.scheduler.Unregister(npc);
+                if (outcome == 2) npc->needed = false;
+                if (outcome == 3) throw std::runtime_error("needed");
+            };
+        w.tick(100);
+        check(a.neededCalls == 1 && b.neededCalls == 1 && clock_ms == 12, "multiple objects exhaust the budget");
+        check(budget_messages() == 0, "aggregate budget stop is not a single-object diagnostic");
+    }
+    {
+        World w;
+        NPC canceled(1, w.calls), future(2, w.calls), heavy(3, w.calls);
+        w.add(canceled);
+        w.add(future, 1000);
+        w.add(heavy);
+        w.scheduler.Unregister(&canceled, true);
+        heavy.cost = 100;
+        w.tick(100);
+        check(w.calls == std::vector<int>{3}, "tombstones and future entries do not count as evaluated objects");
+        check(budget_messages() == 1, "single successful heavy object logs after skipped entries");
+    }
+}
+
+void scale_lifecycle()
+{
+    for (int mode : {0, 1, 2})
+    {
+        World w;
+        NPC a(1, w.calls), b(2, w.calls);
+        a.scaleAction = [&] {
+#ifdef DEBUG
+            check(w.scheduler.Registered(&a), "scale callback belongs to scheduler");
+#endif
+            if (mode == 2)
+                throw std::runtime_error("scale");
+            w.scheduler.Unregister(&a);
+            if (mode == 1)
+                w.scheduler.Register(&a);
+        };
+        w.add(a);
+        w.add(b);
+        w.tick(100);
+        check(w.calls == std::vector<int>{2}, "canceled/throwing scale callback must not update");
+        check(w.scheduler.m_current_step_obj == nullptr, "scale exit clears current callback");
+        a.scaleAction = {};
+        w.calls.clear();
+        w.tick(101);
+        check(w.calls == (mode == 1 ? std::vector<int>{1} : std::vector<int>{}), "scale re-registration deferred");
+    }
+}
+#ifdef DEBUG
+void registered_consistency()
+{
+    World w;
+    NPC a(1, w.calls);
+    w.add(a);
+    w.scheduler.ItemsRT.push_back(w.scheduler.Items.front());
+    unsigned before = failures;
+    w.scheduler.Registered(&a);
+    unsigned detected = failures - before;
+    failures = before;
+    check(detected > 0, "duplicate membership must assert");
+    w.scheduler.ItemsRT.clear();
+    w.scheduler.Items.clear();
+    auto& operation = w.scheduler.Registration.emplace_back();
+    operation.Object = &a;
+    operation.OP = false;
+    operation.RT = false;
+    before = failures;
+    w.scheduler.Registered(&a);
+    detected = failures - before;
+    failures = before;
+    check(detected > 0, "unregister of absent object must assert");
+    w.scheduler.Registration.clear();
+}
+#endif
+
+void rt_mutation()
+{
+    for (int removed : {1, 2, 3})
+    {
+        for (bool again : {false, true})
+        {
+            World w;
+            NPC a(1, w.calls), b(2, w.calls), c(3, w.calls);
+            NPC* victim = removed == 1 ? &a : removed == 2 ? &b : &c;
+            for (auto* npc : {&a, &b, &c})
+                w.scheduler.Register(npc, true);
+            b.action = [&] {
+                w.scheduler.Unregister(victim);
+                if (again)
+                    w.scheduler.Register(victim, true);
+            };
+            w.tick(100);
+            check(w.calls == (removed == 3 ? std::vector<int>{1, 2} : std::vector<int>{1, 2, 3}), "RT removal changes current-pass dispatch");
+            check(w.scheduler.ItemsRT.size() == (again ? 3u : 2u), "RT removal/re-registration membership");
+            b.action = {};
+            w.calls.clear();
+            w.tick(150);
+            std::vector<int> expected;
+            for (int id : {1, 2, 3})
+                if (id != removed)
+                    expected.push_back(id);
+            if (again)
+                expected.push_back(removed);
+            check(w.calls == expected, "RT survivor and re-registration order");
+            if (again)
+                check(victim->elapsed.back() == 50, "RT re-registration timestamp");
+        }
+    }
+    // A needed callback can unregister its own entry before Update dereferences it.
+    World w;
+    NPC a(1, w.calls), b(2, w.calls);
+    w.scheduler.Register(&a, true);
+    w.scheduler.Register(&b, true);
+    a.neededAction = [&] { w.scheduler.Unregister(&a); };
+    w.tick(100);
+    check(w.calls == std::vector<int>{2}, "RT needed self-removal suppresses update");
+    check(w.scheduler.ItemsRT.size() == 1, "RT needed removal compacts queue");
+}
+
+#ifdef DEBUG
+void registered_state()
+{
+    World w;
+    NPC a(1, w.calls), b(2, w.calls), c(3, w.calls);
+    check(!w.scheduler.Registered(&a), "initially absent");
+    w.scheduler.Register(&a);
+    check(w.scheduler.Registered(&a), "pending registration visible");
+    w.add(b);
+    a.action = [&] { check(w.scheduler.Registered(&a), "current callback registered"); };
+    b.action = [&] {
+        check(w.scheduler.Registered(&a), "processed callback registered");
+        w.scheduler.Unregister(&a);
+        check(!w.scheduler.Registered(&a), "pending removal overrides processed membership");
+        w.scheduler.Register(&c);
+        check(w.scheduler.Registered(&c), "pending callback registration visible");
+        w.scheduler.Unregister(&c);
+        check(!w.scheduler.Registered(&c), "paired cancellation visible");
+        w.scheduler.Unregister(&b);
+        check(!w.scheduler.Registered(&b), "current callback removal visible");
+    };
+    w.tick(100);
+    check(!w.scheduler.Registered(&a) && !w.scheduler.Registered(&b) && !w.scheduler.Registered(&c), "all removals applied");
+    check(w.scheduler.m_debug_processed == nullptr, "temporary queue observer cleared");
+}
+#endif
+
+void exception_cleanup()
+{
+    World w;
+    NPC a(1, w.calls);
+    a.throwUpdate = true;
+    w.add(a);
+    w.tick(100);
+    check(w.scheduler.m_current_step_obj == nullptr, "exception leaves no current object");
+    // A stale current pointer must not swallow cancellation of a pending registration.
+    a.throwUpdate = false;
+    w.scheduler.Register(&a);
+    w.scheduler.Unregister(&a, true);
+    w.calls.clear();
+    w.tick(200);
+    check(w.calls.empty() && w.scheduler.Items.empty(), "pending registration canceled after exception");
+    w.scheduler.Register(&a);
+    w.tick(201);
+    w.tick(202);
+    check(w.calls == std::vector<int>{1}, "object can register again after exception");
+}
+
 void exceptions()
 {
     for (bool inNeeded : {true, false})
@@ -466,6 +792,7 @@ void stress_test()
         psShedulerCurrent = 10;
         psShedulerTarget = 10;
         clock_ms = 0;
+        messages.clear();
         for (u32 i = 0; i < 96; ++i)
         {
             npcs.emplace_back(i, seed);
@@ -475,6 +802,7 @@ void stress_test()
             instance.Register(&npc);
         for (frame = 0; frame < 100; ++frame)
         {
+            context = "seed=" + std::to_string(seed) + " frame=" + std::to_string(frame);
             Device.dwTimeGlobal += 17 + (frame * 13 + seed) % 31;
             Device.dwPrecacheFrame = frame < 4 ? 1 : 0;
             // Include external forced unregister, deferred registration and RT work.
@@ -486,10 +814,11 @@ void stress_test()
                 instance.Register(&npc, true);
                 npc.registered = true;
             }
-            // RT mutations are excluded: their vector invalidation is a separate existing issue.
+            // Retire this RT participant; mutation cases are exercised by the focused tests.
             if (frame == 9)
             {
-                instance.Unregister(&npcs[95], true);
+                if (npcs[95].registered)
+                    instance.Unregister(&npcs[95], true);
                 npcs[95].registered = false;
             }
             std::vector<ISheduled*> before;
@@ -548,7 +877,33 @@ int main(int argc, char** argv)
     const std::string name = argv[1];
     try
     {
-        if (name == "ordering")
+#ifdef DEBUG
+        if (name == "registered_consistency")
+        {
+            registered_consistency();
+            return failures ? 1 : 0;
+        }
+        if (name == "registered_state")
+        {
+            registered_state();
+            return failures ? 1 : 0;
+        }
+#endif
+        if (name == "needed_lifecycle")
+            needed_lifecycle();
+        else if (name == "budget_diagnostics")
+            budget_diagnostics();
+        else if (name == "callback_budget")
+            callback_budget();
+        else if (name == "normal_cancels_rt")
+            normal_cancels_rt();
+        else if (name == "scale_lifecycle")
+            scale_lifecycle();
+        else if (name == "exception_cleanup")
+            exception_cleanup();
+        else if (name == "rt_mutation")
+            rt_mutation();
+        else if (name == "ordering")
             ordering();
         else if (name == "compaction")
             compaction();

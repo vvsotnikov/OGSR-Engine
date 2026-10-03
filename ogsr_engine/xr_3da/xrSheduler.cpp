@@ -61,7 +61,7 @@ void CSheduler::internal_Registration()
 
 void CSheduler::internal_Register(ISheduled* object, BOOL RT)
 {
-    VERIFY(!O->shedule.b_locked);
+    VERIFY(!object->shedule.b_locked);
 
     if (RT)
     {
@@ -93,7 +93,12 @@ bool CSheduler::internal_Unregister(const ISheduled* object, BOOL RT)
         {
             if (ItemsRT[i].Object == object)
             {
-                ItemsRT.erase(ItemsRT.begin() + i);
+                // Callbacks may remove this entry or a neighbor during RT dispatch.
+                // Keep vector references stable until traversal has finished.
+                if (m_processing_now)
+                    ItemsRT[i].Object = nullptr;
+                else
+                    ItemsRT.erase(ItemsRT.begin() + i);
                 return true;
             }
         }
@@ -122,70 +127,24 @@ bool CSheduler::internal_Unregister(const ISheduled* object, BOOL RT)
 #ifdef DEBUG
 bool CSheduler::Registered(ISheduled* object) const
 {
-    u32 count = 0;
-    typedef xr_vector<Item> ITEMS;
-
+    // Membership includes the detached current callback and the temporary
+    // processed queue, then pending operations in the order they were requested.
+    size_t count = m_current_step_obj == object ? 1 : 0;
+    const auto matches = [object](const xr_vector<Item>& items) {
+        return std::count_if(items.begin(), items.end(), [object](const Item& item) { return item.Object == object; });
+    };
+    count += matches(ItemsRT) + matches(Items);
+    if (m_debug_processed)
+        count += matches(*m_debug_processed);
+    VERIFY(count <= 1);
+    for (const auto& operation : Registration)
     {
-        ITEMS::const_iterator I = ItemsRT.begin();
-        ITEMS::const_iterator E = ItemsRT.end();
-        for (; I != E; ++I)
-            if ((*I).Object == object)
-            {
-                //				Msg				("0x%8x found in RT",object);
-                count = 1;
-                break;
-            }
+        if (operation.Object != object)
+            continue;
+        VERIFY(operation.OP ? count == 0 : count == 1);
+        count = operation.OP ? 1 : 0;
     }
-    {
-        ITEMS::const_iterator I = Items.begin();
-        ITEMS::const_iterator E = Items.end();
-        for (; I != E; ++I)
-            if ((*I).Object == object)
-            {
-                //				Msg				("0x%8x found in non-RT",object);
-                VERIFY(!count);
-                count = 1;
-                break;
-            }
-    }
-
-    {
-        ITEMS::const_iterator I = ItemsProcessed.begin();
-        ITEMS::const_iterator E = ItemsProcessed.end();
-        for (; I != E; ++I)
-            if ((*I).Object == object)
-            {
-                //				Msg				("0x%8x found in process items",object);
-                VERIFY(!count);
-                count = 1;
-                break;
-            }
-    }
-
-    typedef xr_vector<ItemReg> ITEMS_REG;
-    ITEMS_REG::const_iterator I = Registration.begin();
-    ITEMS_REG::const_iterator E = Registration.end();
-    for (; I != E; ++I)
-    {
-        if ((*I).Object == object)
-        {
-            if ((*I).OP)
-            {
-                //				Msg				("0x%8x found in registration on register",object);
-                VERIFY(!count);
-                ++count;
-            }
-            else
-            {
-                //				Msg				("0x%8x found in registration on UNregister",object);
-                VERIFY(count == 1);
-                --count;
-            }
-        }
-    }
-
-    VERIFY(!count || (count == 1));
-    return (count == 1);
+    return count != 0;
 }
 #endif // DEBUG
 
@@ -220,14 +179,18 @@ void CSheduler::Unregister(ISheduled* A, bool force)
 
 void CSheduler::ProcessStep()
 {
-    ZoneScoped;
+    ZoneScopedN("CSheduler::ProcessStep");
 
     // Normal priority
     u32 dwTime = Device.dwTimeGlobal;
 
     const bool prefetch = Device.dwPrecacheFrame > 0;
     decltype(Items) ItemsProcessed;
+#ifdef DEBUG
+    m_debug_processed = &ItemsProcessed;
+#endif
     bool stopped{};
+    size_t objects_evaluated{};
     //size_t cnt{};
     CTimer t_total;
     t_total.Start();
@@ -244,6 +207,7 @@ void CSheduler::ProcessStep()
 
         if (!skip)
         {
+            ++objects_evaluated;
             __try
             {
                 shed_need = curr.Object->shedule_Needed();
@@ -255,67 +219,72 @@ void CSheduler::ProcessStep()
             }
         }
 
+        if (!Items[it - 1].Object) // The needed callback may unregister (and destroy) this object.
+            skip = true;
+
         // Hide processed slots from Unregister just as erasing them would.
         // Remove the tombstones together below, preserving survivor order.
         Items[it - 1].Object = nullptr;
 
-        if (skip || !shed_need)
+        // All callback exits converge on the budget check below.
+        do
         {
-            continue;
-        }
-
-        __try
-        {
-            // Calc next update interval
-            const u32 dwMin = std::max(30u, curr.Object->shedule.t_min);
-            const u32 dwMax = (1000u + curr.Object->shedule.t_max) / 2;
-
-            const float scale = curr.Object->shedule_Scale();
-
-            u32 dwUpdate = dwMin + iFloor(float(dwMax - dwMin) * scale);
-            clamp(dwUpdate, std::max(dwMin, 20u), dwMax);
-
-            const u32 elapsed = dwTime - curr.dwTimeOfLastExecute;
-
-            m_current_step_obj = curr.Object;
-
-            // if (!Core.DebugFlags.test(xrCore::dbg_DisableObjectsScheduler))
-            curr.Object->shedule_Update(std::clamp(elapsed, 1u, std::max(curr.Object->shedule.t_max, 1000u)));
-
-            if (!m_current_step_obj)
+            if (skip || !shed_need)
             {
-                continue;
+                break;
             }
 
-            m_current_step_obj = nullptr;
+            __try
+            {
+                m_current_step_obj = curr.Object;
 
-            // Fill item structure
-            auto& next = ItemsProcessed.emplace_back();
-            next.dwTimeForExecute = dwTime + dwUpdate;
-            next.dwTimeOfLastExecute = dwTime;
-            next.Object = curr.Object;
-            next.scheduled_name = curr.Object->shedule_Name();
+                // Calc next update interval
+                const u32 dwMin = std::max(30u, curr.Object->shedule.t_min);
+                const u32 dwMax = (1000u + curr.Object->shedule.t_max) / 2;
 
-            //cnt++;
-        }
-        __except (ExceptStackTrace("[CSheduler::ProcessStep2] stack trace:\n"))
-        {
-            Msg("Scheduler tried to update object %s", *curr.scheduled_name);
-            curr.Object = nullptr;
-            continue;
-        }
+                const float scale = curr.Object->shedule_Scale();
+                if (!m_current_step_obj) // Scale callbacks may unregister (and destroy) the object.
+                    break;
+
+                u32 dwUpdate = dwMin + iFloor(float(dwMax - dwMin) * scale);
+                clamp(dwUpdate, std::max(dwMin, 20u), dwMax);
+
+                const u32 elapsed = dwTime - curr.dwTimeOfLastExecute;
+
+                // if (!Core.DebugFlags.test(xrCore::dbg_DisableObjectsScheduler))
+                curr.Object->shedule_Update(std::clamp(elapsed, 1u, std::max(curr.Object->shedule.t_max, 1000u)));
+
+                if (!m_current_step_obj)
+                {
+                    break;
+                }
+
+                m_current_step_obj = nullptr;
+
+                // Fill item structure
+                auto& next = ItemsProcessed.emplace_back();
+                next.dwTimeForExecute = dwTime + dwUpdate;
+                next.dwTimeOfLastExecute = dwTime;
+                next.Object = curr.Object;
+                next.scheduled_name = curr.Object->shedule_Name();
+
+                //cnt++;
+            }
+            __except (ExceptStackTrace("[CSheduler::ProcessStep2] stack trace:\n"))
+            {
+                Msg("Scheduler tried to update object %s", *curr.scheduled_name);
+                m_current_step_obj = nullptr;
+                break;
+            }
+        } while (false);
 
         if (!prefetch && t_total.GetElapsed_ms() > static_cast<u32>(std::floor(psShedulerCurrent)))
         {
             // we have maxed out the load - increase heap
             psShedulerTarget += (psShedulerReaction * 3);
 
-            // if (Core.DebugFlags.test(xrCore::dbg_TraceScheduler))
-            {
-                // Msg("Break ProcessStep. Processed: [%u], left in queue: [%u]", ItemsProcessed.size(), Items.size());
-                if (ItemsProcessed.size() == 1) // кто то жрет все время на кадре
-                    Msg("! Single item [%s] took whole update frame!!!", ItemsProcessed.front().scheduled_name.c_str());
-            }
+            if (objects_evaluated == 1)
+                Msg("! Single item [%s] took whole update frame!!!", curr.scheduled_name.c_str());
 
             stopped = true;
             break;
@@ -331,6 +300,9 @@ void CSheduler::ProcessStep()
     // Push "processed" back
     Items.erase(std::remove_if(Items.begin(), Items.end(), [](const Item& item) { return !item.Object; }), Items.end());
     Items.insert(Items.end(), std::make_move_iterator(ItemsProcessed.begin()), std::make_move_iterator(ItemsProcessed.end()));
+#ifdef DEBUG
+    m_debug_processed = nullptr;
+#endif
 
     if (!stopped)
     {
@@ -358,9 +330,14 @@ void CSheduler::Update()
         // Realtime priority
         for (auto& curr : ItemsRT)
         {
-            R_ASSERT(curr.Object);
+            if (!curr.Object)
+                continue;
 
-            if (!curr.Object->shedule_Needed())
+            const bool needed = curr.Object->shedule_Needed();
+            if (!curr.Object) // The needed callback may unregister this entry.
+                continue;
+
+            if (!needed)
             {
                 curr.dwTimeOfLastExecute = dwTime;
                 continue;
@@ -380,6 +357,7 @@ void CSheduler::Update()
     psShedulerCurrent = 0.9f * psShedulerCurrent + 0.1f * psShedulerTarget;
     Device.Statistic->fShedulerLoad = psShedulerCurrent;
 
+    ItemsRT.erase(std::remove_if(ItemsRT.begin(), ItemsRT.end(), [](const Item& item) { return !item.Object; }), ItemsRT.end());
     m_processing_now = false;
 
     internal_Registration();

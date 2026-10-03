@@ -25,6 +25,10 @@ private:
     xr_vector<ItemReg> Registration;
 
     ISheduled* m_current_step_obj{};
+#ifdef DEBUG
+    // ProcessStep owns this temporary queue; Registered observes it during callbacks.
+    const xr_vector<Item>* m_debug_processed{};
+#endif
 
     bool m_processing_now;
 

@@ -1,46 +1,23 @@
-# Scheduler behavior tests
+# Scheduler invariants
 
-## Constraints behind the tests
+Queue order determines which objects wait when the frame budget expires. Live
+survivors must retain their relative order and precede objects requeued after
+processing; sorting by deadline or swapping with the tail changes that behavior.
 
-Queue order is part of scheduling behavior: when the frame budget runs out,
-entries left behind wait until another pass. Compaction must preserve the relative
-order of live survivors and keep them ahead of processed entries being requeued.
-Sorting by deadline or swapping erased entries with the tail would change who waits.
+Equivalent scheduling behavior does not require identical callback counts per
+frame. Lower queue-maintenance cost can permit more callbacks within the same
+elapsed-time budget. A canceled slot carries no scheduling obligation, even if
+its former deadline has not arrived.
 
-A processed entry must disappear from unregister lookups before its update callback
-runs. Otherwise self-unregister could find the old queue slot instead of clearing
-`m_current_step_obj`, allowing the object to be requeued incorrectly. Tombstoning
-provides this logical removal without shifting the vector during dispatch. Deferred
-registration is also essential: callbacks must not grow the vector being traversed.
+Ordinary callback work consumes the elapsed-time budget even when it cancels
+itself, rejects an update, or throws. Outside prefetch, once that budget is
+exceeded, later callbacks must wait for another pass. A callback is indivisible,
+so the budget cannot bound the duration of a single callback.
 
-Preserving the scheduling contract means preserving order, interval rules and the
-budget policy, not identical callback counts per frame. Reducing queue-maintenance
-cost can allow more callbacks before the same elapsed-time budget expires. A null
-slot carries no live scheduling obligation, so removing it before its former
-deadline need not change live dispatch behavior.
+Cancellation of the current callback must prevent its requeue, rather than merely
+remove its former queue entry. Re-registering the same object creates a later
+scheduling obligation; it must not revive the canceled invocation.
 
-The bounded-liveness check assumes a fixed population whose entries remain due,
-with one callback consuming the budget per pass. It does not establish a waiting-time
-bound under arbitrary arrivals, cancellations or changing callback costs.
-
-## Running
-
-From the repository root:
-
-```powershell
-cmake -S tools/tests/scheduler -B <build-directory>
-cmake --build <build-directory> --config Release
-ctest --test-dir <build-directory> -C Release --output-on-failure
-```
-
-## Interpretation limits
-
-The tests compile the production scheduler with mock objects and a clock advanced
-by callbacks. They do not measure queue-maintenance cost or validate the real
-interface ABI and shared-string reference counting. C++ catches substitute for
-Windows SEH handlers, so exception cases validate adapted control flow, not native
-SEH recovery or complete exception-state cleanup.
-
-RT-list mutation inside callbacks is excluded because of the existing iterator
-invalidation problem. The fixture uses Release semantics and does not exercise
-engine DEBUG code. Native builds and runtime checks remain necessary complements.
+An object dropped after a handled callback exception is no longer registered.
+A later unregister is valid only after re-registration. Handling that callback
+exception does not imply support for recovering an entire aborted scheduler update.
