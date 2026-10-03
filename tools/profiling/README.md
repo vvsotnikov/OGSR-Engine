@@ -2,7 +2,7 @@
 
 ## Current branch scope
 
-The core branch contains whole-map policy, optional metrics and lifecycle refactors. Scheduler compaction from merged [PR #7](https://github.com/vvsotnikov/OGSR-Engine/pull/7) is always enabled. Scheduler callback-removal, exception-cleanup and DEBUG membership fixes are integrated from [PR #9](https://github.com/vvsotnikov/OGSR-Engine/pull/9); review that dependency before merging this branch. Deferred activation remains separate in draft [PR #8](https://github.com/vvsotnikov/OGSR-Engine/pull/8). Historical packages and dated reports may contain earlier combinations of features; they are retained as evidence, not instructions to reproduce the current build.
+The core branch contains whole-map policy, optional metrics and lifecycle refactors. Scheduler compaction from merged [PR #7](https://github.com/vvsotnikov/OGSR-Engine/pull/7) is always enabled. Scheduler callback lifecycle, budget enforcement and DEBUG membership fixes from merged [PR #9](https://github.com/vvsotnikov/OGSR-Engine/pull/9) are included through main. Deferred activation remains separate in draft [PR #8](https://github.com/vvsotnikov/OGSR-Engine/pull/8). Historical packages and dated reports may contain earlier combinations of features; they are retained as evidence, not instructions to reproduce the current build.
 
 Use `-Package bin_whole_lifecycle` for the integrated whole-map/scheduler build; compaction needs no switch and deferred activation is unavailable.
 
