@@ -22,7 +22,7 @@ class Evidence(unittest.TestCase):
             root=Path(directory); app=root/'appdata'; (app/'logs').mkdir(parents=True)
             (root/'session.json').write_text(json.dumps(dict(status='regular-completed', regularRequested=True,
                 session='fixture', engineSha256='fixture', extraRequested=2, compactQueue=True, spawnBudgetMs=3)))
-            frame_rows=[(0,0,3,10,1)]+[(i,i*1000,4,1000,1) for i in range(1,31)]
+            frame_rows=[(0,0,3,10,1),(1,1,3,200,1)]+[(i,i*1000,4,1000,1) for i in range(2,32)]
             write(app/'regular-frames.csv','frame,game_ms,stage,frame_ms,frame_gap',frame_rows)
             population=[(i*1000,4,2,2,2,2,2) for i in range(30)]
             write(app/'regular-population.csv','game_ms,stage,created,retained,online,client,living',population)
@@ -32,6 +32,8 @@ class Evidence(unittest.TestCase):
             result=regular.summarize(root)
             self.assertEqual(result['retainedOnlineClient'],2)
             self.assertEqual(result['frameMs']['mean'],1000)
+            self.assertEqual(result['creationWarmupMaxFrameMs'],200)
+            self.assertEqual(result['postCreationMaxFrameMs'],10)
             path.write_text(log.replace('id=11','id=10'))
             with self.assertRaisesRegex(ValueError,'duplicate'): regular.summarize(root)
             path.write_text(log.replace('all_online count=2','all_online count=1'))

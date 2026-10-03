@@ -5,7 +5,9 @@ param(
     [ValidateRange(0,10)][int]$BudgetMs = 0,
     [switch]$CompactQueue,
     [switch]$SaveSnapshot,
-    [ValidateSet('bin_experiment','bin_policy','bin_activation','bin_activation_tracy')][string]$Package = 'bin_experiment',
+    [ValidateSet('bin_experiment','bin_policy','bin_activation','bin_activation_tracy','bin_reconcile')][string]$Package = 'bin_experiment',
+    [switch]$ReconcileMetrics,
+    [switch]$Transitions,
     [switch]$ActivationQueue,
     [switch]$CaptureTrace,
     [switch]$Metrics,
@@ -21,6 +23,7 @@ $ErrorActionPreference = 'Stop'
 $engine = Join-Path $InstallRoot "$Package/xrEngine.exe"
 if (!(Test-Path $engine) -or !(Test-Path "$InstallRoot/$Package/build.json")) { throw "Missing package or manifest: $engine" }
 if ($Mode -eq 'distance' -and ($Count -ne 0 -or $Eligibility)) { throw 'Population and eligibility fixtures require whole-map mode' }
+if ($Transitions -and ($Count -ne 0 -or $Eligibility -or $SavePending -or $SaveSnapshot -or $VerifySession -or $CaptureTrace)) { throw 'Transition fixture must run by itself' }
 $session = & "$PSScriptRoot/Capture-Session.ps1" -InstallRoot $InstallRoot -ToolRoot $ToolRoot `
     -Mode $Mode -SeedAppData $SeedAppData -SaveName $SaveName -PrepareOnly
 $path = Join-Path $session 'session.json'
@@ -33,6 +36,9 @@ $meta | Add-Member eligibilityRequested ([bool]$Eligibility)
 if ($CompactQueue) { $meta.arguments += ' -scheduler_compact' }
 if ($ActivationQueue) { $meta.arguments += ' -alife_activation_queue' }
 if ($Metrics) { $meta.arguments += ' -alife_metrics' }
+if ($ReconcileMetrics) { $meta.arguments += ' -alife_reconcile_metrics' }
+$meta | Add-Member reconcileMetrics ([bool]$ReconcileMetrics)
+$meta | Add-Member transitionsRequested ([bool]$Transitions)
 if ($CaptureTrace -and !$meta.build.tracyEnabled) { throw 'Trace requires a Tracy-enabled package' }
 $meta | Add-Member activationQueue ([bool]$ActivationQueue)
 $meta | Add-Member traceRequested ([bool]$CaptureTrace)
@@ -43,12 +49,13 @@ $meta | Add-Member spawnBudgetMs $BudgetMs
 $meta | Add-Member compactQueue ([bool]$CompactQueue)
 $meta | Add-Member saveRequested ([bool]$SaveSnapshot)
 $meta.status = 'regular-running'
-foreach ($name in @('SpawnQueue.lua','RegularDriver.lua','BarStressPositions.lua','Test-SpawnQueue.lua','Test-Eligibility.lua')) {
+foreach ($name in @('SpawnQueue.lua','RegularDriver.lua','BarStressPositions.lua','Test-SpawnQueue.lua','Test-Eligibility.lua','TransitionDriver.lua')) {
     Copy-Item "$PSScriptRoot/$name" "$session/appdata/$name"
 }
 $save = if ($SaveSnapshot) { 'true' } else { 'false' }
 $eligibilityValue = if ($Eligibility) { 'true' } else { 'false' }
 $pendingValue = if ($SavePending) { 'true' } else { 'false' }
+$transitionValue = if ($Transitions) { 'true' } else { 'false' }
 $meta | Add-Member savePendingRequested ([bool]$SavePending)
 $verifyIds = @()
 if ($VerifySession) {
@@ -59,7 +66,7 @@ if ($VerifySession) {
     if ($verifyIds.Count -eq 0 -or $verifyIds.Count -ne $sourceMeta.extraRequested -or @($verifyIds | Select-Object -Unique).Count -ne $verifyIds.Count) { throw 'Invalid saved population evidence' }
 }
 $meta | Add-Member verifyIds $verifyIds
-$config = "return {count=$Count, budget_ms=$BudgetMs, save=$save, save_pending=$pendingValue, eligibility=$eligibilityValue, verify_ids={$($verifyIds -join ',')}, positions=dofile(getFS():update_path(`"`$app_data_root`$`", `"BarStressPositions.lua`"))}"
+$config = "return {count=$Count, budget_ms=$BudgetMs, save=$save, transitions=$transitionValue, save_pending=$pendingValue, eligibility=$eligibilityValue, verify_ids={$($verifyIds -join ',')}, positions=dofile(getFS():update_path(`"`$app_data_root`$`", `"BarStressPositions.lua`"))}"
 [IO.File]::WriteAllText("$session/appdata/regular-config.lua", $config, [Text.Encoding]::ASCII)
 $game = Start-Process $engine -ArgumentList $meta.arguments -WorkingDirectory $InstallRoot -PassThru
 $meta | Add-Member gamePid $game.Id
@@ -96,6 +103,16 @@ try {
     if ($logs.Count -ne 1) { throw 'Expected one engine log' }
     $log = [IO.File]::ReadAllText($logs[0].FullName)
     Assert-ValidationLogHealthy $log
+    if ($ReconcileMetrics -and $log -notmatch '\[ALife reconcile\].*sampled=1') { throw 'Reconciliation timing was not exercised' }
+    if ($Transitions) {
+        $arrivals = @([regex]::Matches($log, '\[transition\] arrived phase=\d map=\w+') | ForEach-Object Value)
+        $expected = '[transition] arrived phase=1 map=l05_bar|[transition] arrived phase=2 map=l02_garbage|[transition] arrived phase=3 map=l05_bar'
+        if (($arrivals -join '|') -ne $expected -or $game.ExitCode -ne 0 -or $log -match '\[transition\] FAILED' -or $log -notmatch '\[transition\] complete' -or $log -notmatch 'Game reconcile_roundtrip\.sav is successfully saved') { throw 'Level roundtrip failed or unacknowledged' }
+        $meta.status = 'transition-completed'
+        $meta | Add-Member gameExitCode $game.ExitCode
+        Write-Output "COMPLETE transitions session=$session"
+        return
+    }
     if ($ActivationQueue -and $Mode -eq 'whole-map' -and $log -notmatch 'ALife activation queue: enabled') { throw 'Executable did not acknowledge activation queue' }
     if ($verifyIds.Count -and $log -notmatch "\[regular\] verified_restored count=$($verifyIds.Count)\b") { throw 'Restored population not verified' }
     if ($SavePending -and ($log -notmatch '\[regular\] save_pending offline=[1-9]' -or $log -notmatch 'Game activation_pending\.sav is successfully saved' -or !(Test-Path "$session/appdata/savedgames/activation_pending.sav"))) { throw 'Pending activation save not acknowledged' }

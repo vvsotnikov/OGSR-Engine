@@ -34,6 +34,10 @@ def summarize(session):
     if len(populations) < 25 or any(int(r[key]) != count for r in populations for key in ('created','retained','online','client')):
         raise ValueError('Population missing or not fully online')
     batches = rows(session/'appdata/regular-batches.csv')
+    creation_frames = {int(r['frame']) for r in batches if int(r['count']) > 0}
+    # Callback interval F includes work done after callback F-1. The last
+    # creation batch can therefore be labelled stage 3; exclude it explicitly.
+    post_creation = [float(r['frame_ms']) for r in frames if r['stage']=='3' and int(r['frame'])-1 not in creation_frames]
     if sum(int(r['count']) for r in batches) != count:
         raise ValueError('Creation count mismatch')
     if meta['spawnBudgetMs'] and any(int(r['count']) > 8 for r in batches):
@@ -53,7 +57,7 @@ def summarize(session):
                   savePendingRequested=meta.get('savePendingRequested', False), verifiedIds=len(meta.get('verifyIds', [])),
                   compact=meta['compactQueue'], budgetMs=meta['spawnBudgetMs'], frameMs=cadence.stats(times),
                   seconds=sum(times)/1000, creationWarmupMaxFrameMs=max(warmup),
-                  postCreationMaxFrameMs=max(float(r['frame_ms']) for r in frames if r['stage']=='3'),
+                  postCreationMaxFrameMs=max(post_creation),
                   creationWallMs=float(creation[2]), creationWorkMs=float(creation[3]),
                   onlineAtCreation=int(creation[4]), allOnlineAfterCreateMs=float(online[2]),
                   batches=len(batches), batchWorkMs=cadence.stats([float(r['work_ms']) for r in batches]),

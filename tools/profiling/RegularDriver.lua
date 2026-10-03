@@ -11,6 +11,7 @@ return function(cfg)
         return tonumber(counter[0]) * scale
     end
     local function path(name) return getFS():update_path("$app_data_root$", name) end
+    if cfg.transitions then return dofile(path("TransitionDriver.lua"))(now, path) end
     local eligibility = cfg.eligibility and dofile(path("Test-Eligibility.lua"))(cfg.positions[1], now)
     local frames = assert(io.open(path("regular-frames.csv"), "w"))
     frames:write("frame,game_ms,stage,frame_ms,frame_gap\n")

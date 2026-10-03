@@ -241,24 +241,79 @@ void CALifeSwitchManager::try_switch_offline(CSE_ALifeDynamicObject* I)
     STOP_PROFILE
 }
 
-void CALifeSwitchManager::switch_object(CSE_ALifeDynamicObject* I)
+bool CALifeSwitchManager::maintain_before_switch(CSE_ALifeDynamicObject* I)
 {
     if (I->redundant())
     {
         release(I);
-        return;
+        return false;
     }
 
-    if (!synchronize_location(I))
-        return;
+    return synchronize_location(I);
+}
 
+void CALifeSwitchManager::evaluate_switch(CSE_ALifeDynamicObject* I)
+{
+    // Virtual dispatch is deliberately retained: legacy groups interleave
+    // member cleanup with policy evaluation. This is not a pure predicate.
     if (I->m_bOnline)
         try_switch_offline(I);
     else
         try_switch_online(I);
 
+}
+
+void CALifeSwitchManager::maintain_after_switch(CSE_ALifeDynamicObject* I)
+{
     if (I->redundant())
         release(I);
+}
+
+void CALifeSwitchManager::switch_object(CSE_ALifeDynamicObject* I)
+{
+    if (!m_reconcile_sample)
+    {
+        if (!maintain_before_switch(I)) return;
+        evaluate_switch(I);
+        maintain_after_switch(I);
+        return;
+    }
+    ++m_reconcile_objects;
+    CTimer timer;
+    timer.Start();
+    const bool ready = maintain_before_switch(I);
+    m_reconcile_stage_ms[0] += timer.GetElapsed_sec() * 1000.0;
+    if (!ready) return;
+    const unsigned phase = I->m_bOnline ? 1 : 2;
+    timer.Start();
+    evaluate_switch(I);
+    m_reconcile_stage_ms[phase] += timer.GetElapsed_sec() * 1000.0;
+    timer.Start();
+    maintain_after_switch(I);
+    m_reconcile_stage_ms[3] += timer.GetElapsed_sec() * 1000.0;
+}
+
+void CALifeSwitchManager::begin_reconciliation()
+{
+    m_reconcile_sample = m_reconcile_metrics && (++m_reconcile_passes % 64 == 0);
+    if (m_reconcile_sample)
+    {
+        ++m_reconcile_samples;
+        m_reconcile_objects = 0;
+        for (auto& value : m_reconcile_stage_ms) value = 0;
+    }
+}
+
+void CALifeSwitchManager::finish_reconciliation(double elapsed_ms)
+{
+    // Emission happens outside the measured traversal. Queue consumption below
+    // is separate and must not leak into the next sample's stage counters.
+    if (m_reconcile_metrics && (m_reconcile_sample || elapsed_ms >= 10.0))
+        Msg("[ALife reconcile] frame=%u pass=%u sampled=%u objects=%u total_ms=%.6f before_ms=%.6f online_dispatch_ms=%.6f offline_dispatch_ms=%.6f after_ms=%.6f",
+            Device.dwFrame, m_reconcile_passes, u32(m_reconcile_sample), m_reconcile_sample ? m_reconcile_objects : 0,
+            elapsed_ms, m_reconcile_sample ? m_reconcile_stage_ms[0] : 0.0, m_reconcile_sample ? m_reconcile_stage_ms[1] : 0.0,
+            m_reconcile_sample ? m_reconcile_stage_ms[2] : 0.0, m_reconcile_sample ? m_reconcile_stage_ms[3] : 0.0);
+    m_reconcile_sample = false;
 }
 
 void CALifeSwitchManager::begin_activation_collection()
