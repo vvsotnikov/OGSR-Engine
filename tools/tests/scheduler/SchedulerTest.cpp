@@ -165,7 +165,7 @@ void ordering()
     check(w.calls == std::vector<int>({2, 4}), "only strictly overdue entries dispatch, in queue order");
     check(a.neededCalls == 0 && c.neededCalls == 0, "future entries must not query needed");
     w.order({1, 3, 2, 4});
-    w.scheduler.Unregister(&c, true); // Not due: compaction must still remove it.
+    w.scheduler.Unregister(&c, true); // Check live ordering after cancellation; slot removal is tested by compaction().
     w.calls.clear();
     w.tick(101);
     check(w.calls == std::vector<int>({1}), "deadline equality and canceled future item");

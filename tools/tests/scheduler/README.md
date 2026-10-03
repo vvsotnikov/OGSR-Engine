@@ -1,58 +1,61 @@
 # Scheduler behavior tests
 
+The suite compiles the production scheduler with mock objects and deterministic
+clocks. Each case asserts expected behavior directly. Assertions remain active in
+Release, including inside the adapted exception handlers.
+
+## Invariants
+
+| Case | Expected behavior |
+| --- | --- |
+| `ordering` | Ordinary entries dispatch only when `deadline < now`, in queue order. Entries not yet due receive no needed check. Unprocessed live entries retain their relative order and precede requeued processed entries. |
+| `compaction` | A canceled future entry is removed from the slot vector at the end of the pass, even before its former deadline. |
+| `intervals` | The next deadline uses the derived interval below; the last-execution timestamp becomes `now`. Callback elapsed time is clamped independently. |
+| `budget` | The tested successful callbacks stop dispatch only when accumulated cost exceeds `floor(current_budget)`. Equality permits another callback. Unprocessed entries get their turn before requeued entries. Budget targets and smoothing follow the rules below. |
+| `prefetch` | Precache dispatch ignores the time budget; a completed pass decreases the target. |
+| `needed` | An ordinary object returning false from its needed check receives no callback and is removed; its neighbor continues to dispatch. |
+| `self_remove` | Self-unregister prevents automatic requeue without skipping the neighbor. Explicit self-registration is deferred and can dispatch on the next eligible pass. |
+| `remove_other` | Canceling a later entry suppresses its callback. Canceling an already-processed entry prevents its next callback. |
+| `registration` | Registration during dispatch takes effect after the pass. Paired pending registration/unregistration cancels out. External deferred unregister takes effect before dispatch. |
+| `realtime` | RT callbacks run before ordinary callbacks. An RT needed check returning false advances its last-update timestamp without removing it. External RT unregister removes it. |
+| `exceptions` | A throwing ordinary needed check receives no update callback; a throwing update receives no automatic requeue. Both paths leave neighbors able to dispatch on this and subsequent passes. |
+| `liveness` | For the fixed N-object workload, with every object due each pass and each callback exceeding the maximum budget, every object dispatches once per N passes. This is a bounded workload assertion, not a fairness guarantee for arbitrary workloads. |
+| `stress` | Across mixed deadlines, costs and registration/removal interactions: no duplicate callback within a frame, no callback after cancellation, unique live membership matching registration state, correct updated timestamps and interval bounds, and preserved relative survivor order. Processed/re-registered and canceled entries are excluded from the survivor comparison. |
+
+For the valid configurations exercised by `intervals`:
+
+- `min_interval = max(30, t_min)` and `max_interval = (1000 + t_max) / 2`
+  using integer division.
+- `interval = clamp(min_interval + floor((max_interval - min_interval) * scale),
+  min_interval, max_interval)`; `next_deadline = now + interval`.
+- Callback elapsed time is `clamp(now - last_execution, 1, max(t_max, 1000))`.
+
+An over-budget break adds 3 to the target; a completed pass subtracts 1.
+The target is then clamped to `[3, psShedulerMax]`, and
+`current_budget = 0.9 * current_budget + 0.1 * target`.
+
+Update the affected expectations alongside an intentional contract change.
+Do not weaken assertions merely to accommodate a regression.
+
+## Running
+
+From the repository root:
+
 ```powershell
 cmake -S tools/tests/scheduler -B <build-directory>
 cmake --build <build-directory> --config Release
 ctest --test-dir <build-directory> -C Release --output-on-failure
 ```
 
-These tests compile the current production scheduler with mock objects and clocks.
-They assert the scheduling contract directly; there is no frozen implementation,
-expected digest, historical Git lookup, or launch flag. Assertions remain enabled
-in Release and report failures outside the adapted exception handlers.
+## Limits
 
-The focused cases cover:
+The adapter replaces the two Windows SEH handlers with C++ catches. Exception
+cases test adapted control flow, not Windows SEH recovery or cleanup of every
+internal field. The interface and string mocks do not validate ABI compatibility,
+real reference counting or CPU cost. The mock clock advances during callbacks,
+so tests do not model queue-maintenance time.
 
-- Strictly overdue dispatch, live queue order, survivor-before-processed order,
-  future cancellation, and removal of tombstones.
-- Explicit interval examples for derived bounds, fractional scaling and flooring,
-  upper clamping, elapsed-time clamping, and last-execution timestamps.
-- Strict budget comparison, floored budget thresholds, stopping after a callback,
-  continuation on the next pass, target adjustment/clamping/smoothing, and precache.
-- Not-needed removal, self-unregister with/without re-registration, cancellation of
-  later and already-processed objects, deferred registration, paired pending
-  registration/unregistration, and external unregister.
-- RT-before-normal ordering, RT not-needed timestamp handling, and external RT removal.
-- Exceptions from needed/update callbacks: removal without requeue, with and without
-  a neighbor, and continued neighbor dispatch. These use C++ exceptions in the adapter.
-- Bounded liveness for a fixed population: every overdue object dispatches within
-  N passes with N objects, even when each callback exceeds the maximum budget.
-
-The previous 200-seed workload (96 objects, 100 frames each) is retained with
-assertions for duplicate callbacks, callbacks after cancellation, unique queue
-membership, derived deadline bounds, updated timestamps and relative survivor order.
-Order checks exclude canceled entries and processed/re-registered objects. Focused cases assert
-exact order and numerical expectations instead of relying on a legacy digest.
-The 12 shared-behavior cases were also run against pre-compaction scheduler source
-from `ea325cc57`; all passed. The isolated `compaction` case failed there as expected:
-legacy code retains a canceled future slot until its deadline. Current code passes
-all 13 cases. That old source was substituted only in a local generated test file;
-it is not a stored reference or a test dependency.
-
-Deliberate mutations to exception handling, queue-head progress and survivor order
-were detected by the corresponding tests. The generated source was restored and
-all 13 cases passed again. These finite checks do not prove every possible behavior.
-
-If intended scheduler behavior changes, update the affected explicit expectations
-alongside that change. Do not weaken assertions merely to accommodate a regression.
-
-The adapter strips engine includes and substitutes C++ catch blocks for the two
-exact SEH handlers, rejecting unfamiliar SEH syntax. It does not validate Windows
-SEH recovery, real shared-string reference counting or CPU cost. Real-time-list
-mutation inside callbacks is excluded because of its existing iterator-invalidation
-problem. The handwritten interface and string mocks do not validate interface/ABI
-compatibility. `R_ASSERT` is checked, while debug-only `VERIFY` remains disabled.
-Private members are exposed only in this isolated test translation unit.
-Use Release for this fixture; it does not exercise the engine's DEBUG-only code.
-Run a native Release build and runtime smoke check as well. Run these tests locally
-while automated build checks remain disabled.
+RT-list mutation inside callbacks is excluded because of the existing iterator
+invalidation problem. Private members are exposed only in the test translation
+unit. `R_ASSERT` is checked; debug-only `VERIFY` and engine DEBUG code are not.
+Native Release builds and runtime smoke checks complement these tests.
