@@ -1,0 +1,23 @@
+cmake_minimum_required(VERSION 3.16)
+project(scheduler-regression LANGUAGES CXX)
+# Compile the real scheduler with deterministic clocks and mock game objects.
+# Only includes and Windows SEH syntax are adapted; scheduling code is unchanged.
+get_filename_component(ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${ROOT}/ogsr_engine/xr_3da/xrSheduler.h" "${ROOT}/ogsr_engine/xr_3da/xrSheduler.cpp")
+file(READ "${ROOT}/ogsr_engine/xr_3da/xrSheduler.h" HEADER)
+string(REPLACE "#include \"ISheduled.h\"" "" HEADER "${HEADER}")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/scheduler-under-test.h" "${HEADER}")
+file(READ "${ROOT}/ogsr_engine/xr_3da/xrSheduler.cpp" SOURCE)
+if(SOURCE MATCHES "QueueProbe|CadenceProbe")
+    message(FATAL_ERROR "Restore gameplay sources before running the scheduler fixture")
+endif()
+string(REGEX REPLACE "#include[^\n]*" "" SOURCE "${SOURCE}")
+string(REPLACE "__try" "try" SOURCE "${SOURCE}")
+string(REGEX REPLACE "__except[^\n]*" "catch (...)" SOURCE "${SOURCE}")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/scheduler-under-test.cpp" "${SOURCE}")
+add_executable(scheduler-test SchedulerTest.cpp)
+target_include_directories(scheduler-test PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+target_compile_features(scheduler-test PRIVATE cxx_std_17)
+enable_testing()
+add_test(NAME queue-equivalence COMMAND "${CMAKE_COMMAND}" "-DPROGRAM=$<TARGET_FILE:scheduler-test>" -P "${CMAKE_CURRENT_SOURCE_DIR}/Compare.cmake")
