@@ -8,6 +8,7 @@ param(
     [switch]$Manual
 )
 $ErrorActionPreference = 'Stop'
+. "$PSScriptRoot/ValidationLog.ps1"
 # Requires persistence-diagnostic.patch in a separately packaged bin_validation.
 $session = $ExistingSession
 if (!$session) {
@@ -72,28 +73,27 @@ function Send-Command([string]$Command) {
     Move-Item -LiteralPath "$path.pending" -Destination $path
     Write-Output "SENT: $Command"
 }
-function Wait-Snapshots([int]$Target, [string]$Stage) {
-    Wait-For { ([regex]::Matches((Read-Log), '\[ALife world end\]')).Count -ge $Target } $Stage
+function Wait-Stage([string]$Stage, [string]$Command, [string]$SuccessPattern, [int]$Level, [int]$Count = 3) {
+    Wait-For { Test-ValidationStage -Text (Read-Log) -Command $Command -SuccessPattern $SuccessPattern -Level $Level -MinimumSnapshots $Count } $Stage
     [IO.File]::WriteAllText((Join-Path $session "$Stage.log"), (Read-Log))
 }
 try {
-    Wait-Snapshots 3 'initial'
+    Wait-Stage 'initial' '' '' 7
     if (!$RestartOnly) {
         Send-Command 'save validation_bar'
-        Wait-For { Test-Path "$session/appdata/savedgames/validation_bar.sav" } 'save-created'
-        $count = ([regex]::Matches((Read-Log), '\[ALife world end\]')).Count
-        Wait-Snapshots ($count + 1) 'saved'
+        Wait-Stage 'saved' 'save validation_bar' 'Game validation_bar\.sav is successfully saved' 7 1
+        if (!(Test-Path "$session/appdata/savedgames/validation_bar.sav")) { throw 'Save acknowledgement without a save file' }
         Send-Command 'load validation_bar'
-        Wait-Snapshots ($count + 4) 'reloaded'
-        $count = ([regex]::Matches((Read-Log), '\[ALife world end\]')).Count
+        Wait-Stage 'reloaded' 'load validation_bar' 'Game validation_bar is successfully loaded' 7
         Send-Command 'jump_to_level l02_garbage'
-        Wait-Snapshots ($count + 3) 'garbage'
-        $count = ([regex]::Matches((Read-Log), '\[ALife world end\]')).Count
+        Wait-Stage 'garbage' 'jump_to_level l02_garbage' 'Game \S+_autosave is successfully loaded' 2
         Send-Command 'jump_to_level l05_bar'
-        Wait-Snapshots ($count + 3) 'bar-return'
+        Wait-Stage 'bar-return' 'jump_to_level l05_bar' 'Game \S+_autosave is successfully loaded' 7
     }
     Send-Command 'quit'
     if (!$game.WaitForExit(30000)) { throw 'Normal quit did not finish within 30 seconds' }
+    Assert-ValidationLogHealthy (Read-Log)
+    if ($null -ne $game.ExitCode -and $game.ExitCode -ne 0) { throw "Engine exited with code $($game.ExitCode)" }
     $meta.status = 'validation-completed'
     $meta | Add-Member -NotePropertyName gameExitCode -NotePropertyValue $game.ExitCode -Force
     Write-Output "EXIT=$($game.ExitCode) SESSION=$session"
