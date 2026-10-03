@@ -201,7 +201,7 @@ void CSheduler::ProcessStep()
 
 void CSheduler::ProcessStepInternal()
 {
-    ZoneScoped;
+    ZoneScopedN("CSheduler::ProcessStep");
 
     // Normal priority
     u32 dwTime = Device.dwTimeGlobal;
