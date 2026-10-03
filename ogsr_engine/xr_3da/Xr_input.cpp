@@ -13,21 +13,6 @@ ENGINE_API Flags32 psMouseInvert = {FALSE};
 #define MOUSEBUFFERSIZE 64
 #define KEYBOARDBUFFERSIZE 64
 
-namespace
-{
-void CheckInputResult(HRESULT result, const char* operation)
-{
-    if (SUCCEEDED(result))
-        return;
-
-    Msg("! INPUT: %s failed, HRESULT=0x%08X", operation, unsigned(result));
-    Debug.error(result, operation, DEBUG_INFO);
-    // An ignored error dialog must not let initialization use a null or
-    // partially configured device. This check also runs in release builds.
-    ExitProcess(EXIT_FAILURE);
-}
-}
-
 CInput::CInput(bool bExclusive, int deviceForInit)
 {
     is_exclusive_mode = bExclusive;
@@ -40,7 +25,7 @@ CInput::CInput(bool bExclusive, int deviceForInit)
     iCapture(&dummyController);
 
     if (!pDI)
-        CheckInputResult(DirectInput8Create(GetModuleHandle(NULL), DIRECTINPUT_VERSION, IID_IDirectInput8, (void**)&pDI, NULL), "DirectInput8Create");
+        CHK_DX(DirectInput8Create(GetModuleHandle(NULL), DIRECTINPUT_VERSION, IID_IDirectInput8, (void**)&pDI, NULL));
 
     // KEYBOARD
     if (deviceForInit & keyboard_device_key)
@@ -86,14 +71,14 @@ CInput::~CInput(void)
 //-----------------------------------------------------------------------------
 HRESULT CInput::CreateInputDevice(LPDIRECTINPUTDEVICE8* device, GUID guidDevice, const DIDATAFORMAT* pdidDataFormat, u32 dwFlags, u32 buf_size) const
 {
-    const char* deviceName = guidDevice == GUID_SysKeyboard ? "keyboard" : "mouse";
-    Msg("INPUT: Initializing %s", deviceName);
-    CheckInputResult(pDI->CreateDevice(guidDevice, device, NULL), "CreateDevice");
+    // Obtain an interface to the input device
+    //.	CHK_DX( pDI->CreateDeviceEx( guidDevice, IID_IDirectInputDevice8, (void**)device, NULL ) );
+    CHK_DX(pDI->CreateDevice(guidDevice, /*IID_IDirectInputDevice8,*/ device, NULL));
 
     // Set the device data format. Note: a data format specifies which
     // controls on a device we are interested in, and how they should be
     // reported.
-    CheckInputResult((*device)->SetDataFormat(pdidDataFormat), "SetDataFormat");
+    CHK_DX((*device)->SetDataFormat(pdidDataFormat));
 
     // Set the cooperativity level to let DirectInput know how this device
     // should interact with the system and with other DirectInput applications.
@@ -101,7 +86,7 @@ HRESULT CInput::CreateInputDevice(LPDIRECTINPUTDEVICE8* device, GUID guidDevice,
     if (FAILED(_hr) && (_hr == E_NOTIMPL))
         Msg("! INPUT: Can't set coop level. Emulation???");
     else
-        CheckInputResult(_hr, "SetCooperativeLevel");
+        R_CHK(_hr);
 
     // setup the buffer size for the keyboard data
     DIPROPDWORD dipdw;
@@ -111,7 +96,7 @@ HRESULT CInput::CreateInputDevice(LPDIRECTINPUTDEVICE8* device, GUID guidDevice,
     dipdw.diph.dwHow = DIPH_DEVICE;
     dipdw.dwData = buf_size;
 
-    CheckInputResult((*device)->SetProperty(DIPROP_BUFFERSIZE, &dipdw.diph), "SetProperty(DIPROP_BUFFERSIZE)");
+    CHK_DX((*device)->SetProperty(DIPROP_BUFFERSIZE, &dipdw.diph));
 
     return S_OK;
 }
