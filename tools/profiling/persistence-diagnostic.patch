@@ -1,0 +1,75 @@
+diff --git a/ogsr_engine/xrGame/GamePersistent.cpp b/ogsr_engine/xrGame/GamePersistent.cpp
+index 2c2029ec4..97f3f09eb 100644
+--- a/ogsr_engine/xrGame/GamePersistent.cpp
++++ b/ogsr_engine/xrGame/GamePersistent.cpp
+@@ -21,6 +21,7 @@
+ #include "string_table.h"
+ #include "HUDManager.h"
+ #include "..\xr_3da\DiscordRPC.hpp"
++#include <fstream>
+ 
+ #ifndef MASTER_GOLD
+ #include "custommonster.h"
+@@ -563,6 +564,34 @@ void CGamePersistent::OnFrame()
+     if (!g_pGameLevel->bReady)
+         return;
+ 
++    // Disposable validation build only: publish numbered command files atomically.
++    // Poll on the main thread after loading; never inject input or run from ALife workers.
++    if (strstr(Core.Params, "-alife_validation"))
++    {
++        static u32 next_command = 1;
++        static ULONGLONG next_poll = 0;
++        if (GetTickCount64() >= next_poll && Device.dwPrecacheFrame == 0 && !load_screen_renderer.b_registered)
++        {
++            next_poll = GetTickCount64() + 1000;
++            string_path relative, path;
++            xr_sprintf(relative, "validation_%03u.txt", next_command);
++            FS.update_path(path, "$app_data_root$", relative);
++            std::ifstream input(path);
++            std::string command;
++            if (std::getline(input, command))
++            {
++                ++next_command;
++                const bool allowed = command == "quit" || command.find("save validation_") == 0 ||
++                    command.find("load validation_") == 0 || command == "jump_to_level l02_garbage" ||
++                    command == "jump_to_level l05_bar";
++                Msg("[ALife validation] command=%s allowed=%u", command.c_str(), u32(allowed));
++                if (allowed)
++                    Console->Execute(command.c_str());
++                return;
++            }
++        }
++    }
++
+     if (Device.Paused())
+     {
+ #ifndef MASTER_GOLD
+diff --git a/ogsr_engine/xrGame/alife_update_manager.cpp b/ogsr_engine/xrGame/alife_update_manager.cpp
+index e45cb4045..88dc5c8b0 100644
+--- a/ogsr_engine/xrGame/alife_update_manager.cpp
++++ b/ogsr_engine/xrGame/alife_update_manager.cpp
+@@ -116,6 +116,23 @@ void CALifeUpdateManager::update()
+ void CALifeUpdateManager::report_metrics()
+ {
+     ZoneScopedN("ALife/metrics");
++    if (strstr(Core.Params, "-alife_validation") && m_metrics_samples % 10 == 0)
++    {
++        Msg("[ALife world begin] game_ms=%u level=%u", Device.dwTimeGlobal, u32(graph().level().level_id()));
++        for (const auto& entry : objects().objects())
++        {
++            const auto* object = entry.second;
++            const auto* creature = smart_cast<const CSE_ALifeCreatureAbstract*>(object);
++            if (!creature)
++                continue;
++            const auto* monster = smart_cast<const CSE_ALifeMonsterAbstract*>(object);
++            Msg("[ALife world] id=%u section=%s graph=%u level=%u online=%u parent=%u group=%u health=%.6f flags=%u",
++                u32(object->ID), object->name(), u32(object->m_tGraphID),
++                u32(ai().game_graph().vertex(object->m_tGraphID)->level_id()), u32(object->m_bOnline),
++                u32(object->ID_Parent), monster ? u32(monster->m_group_id) : 0xffffu, creature->fHealth, object->m_flags.get());
++        }
++        Msg("[ALife world end]");
++    }
+     // Opt-in inventory after warmup, then every 30 samples. Keep verbose
+     // diagnostics out of performance comparisons.
+     const bool inventory = (++m_metrics_samples % 30 == 10) && strstr(Core.Params, "-alife_diagnostics");
