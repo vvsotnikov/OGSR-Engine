@@ -255,7 +255,9 @@ void CSheduler::ProcessStep()
             }
         }
 
-        Items.erase(Items.begin() + (--it));
+        // Hide processed slots from Unregister just as erasing them would.
+        // Remove the tombstones together below, preserving survivor order.
+        Items[it - 1].Object = nullptr;
 
         if (skip || !shed_need)
         {
@@ -327,6 +329,7 @@ void CSheduler::ProcessStep()
     //    Msg("Prefetch frame, updated: [%u] objects!", cnt);
 
     // Push "processed" back
+    Items.erase(std::remove_if(Items.begin(), Items.end(), [](const Item& item) { return !item.Object; }), Items.end());
     Items.insert(Items.end(), std::make_move_iterator(ItemsProcessed.begin()), std::make_move_iterator(ItemsProcessed.end()));
 
     if (!stopped)
