@@ -2,7 +2,7 @@
 
 ## Current branch scope
 
-The core branch contains whole-map policy, optional metrics and lifecycle refactors. Scheduler compaction is reviewed separately in [PR #7](https://github.com/vvsotnikov/OGSR-Engine/pull/7). Deferred activation lives on `experiment/activation-queue` as an unproven experiment, not in the core engine. Historical packages and dated reports may contain both features; they are retained as evidence, not instructions to enable them on the current build.
+The core branch contains whole-map policy, optional metrics and lifecycle refactors. Scheduler compaction is reviewed separately in [PR #7](https://github.com/vvsotnikov/OGSR-Engine/pull/7). Deferred activation lives in draft [PR #8](https://github.com/vvsotnikov/OGSR-Engine/pull/8) as an unproven experiment, not in the core engine. Historical packages and dated reports may contain both features; they are retained as evidence, not instructions to enable them on the current build.
 
 Script installation/tool paths are explicit required parameters. Set `$install` and `$tracy` to your local directories; no developer-specific defaults are used. Private `.cmd` launchers can supply those arguments. `Prepare-RegularValidation.ps1` likewise requires `-BaselineRoot` and `-InstallRoot`.
 
@@ -12,7 +12,7 @@ Optional metrics and offline-inventory diagnostics are compiled into the engine 
 
 The experimental engine accepts these launch-only flags:
 
-- `-alife_whole_map`: distance no longer prevents online switching on the loaded level. Without it, the original distance policy applies.
+- `-alife_whole_map`: distance no longer prevents online switching on the loaded level. Without it, the original distance policy applies. Distance getters, setters and configuration still describe the normal-mode distance setting; this flag overrides native distance gates without rewriting that setting. Scripts that independently use the distance value still see the configured value.
 - `-alife_metrics`: log population and cumulative spawn/removal counts once per game second, plus total switch/scheduled work during that sample. The same measurements are published as Tracy plots when profiling is compiled in.
 - `-alife_diagnostics` with `-alife_metrics`: list living offline entities on the tenth metrics sample, then every 30 samples. Includes identity, parent/group, eligibility, configuration match, AI-location use and graph/node IDs. Use `Capture-Session.ps1 -Diagnostics` to enable it. Exclude these runs from performance comparisons because logging adds work.
 
