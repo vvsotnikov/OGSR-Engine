@@ -1,4 +1,4 @@
--- Private test driver for an unpatched, non-Tracy Release executable.
+-- Private test driver for a non-Tracy Release executable without C++ test hooks.
 return function(cfg)
     local ffi = FFI
     ffi.cdef[[int QueryPerformanceCounter(int64_t*); int QueryPerformanceFrequency(int64_t*);]]
@@ -11,6 +11,7 @@ return function(cfg)
         return tonumber(counter[0]) * scale
     end
     local function path(name) return getFS():update_path("$app_data_root$", name) end
+    local eligibility = cfg.eligibility and dofile(path("Test-Eligibility.lua"))(cfg.positions[1], now)
     local frames = assert(io.open(path("regular-frames.csv"), "w"))
     frames:write("frame,game_ms,stage,frame_ms,frame_gap\n")
     local batches = assert(io.open(path("regular-batches.csv"), "w"))
@@ -37,6 +38,7 @@ return function(cfg)
         if not db.actor or not app_ready() or d.precache_frame ~= 0 then return end
         if d.frame == last_frame then return end
         assert(not d:is_paused() and db.actor:alive(), "Paused or dead actor")
+        if eligibility and not eligibility() then return end
         local time = now()
         if stage == 0 then
             assert(level.name() == "l05_bar", "Wrong map")

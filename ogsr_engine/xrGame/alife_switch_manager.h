@@ -44,6 +44,7 @@ public:
     IC CALifeSwitchManager(xrServer* server, LPCSTR section);
     virtual ~CALifeSwitchManager();
     void switch_object(CSE_ALifeDynamicObject* object);
+    IC bool uses_distance_switching() const;
     IC float online_distance() const;
     IC float offline_distance() const;
     IC float switch_distance() const;

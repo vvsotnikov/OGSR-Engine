@@ -147,7 +147,7 @@ void CSE_ALifeDynamicObject::try_switch_online()
         return;
     }
 
-    if (alife().graph().actor()->o_Position.distance_to(o_Position) > alife().online_distance())
+    if (alife().uses_distance_switching() && alife().graph().actor()->o_Position.distance_to(o_Position) > alife().online_distance())
     {
 #ifdef DEBUG
         if (!client_data.empty())
@@ -172,7 +172,7 @@ void CSE_ALifeDynamicObject::try_switch_offline()
         return;
     }
 
-    if (alife().graph().actor()->o_Position.distance_to(o_Position) <= alife().offline_distance())
+    if (!alife().uses_distance_switching() || alife().graph().actor()->o_Position.distance_to(o_Position) <= alife().offline_distance())
         return;
 
     alife().switch_offline(this);

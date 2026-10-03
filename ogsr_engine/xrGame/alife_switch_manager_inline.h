@@ -20,11 +20,13 @@ IC CALifeSwitchManager::CALifeSwitchManager(xrServer* server, LPCSTR section) : 
         m_whole_map_online ? "whole current map" : "distance", m_alife_metrics ? "on" : "off", m_switch_distance);
 }
 
-// Only distance gates change. The level registry still limits switching to the
-// loaded map; explicit cannot-online flags continue to take precedence.
-IC float CALifeSwitchManager::online_distance() const { return m_whole_map_online ? flt_max : m_online_distance; }
+// Whole-map policy bypasses distance gates explicitly at their call sites.
+// The current-level registry, script eligibility and lifecycle work still apply.
+IC bool CALifeSwitchManager::uses_distance_switching() const { return !m_whole_map_online; }
 
-IC float CALifeSwitchManager::offline_distance() const { return m_whole_map_online ? flt_max : m_offline_distance; }
+IC float CALifeSwitchManager::online_distance() const { return m_online_distance; }
+
+IC float CALifeSwitchManager::offline_distance() const { return m_offline_distance; }
 
 IC float CALifeSwitchManager::switch_distance() const { return (m_switch_distance); }
 
