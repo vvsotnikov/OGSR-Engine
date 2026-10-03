@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <iostream>
 #include <string>
@@ -35,9 +36,20 @@ void clamp(T& value, T low, T high)
     value = std::clamp(value, low, high);
 }
 int iFloor(float value) { return int(std::floor(value)); }
+std::vector<std::string> messages;
 template <class... Args>
-void Msg(Args...)
-{}
+void Msg(const char* format, Args... args)
+{
+    char buffer[4096];
+    std::snprintf(buffer, sizeof(buffer), format, args...);
+    messages.emplace_back(buffer);
+}
+size_t budget_messages()
+{
+    return std::count_if(messages.begin(), messages.end(), [](const std::string& message) {
+        return message.find("budget exhausted") != std::string::npos || message.find("took whole update frame") != std::string::npos;
+    });
+}
 uint64_t clock_ms = 0;
 struct CTimer
 {
@@ -139,6 +151,7 @@ struct World
         Device.dwTimeGlobal = 0;
         Device.dwPrecacheFrame = 0;
         clock_ms = 0;
+        messages.clear();
         psShedulerCurrent = 10;
         psShedulerTarget = 10;
         psShedulerMax = 10;
@@ -454,6 +467,7 @@ void callback_budget()
                 psShedulerMax = 100.f;
                 Device.dwPrecacheFrame = prefetch ? 1 : 0;
                 w.tick(100);
+                check(budget_messages() == (prefetch ? 0u : 1u), "single expensive object logs even on cancellation, rejection or exception");
                 check(callbacks == (prefetch ? 3u : 1u), "every callback exit honors budget except during prefetch");
                 check(clock_ms == (prefetch ? 300u : 100u), "only one indivisible callback may overrun normal budget");
                 if (!prefetch)
@@ -476,6 +490,40 @@ void callback_budget()
                 }
             }
     context.clear();
+}
+
+void budget_diagnostics()
+{
+    // Both objects contribute to the stop, regardless of whether they are requeued.
+    for (int outcome : {0, 1, 2, 3})
+    {
+        World w;
+        NPC a(1, w.calls), b(2, w.calls);
+        w.add(a);
+        w.add(b);
+        for (auto* npc : {&a, &b})
+            npc->neededAction = [&, npc] {
+                clock_ms += 6;
+                if (outcome == 1) w.scheduler.Unregister(npc);
+                if (outcome == 2) npc->needed = false;
+                if (outcome == 3) throw std::runtime_error("needed");
+            };
+        w.tick(100);
+        check(a.neededCalls == 1 && b.neededCalls == 1 && clock_ms == 12, "multiple objects exhaust the budget");
+        check(budget_messages() == 0, "aggregate budget stop is not a single-object diagnostic");
+    }
+    {
+        World w;
+        NPC canceled(1, w.calls), future(2, w.calls), heavy(3, w.calls);
+        w.add(canceled);
+        w.add(future, 1000);
+        w.add(heavy);
+        w.scheduler.Unregister(&canceled, true);
+        heavy.cost = 100;
+        w.tick(100);
+        check(w.calls == std::vector<int>{3}, "tombstones and future entries do not count as evaluated objects");
+        check(budget_messages() == 1, "single successful heavy object logs after skipped entries");
+    }
 }
 
 void scale_lifecycle()
@@ -744,6 +792,7 @@ void stress_test()
         psShedulerCurrent = 10;
         psShedulerTarget = 10;
         clock_ms = 0;
+        messages.clear();
         for (u32 i = 0; i < 96; ++i)
         {
             npcs.emplace_back(i, seed);
@@ -842,6 +891,8 @@ int main(int argc, char** argv)
 #endif
         if (name == "needed_lifecycle")
             needed_lifecycle();
+        else if (name == "budget_diagnostics")
+            budget_diagnostics();
         else if (name == "callback_budget")
             callback_budget();
         else if (name == "normal_cancels_rt")

@@ -190,6 +190,7 @@ void CSheduler::ProcessStep()
     m_debug_processed = &ItemsProcessed;
 #endif
     bool stopped{};
+    size_t objects_evaluated{};
     //size_t cnt{};
     CTimer t_total;
     t_total.Start();
@@ -206,6 +207,7 @@ void CSheduler::ProcessStep()
 
         if (!skip)
         {
+            ++objects_evaluated;
             __try
             {
                 shed_need = curr.Object->shedule_Needed();
@@ -281,7 +283,8 @@ void CSheduler::ProcessStep()
             // we have maxed out the load - increase heap
             psShedulerTarget += (psShedulerReaction * 3);
 
-            Msg("! Scheduler budget exhausted after [%s]", curr.scheduled_name.c_str());
+            if (objects_evaluated == 1)
+                Msg("! Single item [%s] took whole update frame!!!", curr.scheduled_name.c_str());
 
             stopped = true;
             break;
