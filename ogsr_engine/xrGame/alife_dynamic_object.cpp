@@ -115,7 +115,7 @@ bool CSE_ALifeDynamicObject::synchronize_location()
     return (true);
 }
 
-void CSE_ALifeDynamicObject::try_switch_online()
+void CSE_ALifeDynamicObject::maintain_offline_schedule()
 {
     CSE_ALifeSchedulable* schedulable = smart_cast<CSE_ALifeSchedulable*>(this);
     // checking if the abstract monster has just died
@@ -130,7 +130,25 @@ void CSE_ALifeDynamicObject::try_switch_online()
             alife().scheduled().add(this);
     }
 
+}
+
+CSE_ALifeDynamicObject::OnlineSwitchDecision CSE_ALifeDynamicObject::evaluate_online_switch()
+{
     if (!can_switch_online())
+        return OnlineSwitchDecision::denied;
+    if (!can_switch_offline())
+        return OnlineSwitchDecision::activate;
+    if (alife().uses_distance_switching() && alife().graph().actor()->o_Position.distance_to(o_Position) > alife().online_distance())
+        return OnlineSwitchDecision::outside_distance;
+    return OnlineSwitchDecision::activate;
+}
+
+void CSE_ALifeDynamicObject::try_switch_online()
+{
+    // Maintenance must run even when activation remains denied or queued.
+    maintain_offline_schedule();
+    const OnlineSwitchDecision decision = evaluate_online_switch();
+    if (decision == OnlineSwitchDecision::denied)
     {
 #ifdef DEBUG
         if (!client_data.empty())
@@ -141,13 +159,7 @@ void CSE_ALifeDynamicObject::try_switch_online()
         return;
     }
 
-    if (!can_switch_offline())
-    {
-        alife().switch_online(this);
-        return;
-    }
-
-    if (alife().uses_distance_switching() && alife().graph().actor()->o_Position.distance_to(o_Position) > alife().online_distance())
+    if (decision == OnlineSwitchDecision::outside_distance)
     {
 #ifdef DEBUG
         if (!client_data.empty())
@@ -161,21 +173,24 @@ void CSE_ALifeDynamicObject::try_switch_online()
     alife().switch_online(this);
 }
 
-void CSE_ALifeDynamicObject::try_switch_offline()
+bool CSE_ALifeDynamicObject::evaluate_offline_switch()
 {
     if (!can_switch_offline())
-        return;
+        return false;
 
     if (!can_switch_online())
-    {
-        alife().switch_offline(this);
-        return;
-    }
+        return true;
 
     if (!alife().uses_distance_switching() || alife().graph().actor()->o_Position.distance_to(o_Position) <= alife().offline_distance())
-        return;
+        return false;
 
-    alife().switch_offline(this);
+    return true;
+}
+
+void CSE_ALifeDynamicObject::try_switch_offline()
+{
+    if (evaluate_offline_switch())
+        alife().switch_offline(this);
 }
 
 bool CSE_ALifeDynamicObject::redundant() const { return (false); }
