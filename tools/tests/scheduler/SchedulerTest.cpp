@@ -464,15 +464,12 @@ void callback_budget()
                         w.order({2, 3, 1});
                     else
                         w.order({2, 3});
-                    a.neededAction = {};
-                    a.scaleAction = {};
-                    a.action = {};
-                    b.neededAction = {};
-                    b.scaleAction = {};
-                    b.action = {};
-                    c.neededAction = {};
-                    c.scaleAction = {};
-                    c.action = {};
+                    for (auto* npc : {&a, &b, &c})
+                    {
+                        npc->neededAction = {};
+                        npc->scaleAction = {};
+                        npc->action = {};
+                    }
                     w.calls.clear();
                     w.tick(101);
                     check(w.calls == (outcome == 1 ? std::vector<int>{2, 3, 1} : std::vector<int>{2, 3}), "budget survivors run first on next pass");

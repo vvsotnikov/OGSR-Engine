@@ -43,11 +43,11 @@ void CSheduler::internal_Registration()
             // register if non-paired
             if (!bFoundAndErased)
             {
-                // Msg("SCHEDULER: internal register [%s][%x][%s]", *R.Object->shedule_Name(), R.Object, R.RT ? "true" : "false");
+                //Msg("SCHEDULER: internal register [%s][%x][%s]", *R.Object->shedule_Name(), R.Object, R.RT ? "true" : "false");
                 internal_Register(R.Object, R.RT);
             }
-            // else
-            //     Msg("SCHEDULER: internal register skipped, because unregister found [%s][%x][%s]", "unknown", R.Object, R.RT ? "true" : "false");
+            //else
+            //    Msg("SCHEDULER: internal register skipped, because unregister found [%s][%x][%s]", "unknown", R.Object, R.RT ? "true" : "false");
         }
         else
         {
@@ -130,7 +130,9 @@ bool CSheduler::Registered(ISheduled* object) const
     // Membership includes the detached current callback and the temporary
     // processed queue, then pending operations in the order they were requested.
     size_t count = m_current_step_obj == object ? 1 : 0;
-    const auto matches = [object](const xr_vector<Item>& items) { return std::count_if(items.begin(), items.end(), [object](const Item& item) { return item.Object == object; }); };
+    const auto matches = [object](const xr_vector<Item>& items) {
+        return std::count_if(items.begin(), items.end(), [object](const Item& item) { return item.Object == object; });
+    };
     count += matches(ItemsRT) + matches(Items);
     if (m_debug_processed)
         count += matches(*m_debug_processed);
@@ -156,7 +158,7 @@ void CSheduler::Register(ISheduled* A, BOOL RT)
     R.Object = A;
     R.Object->shedule.b_RT = RT;
 
-    // Msg("SCHEDULER: register [%s][%x]", *A->shedule_Name(), A);
+    //Msg("SCHEDULER: register [%s][%x]", *A->shedule_Name(), A);
 }
 
 void CSheduler::Unregister(ISheduled* A, bool force)
@@ -188,7 +190,7 @@ void CSheduler::ProcessStep()
     m_debug_processed = &ItemsProcessed;
 #endif
     bool stopped{};
-    // size_t cnt{};
+    //size_t cnt{};
     CTimer t_total;
     t_total.Start();
 
@@ -264,7 +266,7 @@ void CSheduler::ProcessStep()
                 next.Object = curr.Object;
                 next.scheduled_name = curr.Object->shedule_Name();
 
-                // cnt++;
+                //cnt++;
             }
             __except (ExceptStackTrace("[CSheduler::ProcessStep2] stack trace:\n"))
             {
@@ -279,23 +281,18 @@ void CSheduler::ProcessStep()
             // we have maxed out the load - increase heap
             psShedulerTarget += (psShedulerReaction * 3);
 
-            // if (Core.DebugFlags.test(xrCore::dbg_TraceScheduler))
-            {
-                // Msg("Break ProcessStep. Processed: [%u], left in queue: [%u]", ItemsProcessed.size(), Items.size());
-                if (ItemsProcessed.size() == 1)
-                    Msg("! Scheduler budget exhausted after [%s]", curr.scheduled_name.c_str());
-            }
+            Msg("! Scheduler budget exhausted after [%s]", curr.scheduled_name.c_str());
 
             stopped = true;
             break;
         }
     }
 
-    // if (/*Core.DebugFlags.test(xrCore::dbg_TraceScheduler) &&*/ !prefetch && t_total.GetElapsed_ms() > 20)
-    //     Msg("Long ProcessStep !!! duration [%u]ms. updated: [%u] objects!", t_total.GetElapsed_ms(), cnt);
+    //if (/*Core.DebugFlags.test(xrCore::dbg_TraceScheduler) &&*/ !prefetch && t_total.GetElapsed_ms() > 20)
+    //    Msg("Long ProcessStep !!! duration [%u]ms. updated: [%u] objects!", t_total.GetElapsed_ms(), cnt);
 
-    // if (prefetch)
-    //     Msg("Prefetch frame, updated: [%u] objects!", cnt);
+    //if (prefetch)
+    //    Msg("Prefetch frame, updated: [%u] objects!", cnt);
 
     // Push "processed" back
     Items.erase(std::remove_if(Items.begin(), Items.end(), [](const Item& item) { return !item.Object; }), Items.end());
