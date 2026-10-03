@@ -41,6 +41,17 @@ interface ABI and shared-string reference counting. C++ catches substitute for
 Windows SEH handlers, so exception cases validate adapted control flow, not native
 SEH recovery or complete exception-state cleanup.
 
-RT-list mutation inside callbacks is excluded because of the existing iterator
-invalidation problem. The fixture uses Release semantics and does not exercise
-engine DEBUG code. Native builds and runtime checks remain necessary complements.
+RT callbacks may cancel themselves or another entry without invalidating traversal.
+Canceled entries must not receive further callbacks; re-registration takes effect
+at the end of the pass. No timestamp is written to a canceled entry after its
+callback. The same rule applies when cancellation occurs in the needed check.
+
+After an ordinary update exception, there is no current callback. Otherwise a
+stale pointer could consume an unregister meant to cancel a pending registration.
+DEBUG membership checks include queued, current and already-processed objects,
+with pending registration operations applied in request order.
+
+The fixture builds both Release semantics and a DEBUG-defined variant with
+registration assertions active. This exercises scheduler DEBUG code, not the full
+engine's debug configuration. Native builds and runtime checks remain necessary
+complements.

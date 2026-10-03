@@ -9,7 +9,11 @@
 #include <stdexcept>
 #include <set>
 #define ENGINE_API
+#ifdef DEBUG
+#define VERIFY(value) check(bool(value), "VERIFY: " #value)
+#else
 #define VERIFY(...)
+#endif
 void check(bool value, const std::string& message);
 #define R_ASSERT(value) check(bool(value), "R_ASSERT: " #value)
 #define ZoneScoped
@@ -74,13 +78,14 @@ struct ISheduled
 #include "scheduler-under-test.cpp"
 
 unsigned failures = 0;
+std::string context;
 void check(bool value, const std::string& message)
 {
     if (!value)
     {
         ++failures;
         if (failures < 20)
-            std::cerr << message << "\n";
+            std::cerr << context << " " << message << "\n";
     }
 }
 struct NPC : ISheduled
@@ -99,7 +104,8 @@ struct NPC : ISheduled
     bool shedule_Needed() override
     {
         ++neededCalls;
-        if (neededAction) neededAction();
+        if (neededAction)
+            neededAction();
         if (throwNeeded)
             throw std::runtime_error("needed");
         return needed;
@@ -350,15 +356,19 @@ void realtime()
 
 void rt_mutation()
 {
-    for (int removed : {1, 2, 3}) {
-        for (bool again : {false, true}) {
+    for (int removed : {1, 2, 3})
+    {
+        for (bool again : {false, true})
+        {
             World w;
             NPC a(1, w.calls), b(2, w.calls), c(3, w.calls);
             NPC* victim = removed == 1 ? &a : removed == 2 ? &b : &c;
-            for (auto* npc : {&a, &b, &c}) w.scheduler.Register(npc, true);
+            for (auto* npc : {&a, &b, &c})
+                w.scheduler.Register(npc, true);
             b.action = [&] {
                 w.scheduler.Unregister(victim);
-                if (again) w.scheduler.Register(victim, true);
+                if (again)
+                    w.scheduler.Register(victim, true);
             };
             w.tick(100);
             check(w.calls == (removed == 3 ? std::vector<int>{1, 2} : std::vector<int>{1, 2, 3}), "RT removal changes current-pass dispatch");
@@ -367,36 +377,72 @@ void rt_mutation()
             w.calls.clear();
             w.tick(150);
             std::vector<int> expected;
-            for (int id : {1, 2, 3}) if (id != removed) expected.push_back(id);
-            if (again) expected.push_back(removed);
+            for (int id : {1, 2, 3})
+                if (id != removed)
+                    expected.push_back(id);
+            if (again)
+                expected.push_back(removed);
             check(w.calls == expected, "RT survivor and re-registration order");
-            if (again) check(victim->elapsed.back() == 50, "RT re-registration timestamp");
+            if (again)
+                check(victim->elapsed.back() == 50, "RT re-registration timestamp");
         }
     }
     // A needed callback can unregister its own entry before Update dereferences it.
     World w;
     NPC a(1, w.calls), b(2, w.calls);
-    w.scheduler.Register(&a, true); w.scheduler.Register(&b, true);
+    w.scheduler.Register(&a, true);
+    w.scheduler.Register(&b, true);
     a.neededAction = [&] { w.scheduler.Unregister(&a); };
     w.tick(100);
     check(w.calls == std::vector<int>{2}, "RT needed self-removal suppresses update");
     check(w.scheduler.ItemsRT.size() == 1, "RT needed removal compacts queue");
 }
 
+#ifdef DEBUG
+void registered_state()
+{
+    World w;
+    NPC a(1, w.calls), b(2, w.calls), c(3, w.calls);
+    check(!w.scheduler.Registered(&a), "initially absent");
+    w.scheduler.Register(&a);
+    check(w.scheduler.Registered(&a), "pending registration visible");
+    w.add(b);
+    a.action = [&] { check(w.scheduler.Registered(&a), "current callback registered"); };
+    b.action = [&] {
+        check(w.scheduler.Registered(&a), "processed callback registered");
+        w.scheduler.Unregister(&a);
+        check(!w.scheduler.Registered(&a), "pending removal overrides processed membership");
+        w.scheduler.Register(&c);
+        check(w.scheduler.Registered(&c), "pending callback registration visible");
+        w.scheduler.Unregister(&c);
+        check(!w.scheduler.Registered(&c), "paired cancellation visible");
+        w.scheduler.Unregister(&b);
+        check(!w.scheduler.Registered(&b), "current callback removal visible");
+    };
+    w.tick(100);
+    check(!w.scheduler.Registered(&a) && !w.scheduler.Registered(&b) && !w.scheduler.Registered(&c), "all removals applied");
+    check(w.scheduler.m_debug_processed == nullptr, "temporary queue observer cleared");
+}
+#endif
+
 void exception_cleanup()
 {
     World w;
     NPC a(1, w.calls);
     a.throwUpdate = true;
-    w.add(a); w.tick(100);
+    w.add(a);
+    w.tick(100);
     check(w.scheduler.m_current_step_obj == nullptr, "exception leaves no current object");
     // A stale current pointer must not swallow cancellation of a pending registration.
     a.throwUpdate = false;
     w.scheduler.Register(&a);
     w.scheduler.Unregister(&a, true);
-    w.calls.clear(); w.tick(200);
+    w.calls.clear();
+    w.tick(200);
     check(w.calls.empty() && w.scheduler.Items.empty(), "pending registration canceled after exception");
-    w.scheduler.Register(&a); w.tick(201); w.tick(202);
+    w.scheduler.Register(&a);
+    w.tick(201);
+    w.tick(202);
     check(w.calls == std::vector<int>{1}, "object can register again after exception");
 }
 
@@ -529,6 +575,7 @@ void stress_test()
             instance.Register(&npc);
         for (frame = 0; frame < 100; ++frame)
         {
+            context = "seed=" + std::to_string(seed) + " frame=" + std::to_string(frame);
             Device.dwTimeGlobal += 17 + (frame * 13 + seed) % 31;
             Device.dwPrecacheFrame = frame < 4 ? 1 : 0;
             // Include external forced unregister, deferred registration and RT work.
@@ -543,7 +590,8 @@ void stress_test()
             // RT mutations are excluded: their vector invalidation is a separate existing issue.
             if (frame == 9)
             {
-                instance.Unregister(&npcs[95], true);
+                if (npcs[95].registered)
+                    instance.Unregister(&npcs[95], true);
                 npcs[95].registered = false;
             }
             std::vector<ISheduled*> before;
@@ -602,6 +650,13 @@ int main(int argc, char** argv)
     const std::string name = argv[1];
     try
     {
+#ifdef DEBUG
+        if (name == "registered_state")
+        {
+            registered_state();
+            return failures ? 1 : 0;
+        }
+#endif
         if (name == "exception_cleanup")
             exception_cleanup();
         else if (name == "rt_mutation")
