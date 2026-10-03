@@ -839,7 +839,7 @@ HRESULT CRender::shader_compile(LPCSTR name, DWORD const* pSrcData, UINT SrcData
         if (SUCCEEDED(_result))
             crc = crc32(pShaderBuf->GetBufferPointer(), static_cast<u32>(pShaderBuf->GetBufferSize()));
         else
-            Msg("!![%s] D3DPreprocess for [%s] failed with error: [%s]", __FUNCTION__, file_name, Debug.DXerror2string(_result));
+            Msg("!![%s] D3DPreprocess for [%s] failed with error: [%s]", __FUNCTION__, file_name, Debug.DXerror2string(_result).c_str());
         _RELEASE(pShaderBuf);
         _RELEASE(pErrorBuf);
 
