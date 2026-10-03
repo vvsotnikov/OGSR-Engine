@@ -1,0 +1,6 @@
+execute_process(COMMAND "${PROGRAM}" RESULT_VARIABLE OLD_STATUS OUTPUT_VARIABLE OLD)
+execute_process(COMMAND "${PROGRAM}" compact RESULT_VARIABLE NEW_STATUS OUTPUT_VARIABLE NEW)
+if(NOT OLD_STATUS EQUAL 0 OR NOT NEW_STATUS EQUAL 0 OR NOT OLD STREQUAL NEW)
+    message(FATAL_ERROR "Scheduler mismatch or failure: legacy=${OLD_STATUS}:${OLD}; compact=${NEW_STATUS}:${NEW}")
+endif()
+message(STATUS "Matching dispatch/deadline digest, callbacks, needed checks, self/other removals and registrations: ${OLD}")

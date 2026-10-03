@@ -4,11 +4,15 @@ param(
     [string]$ToolRoot = 'C:\Users\vladimir\Documents\Codex\tools\tracy',
     [switch]$CaptureTrace,
     [switch]$Cadence,
-    [switch]$Combat
+    [switch]$Combat,
+    [switch]$QueueBenchmark,
+    [switch]$CompactQueue
 )
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/ValidationLog.ps1"
 $package = if ($Cadence) { 'bin_cadence' } else { 'bin_stress' }
+if ($QueueBenchmark) { $package = 'bin_queue'; $Cadence = $true }
+if ($CompactQueue -and !$QueueBenchmark) { throw 'CompactQueue requires QueueBenchmark' }
 if ($Combat -and (!$Cadence -or $Counts.Count -ne 1 -or $Counts[0] -ne 20)) { throw 'Combat requires -Cadence -Counts 20' }
 $engine = Join-Path $InstallRoot "$package/xrEngine.exe"
 foreach ($count in $Counts) {
@@ -19,12 +23,15 @@ foreach ($count in $Counts) {
     $meta.arguments += " -alife_stress $count"
     if ($Cadence) { $meta.arguments += ' -alife_cadence' }
     if ($Combat) { $meta.arguments += ' -alife_combat' }
+    if ($CompactQueue) { $meta.arguments += ' -scheduler_compact' }
     $meta.engineSha256 = (Get-FileHash $engine).Hash
     $meta.build = Get-Content -Raw "$InstallRoot/$package/build.json" | ConvertFrom-Json
     $meta.status = 'stress-running'
     $meta | Add-Member requestedExtraStalkers $count
     $meta | Add-Member traceRequested ([bool]$CaptureTrace)
     $meta | Add-Member cadenceRequested ([bool]$Cadence)
+    $meta | Add-Member queueBenchmark ([bool]$QueueBenchmark)
+    $meta | Add-Member compactQueue ([bool]$CompactQueue)
     $meta | Add-Member scenario $(if ($Combat) { 'combat' } else { 'dispersed' })
     $collector = $null
     $game = Start-Process $engine -ArgumentList $meta.arguments -WorkingDirectory $InstallRoot -PassThru

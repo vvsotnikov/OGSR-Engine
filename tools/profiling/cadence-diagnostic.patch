@@ -109,8 +109,10 @@ index 7aa419252..5b9dd1125 100644
              // if (!Core.DebugFlags.test(xrCore::dbg_DisableObjectsScheduler))
              curr.Object->shedule_Update(std::clamp(elapsed, 1u, std::max(curr.Object->shedule.t_max, 1000u)));
  
-@@ -329,6 +333,18 @@ void CSheduler::ProcessStep()
+@@ -335,8 +339,20 @@ void CSheduler::ProcessStep()
      // Push "processed" back
+     if (compact_queue)
+         Items.erase(std::remove_if(Items.begin(), Items.end(), [](const Item& item) { return !item.Object; }), Items.end());
      Items.insert(Items.end(), std::make_move_iterator(ItemsProcessed.begin()), std::make_move_iterator(ItemsProcessed.end()));
  
 +    if (CadenceProbe::Enabled())

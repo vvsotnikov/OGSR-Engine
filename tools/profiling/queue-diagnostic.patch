@@ -1,0 +1,145 @@
+--- a/ogsr_engine/xr_3da/xrSheduler.cpp
++++ b/ogsr_engine/xr_3da/xrSheduler.cpp
+@@ -1,6 +1,8 @@
+ #include "stdafx.h"
+ #include "xrSheduler.h"
+ #include "xr_object.h"
++#include "SchedulerProbe.h"
++#include "QueueProbe.h"
+ 
+ float psShedulerCurrent = 10.f;
+ float psShedulerTarget = 10.f;
+@@ -222,6 +224,7 @@
+ {
+     ZoneScoped;
+ 
++    QueueProbe::Begin();
+     // Normal priority
+     u32 dwTime = Device.dwTimeGlobal;
+ 
+@@ -258,10 +261,14 @@
+             }
+         }
+ 
+-        if (compact_queue)
+-            Items[it - 1].Object = nullptr;
+-        else
+-            Items.erase(Items.begin() + (--it));
++        {
++            QueueProbe::Maintenance timing;
++            ++QueueProbe::removed;
++            if (compact_queue)
++                Items[it - 1].Object = nullptr;
++            else
++                Items.erase(Items.begin() + (--it));
++        }
+ 
+         if (skip || !shed_need)
+         {
+@@ -282,6 +289,9 @@
+             const u32 elapsed = dwTime - curr.dwTimeOfLastExecute;
+ 
+             m_current_step_obj = curr.Object;
++
++            CadenceProbe::Begin(curr.Object, dwTime, elapsed, curr.dwTimeForExecute - curr.dwTimeOfLastExecute,
++                dwTime - curr.dwTimeForExecute, dwUpdate, false);
+ 
+             // if (!Core.DebugFlags.test(xrCore::dbg_DisableObjectsScheduler))
+             curr.Object->shedule_Update(std::clamp(elapsed, 1u, std::max(curr.Object->shedule.t_max, 1000u)));
+@@ -332,11 +342,26 @@
+     //if (prefetch)
+     //    Msg("Prefetch frame, updated: [%u] objects!", cnt);
+ 
++    {
++    QueueProbe::Maintenance timing;
+     // Push "processed" back
+     if (compact_queue)
+         Items.erase(std::remove_if(Items.begin(), Items.end(), [](const Item& item) { return !item.Object; }), Items.end());
+     Items.insert(Items.end(), std::make_move_iterator(ItemsProcessed.begin()), std::make_move_iterator(ItemsProcessed.end()));
+ 
++    }
++    if (CadenceProbe::Enabled())
++    {
++        u32 overdue = 0, max_late = 0;
++        for (const auto& item : Items)
++            if (item.Object && item.dwTimeForExecute < dwTime)
++            {
++                ++overdue;
++                max_late = std::max(max_late, dwTime - item.dwTimeForExecute);
++            }
++        CadenceProbe::Frame(dwTime, stopped, u32(Items.size()), overdue, max_late, psShedulerCurrent);
++    }
++    QueueProbe::Finish(compact_queue);
+     if (!stopped)
+     {
+         // always try to decrease target
+@@ -372,6 +397,7 @@
+             }
+ 
+             const u32 elapsed = dwTime - curr.dwTimeOfLastExecute;
++            CadenceProbe::Begin(curr.Object, dwTime, elapsed, 0, 0, 0, true);
+             curr.Object->shedule_Update(elapsed);
+             curr.dwTimeOfLastExecute = dwTime;
+         }
+--- a/ogsr_engine/xrGame/GamePersistent.cpp
++++ b/ogsr_engine/xrGame/GamePersistent.cpp
+@@ -517,6 +517,8 @@
+ extern CUISequencer* g_tutorial2;
+ extern bool RESET_SECTORS_HACK;
+ 
++#include "CadenceStress.inl"
++
+ void CGamePersistent::OnFrame()
+ {
+     if (g_tutorial2)
+@@ -562,6 +564,9 @@
+         return;
+     if (!g_pGameLevel->bReady)
+         return;
++
++    if (Device.dwPrecacheFrame == 0 && !load_screen_renderer.b_registered)
++        RunPopulationStress();
+ 
+     if (Device.Paused())
+     {
+--- a/ogsr_engine/xrGame/ShootingObject.cpp
++++ b/ogsr_engine/xrGame/ShootingObject.cpp
+@@ -4,6 +4,7 @@
+ //////////////////////////////////////////////////////////////////////
+ 
+ #include "stdafx.h"
++#include "../xr_3da/SchedulerProbe.h"
+ 
+ #include "ShootingObject.h"
+ 
+@@ -411,6 +412,7 @@
+ 
+ void CShootingObject::FireBullet(const Fvector& pos, const Fvector& shot_dir, float fire_disp, const CCartridge& cartridge, u16 parent_id, u16 weapon_id, bool send_hit)
+ {
++    CadenceProbe::Shot(parent_id, weapon_id);
+     Fvector dir;
+     dir.random_dir(shot_dir, fire_disp);
+ 
+--- a/ogsr_engine/xrGame/ai/stalker/ai_stalker.cpp
++++ b/ogsr_engine/xrGame/ai/stalker/ai_stalker.cpp
+@@ -8,6 +8,7 @@
+ 
+ #include "stdafx.h"
+ #include "ai_stalker.h"
++#include "../../../xr_3da/SchedulerProbe.h"
+ #include "../ai_monsters_misc.h"
+ #include "../../weapon.h"
+ #include "../../hit.h"
+@@ -632,6 +633,12 @@
+ 
+ void CAI_Stalker::shedule_Update(u32 DT)
+ {
++    if (CadenceProbe::Enabled())
++    {
++        const auto* enemy = memory().enemy().selected();
++        const auto* weapon = smart_cast<const CWeapon*>(inventory().ActiveItem());
++        CadenceProbe::Stalker(static_cast<ISheduled*>(this), ID(), g_Alive(), enemy ? enemy->ID() : 0xffff, weapon && weapon->IsWorking());
++    }
+     START_PROFILE("stalker")
+     START_PROFILE("stalker/schedule_update")
+     VERIFY2(getEnabled() || PPhysicsShell(), *cName());
