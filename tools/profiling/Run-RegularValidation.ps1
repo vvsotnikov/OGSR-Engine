@@ -5,7 +5,7 @@ param(
     [ValidateRange(0,10)][int]$BudgetMs = 0,
     [switch]$CompactQueue,
     [switch]$SaveSnapshot,
-    [ValidateSet('bin_experiment','bin_policy','bin_activation','bin_activation_tracy','bin_reconcile','bin_dynamic_policy','bin_group','bin_core')][string]$Package = 'bin_experiment',
+    [ValidateSet('bin_experiment','bin_policy','bin_activation','bin_activation_tracy','bin_reconcile','bin_dynamic_policy','bin_group','bin_core','bin_whole_lifecycle')][string]$Package = 'bin_experiment',
     [switch]$ReconcileMetrics,
     [switch]$Transitions,
     [switch]$ActivationQueue,
@@ -20,6 +20,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 if ($Package -eq 'bin_core' -and ($CompactQueue -or $ActivationQueue -or $SavePending)) { throw 'Core package excludes scheduler compaction and deferred activation; use their separate experiment builds' }
+if ($Package -eq 'bin_whole_lifecycle' -and ($CompactQueue -or $ActivationQueue -or $SavePending)) { throw 'Whole-map lifecycle package has unconditional compaction and no deferred activation; omit experiment switches' }
 . "$PSScriptRoot/ValidationLog.ps1"
 $engine = Join-Path $InstallRoot "$Package/xrEngine.exe"
 if (!(Test-Path $engine) -or !(Test-Path "$InstallRoot/$Package/build.json")) { throw "Missing package or manifest: $engine" }

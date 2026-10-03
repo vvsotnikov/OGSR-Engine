@@ -4,6 +4,8 @@
 
 The core branch contains whole-map policy, optional metrics and lifecycle refactors. Scheduler compaction from merged [PR #7](https://github.com/vvsotnikov/OGSR-Engine/pull/7) is always enabled. Scheduler callback-removal, exception-cleanup and DEBUG membership fixes are integrated from [PR #9](https://github.com/vvsotnikov/OGSR-Engine/pull/9); review that dependency before merging this branch. Deferred activation remains separate in draft [PR #8](https://github.com/vvsotnikov/OGSR-Engine/pull/8). Historical packages and dated reports may contain earlier combinations of features; they are retained as evidence, not instructions to reproduce the current build.
 
+Use `-Package bin_whole_lifecycle` for the integrated whole-map/scheduler build; compaction needs no switch and deferred activation is unavailable.
+
 Script installation/tool paths are explicit required parameters. Set `$install` and `$tracy` to your local directories; no developer-specific defaults are used. Private `.cmd` launchers can supply those arguments. `Prepare-RegularValidation.ps1` likewise requires `-BaselineRoot` and `-InstallRoot`.
 
 The dynamic-policy and reconciliation fixtures carry frozen pre-refactor reference bodies alongside their tests. Their source commits are provenance comments only: builds work from a source archive without `.git`. Current code is selected by explicit unique region boundaries, not brace counting. Update those boundaries deliberately when refactoring the tested regions.
