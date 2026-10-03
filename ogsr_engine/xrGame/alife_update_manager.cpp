@@ -78,13 +78,11 @@ void CALifeUpdateManager::update_switch()
     init_ef_storage();
 
     START_PROFILE("ALife/switch");
-    begin_activation_collection();
     begin_reconciliation();
     CTimer reconcile_timer;
     if (m_reconcile_metrics) reconcile_timer.Start();
     graph().level().update(CSwitchPredicate(this));
     finish_reconciliation(m_reconcile_metrics ? reconcile_timer.GetElapsed_sec() * 1000.0 : 0.0);
-    finish_activation_collection();
     STOP_PROFILE
 }
 

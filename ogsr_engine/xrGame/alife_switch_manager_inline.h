@@ -19,9 +19,6 @@ IC CALifeSwitchManager::CALifeSwitchManager(xrServer* server, LPCSTR section) : 
     m_reconcile_metrics = strstr(Core.Params, "-alife_reconcile_metrics") != nullptr;
     if (m_reconcile_metrics)
         Msg("* ALife reconciliation timing: pass totals; stage sampling every 64 passes");
-    m_activation_queue_enabled = m_whole_map_online && strstr(Core.Params, "-alife_activation_queue") != nullptr;
-    if (m_activation_queue_enabled)
-        Msg("* ALife activation queue: enabled; soft budget 3 ms per update; maximum 32 attempts");
     Msg("* ALife policy: %s; metrics: %s; configured switch distance: %.1f",
         m_whole_map_online ? "whole current map" : "distance", m_alife_metrics ? "on" : "off", m_switch_distance);
 }

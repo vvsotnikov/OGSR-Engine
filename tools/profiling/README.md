@@ -1,9 +1,18 @@
 # A-Life experiment and profiling
 
+## Current branch scope
+
+The core branch contains whole-map policy, optional metrics and lifecycle refactors. Scheduler compaction is reviewed separately in [PR #7](https://github.com/vvsotnikov/OGSR-Engine/pull/7). Deferred activation lives on `experiment/activation-queue` as an unproven experiment, not in the core engine. Historical packages and dated reports may contain both features; they are retained as evidence, not instructions to enable them on the current build.
+
+Script installation/tool paths are explicit required parameters. Set `$install` and `$tracy` to your local directories; no developer-specific defaults are used. Private `.cmd` launchers can supply those arguments. `Prepare-RegularValidation.ps1` likewise requires `-BaselineRoot` and `-InstallRoot`.
+
+The dynamic-policy and reconciliation fixtures carry frozen pre-refactor reference bodies alongside their tests. Their source commits are provenance comments only: builds work from a source archive without `.git`. Current code is selected by explicit unique region boundaries, not brace counting. Update those boundaries deliberately when refactoring the tested regions.
+
+Optional metrics and offline-inventory diagnostics are compiled into the engine and activated with flags. Additional high-volume instrumentation is kept in the archived diagnostic patches. These are distinct; the engine is not free of diagnostic code.
+
 The experimental engine accepts these launch-only flags:
 
 - `-alife_whole_map`: distance no longer prevents online switching on the loaded level. Without it, the original distance policy applies.
-- `-scheduler_compact`: experimental stable cleanup of the scheduled-object queue, preserving dispatch order and requested intervals. Default launches retain the original erase-per-item path. See `QUEUE-2026-10-03.md` for checks, measurements and the separate diagnostic package.
 - `-alife_metrics`: log population and cumulative spawn/removal counts once per game second, plus total switch/scheduled work during that sample. The same measurements are published as Tracy plots when profiling is compiled in.
 - `-alife_diagnostics` with `-alife_metrics`: list living offline entities on the tenth metrics sample, then every 30 samples. Includes identity, parent/group, eligibility, configuration match, AI-location use and graph/node IDs. Use `Capture-Session.ps1 -Diagnostics` to enable it. Exclude these runs from performance comparisons because logging adds work.
 
@@ -18,8 +27,8 @@ Run `Build-TracyTools.ps1 -ToolRoot <tools-directory>` from PowerShell with Git,
 Package the profiling engine under `<install>/bin_experiment`. The installation needs `fsgame-profiler.ltx` and the original SoC resources. The default seed settings/save come from `<install>/_appdata_profiler_`.
 
 ```powershell
-./Capture-Session.ps1 -InstallRoot D:/Games/OGSR-Baseline -ToolRoot C:/Users/vladimir/Documents/Codex/tools/tracy -Mode distance
-./Capture-Session.ps1 -InstallRoot D:/Games/OGSR-Baseline -ToolRoot C:/Users/vladimir/Documents/Codex/tools/tracy -Mode whole-map
+./Capture-Session.ps1 -InstallRoot $install -ToolRoot $tracy -Mode distance
+./Capture-Session.ps1 -InstallRoot $install -ToolRoot $tracy -Mode whole-map
 ```
 
 Exit the first game before launching the second. Each run copies the same seed save and settings into a unique `captures/<timestamp>-<mode>/appdata` directory. It disables the loading-screen key gate in that copy only. Recording starts after 30 seconds and ends after 60 seconds, or earlier at the capture memory limit (20% of physical RAM). The game stays open. The manifest records the save and executable hashes, command line, capture status and optional packaged build provenance. Do not change the seed save between the two runs.

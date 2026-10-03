@@ -1,6 +1,6 @@
 param(
-    [string]$InstallRoot = 'D:\Games\OGSR-Baseline',
-    [string]$ToolRoot = 'C:\Users\vladimir\Documents\Codex\tools\tracy',
+    [Parameter(Mandatory)][string]$InstallRoot,
+    [Parameter(Mandatory)][string]$ToolRoot,
     [string]$SeedAppData = 'seeds/bar-2026-10-03',
     [string]$SaveName = 'bar_center',
     [switch]$RestartOnly,

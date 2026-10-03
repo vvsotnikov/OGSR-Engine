@@ -113,12 +113,6 @@ void CALifeSwitchManager::remove_online(CSE_ALifeDynamicObject* object, bool upd
 void CALifeSwitchManager::switch_online(CSE_ALifeDynamicObject* object)
 {
     START_PROFILE("ALife/switch/switch_online")
-    if (m_collect_activations && object != graph().actor() && object->can_switch_offline() && object->m_story_id == INVALID_STORY_ID)
-    {
-        objects().activation_queue.enqueue(object->ID);
-        return;
-    }
-    objects().activation_queue.cancel(object->ID);
 #ifdef DEBUG
     //	if (psAI_Flags.test(aiALife))
     Msg("[LSS][%d] Going online [%d][%s][%d] ([%f][%f][%f] : [%f][%f][%f]), on '%s'", Device.dwFrame, Device.dwTimeGlobal, object->name_replace(), object->ID,
@@ -182,7 +176,6 @@ void CALifeSwitchManager::try_switch_online(CSE_ALifeDynamicObject* I)
     if (0xffff != I->ID_Parent)
     {
         // so, object is attached
-        objects().activation_queue.cancel(I->ID);
         // checking if parent is offline too
 #ifdef DEBUG
         if (psAI_Flags.test(aiALife))
@@ -204,10 +197,8 @@ void CALifeSwitchManager::try_switch_online(CSE_ALifeDynamicObject* I)
 
     I->try_switch_online();
     if (!I->can_switch_online())
-        objects().activation_queue.cancel(I->ID);
 
-    // Approved but deferred objects still need their saved client state.
-    if (!I->m_bOnline && !I->keep_saved_data_anyway() && !objects().activation_queue.contains(I->ID))
+    if (!I->m_bOnline && !I->keep_saved_data_anyway())
         I->client_data.clear();
 
     STOP_PROFILE
@@ -306,44 +297,12 @@ void CALifeSwitchManager::begin_reconciliation()
 
 void CALifeSwitchManager::finish_reconciliation(double elapsed_ms)
 {
-    // Emission happens outside the measured traversal. Queue consumption below
-    // is separate and must not leak into the next sample's stage counters.
+    // Emit outside the measured traversal, then stop per-object sampling so
+    // subsequent work cannot leak into this traversal's stage counters.
     if (m_reconcile_metrics && (m_reconcile_sample || elapsed_ms >= 10.0))
         Msg("[ALife reconcile] frame=%u pass=%u sampled=%u objects=%u total_ms=%.6f before_ms=%.6f online_dispatch_ms=%.6f offline_dispatch_ms=%.6f after_ms=%.6f",
             Device.dwFrame, m_reconcile_passes, u32(m_reconcile_sample), m_reconcile_sample ? m_reconcile_objects : 0,
             elapsed_ms, m_reconcile_sample ? m_reconcile_stage_ms[0] : 0.0, m_reconcile_sample ? m_reconcile_stage_ms[1] : 0.0,
             m_reconcile_sample ? m_reconcile_stage_ms[2] : 0.0, m_reconcile_sample ? m_reconcile_stage_ms[3] : 0.0);
     m_reconcile_sample = false;
-}
-
-void CALifeSwitchManager::begin_activation_collection()
-{
-    objects().activation_queue.set_level(u32(graph().level().level_id()));
-    // Keep the initial map population synchronous. Queue only steady gameplay.
-    m_collect_activations = m_activation_queue_enabled && objects().activation_queue.ready &&
-        Device.dwPrecacheFrame == 0 && graph().actor()->m_bOnline;
-}
-
-void CALifeSwitchManager::finish_activation_collection()
-{
-    m_collect_activations = false;
-    auto& queue = objects().activation_queue;
-    queue.ready = true;
-    if (!m_activation_queue_enabled) return;
-    ZoneScopedN("ALife/activation_queue");
-    CTimer timer;
-    timer.Start();
-    const auto attempts = queue.drain([&timer]() { return double(timer.GetElapsed_sec()) * 1000.0; }, [this](std::uint16_t id) {
-        auto* object = objects().object(id, true);
-        if (!object || object->m_bOnline || object->ID_Parent != 0xffff) return;
-        if (!graph().level().object(id, true)) return;
-        if (!ai().game_graph().valid_vertex_id(object->m_tGraphID)) return;
-        if (ai().game_graph().vertex(object->m_tGraphID)->level_id() != graph().level().level_id()) return;
-        // Re-run synchronization, virtual eligibility and group policy against
-        // current state. Reconciliation remains active for raw script writes.
-        switch_object(object);
-    }, 3.0, 32);
-    if (m_alife_metrics && attempts)
-        Msg("[ALife activation] frame=%u attempts=%u pending=%u elapsed_ms=%.3f", Device.dwFrame, attempts, u32(queue.size()), timer.GetElapsed_sec() * 1000.0);
-    TracyPlot("ALife/pending activation", int64_t(queue.size()));
 }

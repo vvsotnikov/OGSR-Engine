@@ -1,7 +1,7 @@
 param(
     [ValidateRange(0,400)][int[]]$Counts = @(0,50,100,200,400),
-    [string]$InstallRoot = 'D:\Games\OGSR-Baseline',
-    [string]$ToolRoot = 'C:\Users\vladimir\Documents\Codex\tools\tracy',
+    [Parameter(Mandatory)][string]$InstallRoot,
+    [Parameter(Mandatory)][string]$ToolRoot,
     [switch]$CaptureTrace,
     [switch]$Cadence,
     [switch]$Combat,

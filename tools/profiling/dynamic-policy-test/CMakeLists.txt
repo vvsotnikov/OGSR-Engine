@@ -3,6 +3,7 @@ project(dynamic-policy-test LANGUAGES CXX)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../ogsr_engine/xrGame/alife_dynamic_object.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Baseline.inc"
     "${CMAKE_CURRENT_SOURCE_DIR}/Generate.py")
 execute_process(COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/Generate.py"
     "${CMAKE_CURRENT_BINARY_DIR}/methods.inc" COMMAND_ERROR_IS_FATAL ANY)

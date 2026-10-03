@@ -9,7 +9,6 @@
 #pragma once
 
 #include "xrServer_Objects_ALife.h"
-#include "alife_activation_queue.h"
 
 
 class CALifeObjectRegistry
@@ -25,7 +24,6 @@ private:
 
 public:
     static CSE_ALifeDynamicObject* get_object(IReader& file_stream);
-    ALifeActivationQueue activation_queue;
 
 public:
     CALifeObjectRegistry(LPCSTR section);

@@ -1,6 +1,6 @@
 param(
-    [string]$InstallRoot = 'D:/Games/OGSR-Baseline',
-    [string]$ToolRoot = 'C:/Users/vladimir/Documents/Codex/tools/tracy',
+    [Parameter(Mandatory)][string]$InstallRoot,
+    [Parameter(Mandatory)][string]$ToolRoot,
     [string]$SaveName = 'bar_center'
 )
 $ErrorActionPreference = 'Stop'

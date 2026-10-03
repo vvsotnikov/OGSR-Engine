@@ -1,26 +1,15 @@
-"""Compile production method bodies against deterministic lifecycle operations."""
+"""Compile current policy against a checked-in pre-refactor reference."""
 from pathlib import Path
-import subprocess
+import re
 import sys
-
-root = Path(__file__).resolve().parents[3]
-path = 'ogsr_engine/xrGame/alife_dynamic_object.cpp'
-old = subprocess.check_output(['git', '-C', str(root), 'show', '0924e934b:' + path], text=True)
-new = (root / path).read_text()
-
-def extract(source, name, replacement):
-    signature = 'CSE_ALifeDynamicObject::' + name + '('
-    start = source.rfind('\n', 0, source.index(signature)) + 1
-    opening = source.index('{', start)
-    depth, end = 1, opening + 1
-    while depth:
-        depth += (source[end] == '{') - (source[end] == '}')
-        end += 1
-    signature_line, body = source[start:end].split('\n', 1)
-    return signature_line.replace('CSE_ALifeDynamicObject::', replacement + '::') + '\n' + body
-
-result = '\n'.join(extract(old, n, 'Baseline') for n in ['try_switch_online', 'try_switch_offline'])
-result += '\n' + '\n'.join(extract(new, n, 'Candidate') for n in [
-    'maintain_offline_schedule', 'evaluate_online_switch', 'try_switch_online',
-    'evaluate_offline_switch', 'try_switch_offline'])
-Path(sys.argv[1]).write_text(result)
+here = Path(__file__).resolve().parent
+root = here.parents[2]
+source = (root / 'ogsr_engine/xrGame/alife_dynamic_object.cpp').read_text(encoding='utf-8')
+start = '\nvoid CSE_ALifeDynamicObject::maintain_offline_schedule()'
+end = '\nbool CSE_ALifeDynamicObject::redundant()'
+if source.count(start) != 1 or source.count(end) != 1:
+    raise ValueError('Production region boundaries changed; inspect fixture')
+candidate = start + source.split(start, 1)[1].split(end, 1)[0]
+candidate = re.sub(r'^(?:void|bool|CSE_ALifeDynamicObject::OnlineSwitchDecision) CSE_ALifeDynamicObject::.*$',
+    lambda m: m[0].replace('CSE_ALifeDynamicObject::', 'Candidate::'), candidate, flags=re.MULTILINE)
+Path(sys.argv[1]).write_text((here / 'Baseline.inc').read_text(encoding='utf-8') + candidate, encoding='utf-8')

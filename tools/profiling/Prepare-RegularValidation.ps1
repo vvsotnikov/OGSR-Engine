@@ -1,6 +1,6 @@
 param(
-    [string]$BaselineRoot = 'D:/Games/OGSR-Baseline',
-    [string]$InstallRoot = 'D:/Games/OGSR-Regular-Validation'
+    [Parameter(Mandatory)][string]$BaselineRoot,
+    [Parameter(Mandatory)][string]$InstallRoot
 )
 $ErrorActionPreference = 'Stop'
 if (Test-Path -LiteralPath $InstallRoot) { throw 'Use a new validation directory; existing data will not be overwritten' }

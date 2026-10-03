@@ -1,11 +1,11 @@
 param(
-    [string]$InstallRoot = 'D:/Games/OGSR-Regular-Validation',
-    [string]$ToolRoot = 'C:/Users/vladimir/Documents/Codex/tools/tracy',
+    [Parameter(Mandatory)][string]$InstallRoot,
+    [Parameter(Mandatory)][string]$ToolRoot,
     [ValidateRange(0,400)][int]$Count = 0,
     [ValidateRange(0,10)][int]$BudgetMs = 0,
     [switch]$CompactQueue,
     [switch]$SaveSnapshot,
-    [ValidateSet('bin_experiment','bin_policy','bin_activation','bin_activation_tracy','bin_reconcile','bin_dynamic_policy','bin_group')][string]$Package = 'bin_experiment',
+    [ValidateSet('bin_experiment','bin_policy','bin_activation','bin_activation_tracy','bin_reconcile','bin_dynamic_policy','bin_group','bin_core')][string]$Package = 'bin_experiment',
     [switch]$ReconcileMetrics,
     [switch]$Transitions,
     [switch]$ActivationQueue,
@@ -19,6 +19,7 @@ param(
     [string]$SaveName = 'bar_center'
 )
 $ErrorActionPreference = 'Stop'
+if ($Package -eq 'bin_core' -and ($CompactQueue -or $ActivationQueue -or $SavePending)) { throw 'Core package excludes scheduler compaction and deferred activation; use their separate experiment builds' }
 . "$PSScriptRoot/ValidationLog.ps1"
 $engine = Join-Path $InstallRoot "$Package/xrEngine.exe"
 if (!(Test-Path $engine) -or !(Test-Path "$InstallRoot/$Package/build.json")) { throw "Missing package or manifest: $engine" }

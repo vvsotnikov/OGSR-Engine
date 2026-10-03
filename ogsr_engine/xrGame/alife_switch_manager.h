@@ -23,8 +23,6 @@ protected:
     float m_offline_distance;
     bool m_whole_map_online;
     bool m_alife_metrics;
-    bool m_activation_queue_enabled = false;
-    bool m_collect_activations = false;
     bool m_reconcile_metrics = false;
     bool m_reconcile_sample = false;
     u32 m_reconcile_passes = 0;
@@ -55,8 +53,6 @@ public:
     IC CALifeSwitchManager(xrServer* server, LPCSTR section);
     virtual ~CALifeSwitchManager();
     void switch_object(CSE_ALifeDynamicObject* object);
-    void begin_activation_collection();
-    void finish_activation_collection();
     void begin_reconciliation();
     void finish_reconciliation(double elapsed_ms);
     IC bool uses_distance_switching() const;
