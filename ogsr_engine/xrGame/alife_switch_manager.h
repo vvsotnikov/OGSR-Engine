@@ -17,6 +17,17 @@ protected:
     typedef ALife::OBJECT_VECTOR OBJECT_VECTOR;
 
 protected:
+    bool m_alife_metrics;
+    bool m_alife_diagnostics;
+    bool m_reconcile_metrics = false;
+    bool m_reconcile_sample = false;
+    u32 m_reconcile_passes = 0;
+    u32 m_reconcile_samples = 0;
+    u32 m_reconcile_objects = 0;
+    double m_reconcile_stage_ms[4] = {};
+    u64 m_online_spawns = 0;
+    u64 m_offline_removals = 0;
+
     float m_switch_distance;
     float m_switch_factor;
     float m_online_distance;
@@ -27,6 +38,11 @@ private:
 
 protected:
     bool synchronize_location(CSE_ALifeDynamicObject* object);
+    void begin_reconciliation();
+    void finish_reconciliation(double elapsed_ms);
+    bool maintain_before_switch(CSE_ALifeDynamicObject* object);
+    void evaluate_switch(CSE_ALifeDynamicObject* object);
+    void maintain_after_switch(CSE_ALifeDynamicObject* object);
 
 public:
     void try_switch_online(CSE_ALifeDynamicObject* object);
