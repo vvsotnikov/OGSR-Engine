@@ -36,6 +36,11 @@ IC float CALifeSwitchManager::switch_distance() const { return (m_switch_distanc
 
 IC void CALifeSwitchManager::set_switch_distance(float switch_distance)
 {
+    if (m_whole_map_online && !m_distance_override_reported)
+    {
+        Msg("* ALife whole-map policy: new switch_distance is stored but does not control switching");
+        m_distance_override_reported = true;
+    }
     m_switch_distance = switch_distance;
     m_online_distance = m_switch_distance * (1.f - m_switch_factor);
     m_offline_distance = m_switch_distance * (1.f + m_switch_factor);

@@ -29,7 +29,8 @@ protected:
     float m_switch_factor;
     float m_online_distance;
     float m_offline_distance;
-    bool m_whole_map_online;
+    bool m_whole_map_online = false;
+    bool m_distance_override_reported = false;
 
 private:
     OBJECT_VECTOR m_saved_chidren;

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.19)
-project(alife-policy-tests LANGUAGES CXX)
+project(alife-policy-tests LANGUAGES C CXX)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 enable_testing()
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
@@ -24,3 +24,14 @@ target_compile_features(dynamic-policy-debug PRIVATE cxx_std_17)
 target_compile_definitions(dynamic-policy-debug PRIVATE DEBUG)
 target_include_directories(dynamic-policy-debug PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 add_test(NAME dynamic-policy-debug COMMAND dynamic-policy-debug)
+
+find_program(POWERSHELL NAMES pwsh powershell REQUIRED)
+add_test(NAME policy-log-errors COMMAND "${POWERSHELL}" -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/runtime/Test-ValidationLog.ps1")
+
+add_executable(policy-lua-runner "${CMAKE_CURRENT_SOURCE_DIR}/../../../ogsr_engine/LuaJIT/src/host/minilua.c")
+if(NOT WIN32)
+    target_link_libraries(policy-lua-runner PRIVATE m)
+endif()
+add_test(NAME policy-lua-harness COMMAND policy-lua-runner "${CMAKE_CURRENT_SOURCE_DIR}/runtime/Test-PolicyHarness.lua" "${CMAKE_CURRENT_SOURCE_DIR}/runtime")
+
+add_test(NAME policy-evidence-reader COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/runtime/Test-Regular.py")

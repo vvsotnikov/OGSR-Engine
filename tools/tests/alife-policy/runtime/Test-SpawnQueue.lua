@@ -1,4 +1,4 @@
--- Runs inside the private Lua driver, with no game objects or wall-clock dependency.
+-- Standalone regression fixture; no game objects or wall-clock dependency.
 return function(make_queue)
     local time, seen = 0, {}
     local queue = make_queue({1,2,3,4,5}, function(job)

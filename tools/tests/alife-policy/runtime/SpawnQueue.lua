@@ -1,4 +1,4 @@
--- Explicit asynchronous creation prototype. Existing alife():create remains synchronous.
+-- Synchronous creation batches spread across driver callbacks.
 -- The caller owns the queue and must finish/cancel it before saving or changing maps.
 return function(jobs, create, now, budget_ms, max_per_step)
     assert(budget_ms >= 0 and max_per_step >= 1)

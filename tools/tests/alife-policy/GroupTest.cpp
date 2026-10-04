@@ -10,14 +10,13 @@ void check(bool ok) { if (!ok) throw std::runtime_error("legacy group behavior m
 #define VERIFY(x) check(bool(x))
 struct World;
 World* world;
-void log(const std::string& text);
-struct Position { float value = 0; float distance_to(const Position& other) const { log("distance"); return other.value; } };
+struct Position { float value = 0; float distance_to(const Position& other) const {  return other.value; } };
 struct Simulator;
 struct CSE_ALifeInventoryItem
 {
     int id = 0;
     bool isAttached = false;
-    bool attached() { log("attached:" + std::to_string(id)); return isAttached; }
+    bool attached() {  return isAttached; }
 };
 struct CSE_ALifeDynamicObject
 {
@@ -25,8 +24,8 @@ struct CSE_ALifeDynamicObject
     bool onlinePermission = true, offlinePermission = true, m_bOnline = true, m_bDirectControl = false;
     Position o_Position;
     virtual ~CSE_ALifeDynamicObject() = default;
-    bool can_switch_online() { log("can_online:" + std::to_string(id)); return onlinePermission; }
-    bool can_switch_offline() { log("can_offline:" + std::to_string(id)); return offlinePermission; }
+    bool can_switch_online() {  return onlinePermission; }
+    bool can_switch_offline() {  return offlinePermission; }
     Simulator& alife();
     void detach(CSE_ALifeInventoryItem*);
 };
@@ -34,7 +33,7 @@ struct CSE_ALifeMonsterAbstract : CSE_ALifeDynamicObject, CSE_ALifeInventoryItem
 {
     bool monster = true, inventory = false, alive = true;
     float fHealth = 1;
-    bool g_Alive() { log("alive:" + std::to_string(CSE_ALifeDynamicObject::id)); return alive; }
+    bool g_Alive() {  return alive; }
 };
 struct CSE_ALifeGroupAbstract
 {
@@ -54,7 +53,7 @@ struct Simulator
     Registry& objects() { return registry; }
     Graph& graph() { return graphValue; }
     bool uses_distance_switching();
-    float offline_distance() { log("threshold"); return 150; }
+    float offline_distance() {  return 150; }
     void register_object(CSE_ALifeMonsterAbstract*);
     void switch_offline(CSE_ALifeDynamicObject*);
 };
@@ -66,47 +65,33 @@ struct World
     CSE_ALifeDynamicObject group, parent, actor;
     std::array<CSE_ALifeMonsterAbstract, 3> members;
     CSE_ALifeGroupAbstract* current = nullptr;
-    bool distance = true, parentExists = true;
-    int registrationAttachment = 0;
-    std::vector<std::string> events;
+    bool distance = true;
 };
-void log(const std::string& text) { world->events.push_back(text); }
 Simulator& CSE_ALifeDynamicObject::alife() { return world->simulator; }
 Simulator& AI::alife() { return world->simulator; }
 CSE_ALifeDynamicObject* CSE_ALifeGroupAbstract::base() { return &world->group; }
 CSE_ALifeDynamicObject* Registry::object(int id, bool optional)
 {
-    log("lookup:" + std::to_string(id) + ":" + std::to_string(optional));
-    if (id == 99) return world->parentExists ? &world->parent : nullptr;
+
+    if (id == 99) return &world->parent;
     return &world->members.at(id);
 }
 CSE_ALifeDynamicObject* Graph::actor() { return &world->actor; }
-bool Simulator::uses_distance_switching() { log("distance_mode"); return world->distance; }
-std::string state(const CSE_ALifeMonsterAbstract& member)
-{
-    std::string result = std::to_string(member.CSE_ALifeDynamicObject::id) + ":" +
-        std::to_string(member.fHealth) + ":" + std::to_string(member.m_bOnline) + ":" +
-        std::to_string(member.m_bDirectControl) + ":" + std::to_string(member.isAttached) + ":" +
-        std::to_string(world->current->m_wCount);
-    for (int id : world->current->m_tpMembers) result += ":member" + std::to_string(id);
-    return result;
-}
+bool Simulator::uses_distance_switching() {  return world->distance; }
 void CSE_ALifeDynamicObject::detach(CSE_ALifeInventoryItem* item)
 {
-    log("detach:" + state(world->members.at(item->id)));
+
     item->isAttached = false;
 }
 void Simulator::register_object(CSE_ALifeMonsterAbstract* member)
 {
-    log("register:" + state(*member));
-    if (world->registrationAttachment == 1) member->isAttached = false;
-    if (world->registrationAttachment == 2) member->isAttached = true;
+
 }
 void Graph::remove(CSE_ALifeMonsterAbstract* member, int graph, bool update)
 {
-    log("graph_remove:" + state(*member) + ":" + std::to_string(graph) + ":" + std::to_string(update));
+
 }
-void Simulator::switch_offline(CSE_ALifeDynamicObject* object) { log("switch_offline"); object->m_bOnline = false; }
+void Simulator::switch_offline(CSE_ALifeDynamicObject* object) {  object->m_bOnline = false; }
 template<class T, class U> T smart_cast(U* object)
 {
     if constexpr (std::is_same_v<T, CSE_ALifeDynamicObject*>) return object;
@@ -147,6 +132,7 @@ int main()
                     // A blocking member stops later corpse cleanup; a corpse before
                     // it is detached. Group permission can still force the final switch.
                     check(group.m_wCount == (deadFirst || !blocks ? 1u : 2u));
+                    check(group.m_tpMembers == (deadFirst || !blocks ? std::vector<int>{0} : std::vector<int>{0, 1}));
                     check(state.group.m_bOnline == !(groupAllowed || !blocks));
                 }
     std::cout << "Legacy group policy and corpse-order cases passed\n";

@@ -14,7 +14,7 @@ foreach ($archive in Get-ChildItem $BaselineRoot -File -Filter 'gamedata.db*') {
     New-Item -ItemType HardLink -Path (Join-Path $InstallRoot $archive.Name) -Target $archive.FullName | Out-Null
 }
 Copy-Item "$BaselineRoot/gamedata" -Destination $InstallRoot -Recurse
-Copy-Item "$BaselineRoot/fsgame-profiler.ltx" "$InstallRoot/fsgame-profiler.ltx"
+Copy-Item "$BaselineRoot/fsgame.ltx" "$InstallRoot/fsgame.ltx"
 New-Item -ItemType Directory "$InstallRoot/seeds" | Out-Null
 Copy-Item "$BaselineRoot/seeds/bar-2026-10-03" "$InstallRoot/seeds" -Recurse
 Copy-Item $sourcePackage "$InstallRoot/$Package" -Recurse

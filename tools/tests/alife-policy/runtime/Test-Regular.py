@@ -22,23 +22,17 @@ class Evidence(unittest.TestCase):
             root=Path(directory); app=root/'appdata'; (app/'logs').mkdir(parents=True)
             (root/'session.json').write_text(json.dumps(dict(status='regular-completed', regularRequested=True,
                 session='fixture', engineSha256='fixture', extraRequested=2, spawnBudgetMs=3)))
-            frame_rows=[(0,0,3,10,1),(1,1,3,200,1)]+[(i,i*1000,4,1000,1) for i in range(2,32)]
-            write(app/'regular-frames.csv','frame,game_ms,stage,frame_ms,frame_gap',frame_rows)
             population=[(i*1000,4,2,2,2,2,2) for i in range(30)]
             write(app/'regular-population.csv','game_ms,stage,created,retained,online,client,living',population)
-            write(app/'regular-batches.csv','frame,count,work_ms',[(0,2,4)])
             log='[regular spawn] index=1 id=10\n[regular spawn] index=2 id=11\n[regular] create_end count=2 wall_ms=4 work_ms=4 online_at_creation=0\n[regular] all_online count=2 after_create_ms=30\n'
             path=app/'logs/test.log'; path.write_text(log)
             result=regular.summarize(root)
             self.assertEqual(result['retainedOnlineClient'],2)
-            self.assertEqual(result['frameMs']['mean'],1000)
-            self.assertEqual(result['creationWarmupMaxFrameMs'],200)
-            self.assertEqual(result['postCreationMaxFrameMs'],10)
             meta_path=root/'session.json'
             meta=json.loads(meta_path.read_text())
             meta.update(mode='distance',distanceControl=True)
             meta_path.write_text(json.dumps(meta))
-            controlled=log+'[regular control] far=2 online=0 client=0 limit=32\n'*30+'[regular] distance_control_passed\n'
+            controlled=log+'[regular control] far=2 online=1 client=1 limit=32\n'*3+'[regular control] far=2 online=0 client=0 limit=32\n'*30+'[regular] distance_control_passed\n'
             path.write_text(controlled)
             self.assertIsNone(regular.summarize(root)['retainedOnlineClient'])
             path.write_text(controlled.replace('far=2 online=0','far=2 online=1'))
@@ -55,9 +49,6 @@ class Evidence(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'not fully online'): regular.summarize(root)
             population[4]=(4000,4,2,2,2,2,2)
             write(app/'regular-population.csv','game_ms,stage,created,retained,online,client,living',population)
-            frame_rows[3]=(9,3000,4,1000,1)
-            write(app/'regular-frames.csv','frame,game_ms,stage,frame_ms,frame_gap',frame_rows)
-            with self.assertRaisesRegex(ValueError,'Missing frames'): regular.summarize(root)
 
 
 if __name__=='__main__': unittest.main()

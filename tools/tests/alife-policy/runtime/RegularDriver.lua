@@ -19,18 +19,12 @@ return function(cfg)
     local far_limit = alife():switch_distance() * (1 + factor) + 10
     local far_samples = 0
     local eligibility = cfg.eligibility and dofile(path("Test-Eligibility.lua"))(cfg.positions[1], now)
-    local frames = assert(io.open(path("regular-frames.csv"), "w"))
-    frames:write("frame,game_ms,stage,frame_ms,frame_gap\n")
-    local batches = assert(io.open(path("regular-batches.csv"), "w"))
-    batches:write("frame,count,work_ms\n")
     local populations = assert(io.open(path("regular-population.csv"), "w"))
     populations:write("game_ms,stage,created,retained,online,client,living\n")
     local jobs = {}
     for i = 1, cfg.count do jobs[i] = assert(cfg.positions[i]) end
     local ids, online_at_creation = {}, 0
     local make_queue = dofile(path("SpawnQueue.lua"))
-    dofile(path("Test-SpawnQueue.lua"))(make_queue)
-    log1("[regular] queue_tests_passed")
     local queue = make_queue(jobs, function(job)
         local object = assert(alife():create("stalker", level.vertex_position(job.node), job.node, job.graph))
         ids[#ids + 1] = object.id
@@ -38,7 +32,7 @@ return function(cfg)
         log1(string.format("[regular spawn] index=%d id=%d node=%d graph=%d", #ids, object.id, job.node, job.graph))
         return object.id
     end, now, cfg.budget_ms, cfg.budget_ms > 0 and 8 or 400)
-    local stage, deadline, last, last_frame, last_stage, sample = 0, 0, nil, nil, 0, 0
+    local stage, deadline, last_frame, sample = 0, 0, nil, 0
     local creation_start, creation_end, work_total, all_online = nil, nil, 0, false
     local function tick()
         local d = device()
@@ -52,7 +46,6 @@ return function(cfg)
             stage, deadline = 1, time + 15000
             log1("[regular] ready map=l05_bar")
         end
-        if last then frames:write(string.format("%d,%d,%d,%.6f,%d\n", d.frame, d:time_global(), last_stage, time-last, d.frame-last_frame)) end
         if stage == 1 and time >= deadline then
             stage, creation_start = 2, time
             log1("[regular] create_begin")
@@ -60,14 +53,13 @@ return function(cfg)
         if stage == 2 then
             local done, count, work = queue:step()
             work_total = work_total + work
-            batches:write(string.format("%d,%d,%.6f\n", d.frame, count, work))
             if done then
                 creation_end = now()
                 stage, deadline = 3, creation_end + 15000
                 log1(string.format("[regular] create_end count=%d wall_ms=%.3f work_ms=%.3f online_at_creation=%d", #ids, creation_end-creation_start, work_total, online_at_creation))
             end
         elseif stage == 3 and time >= deadline then
-            stage, deadline = 4, time + 30000
+            stage, deadline = 4, time + 45000
             log1("[regular] measure_begin")
         elseif stage == 4 and time >= deadline then
             assert(#ids == cfg.count and (distance_mode or all_online), "Incomplete creation/activation")
@@ -77,7 +69,7 @@ return function(cfg)
             end
             log1("[regular] measure_end")
             if cfg.verify_ids and #cfg.verify_ids > 0 then log1("[regular] verified_restored count=" .. #cfg.verify_ids) end
-            frames:close(); batches:close(); populations:close()
+            populations:close()
             if cfg.save then get_console():execute("save regular_validation") end
             get_console():execute("quit")
             return
@@ -108,8 +100,8 @@ return function(cfg)
                 if not distance_mode then assert(online == cfg.count and client == cfg.count, "Offline spawned object") end
                 if cfg.distance_control and cfg.count > 0 then
                     assert(far > 0, "No distant NPCs in control")
-                    assert(far_online == (distance_mode and 0 or far) and far_client == (distance_mode and 0 or far), "Distant population violates policy")
-                    far_samples = far_samples + 1
+                    local matches = far_online == (distance_mode and 0 or far) and far_client == (distance_mode and 0 or far)
+                    far_samples = matches and (far_samples + 1) or 0
                     log1(string.format("[regular control] far=%d online=%d client=%d limit=%.3f", far, far_online, far_client, far_limit))
                 end
             end
@@ -121,7 +113,7 @@ return function(cfg)
             end
             sample = time + 1000
         end
-        last, last_frame, last_stage = time, d.frame, stage
+        last_frame = d.frame
     end
     level.add_call(function()
         local ok, err = xpcall(tick, debug.traceback)

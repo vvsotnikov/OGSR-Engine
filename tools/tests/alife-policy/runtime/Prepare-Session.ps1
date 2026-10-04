@@ -10,7 +10,7 @@ $InstallRoot = (Resolve-Path $InstallRoot).Path
 $repo = (Resolve-Path "$PSScriptRoot/../../../..").Path
 $engine = Join-Path $InstallRoot "$Package/xrEngine.exe"
 $seed = Join-Path $InstallRoot $SeedAppData
-foreach ($required in @($engine, "$seed/savedgames/$SaveName.sav", "$InstallRoot/fsgame-profiler.ltx")) {
+foreach ($required in @($engine, "$seed/savedgames/$SaveName.sav", "$InstallRoot/fsgame.ltx")) {
     if (!(Test-Path -LiteralPath $required)) { throw "Missing: $required" }
 }
 if (Get-Process xrEngine -ErrorAction SilentlyContinue) {
@@ -26,8 +26,10 @@ Copy-Item -Path "$seed/user*.ltx" -Destination $appdata.FullName
 Add-Content -LiteralPath "$($appdata.FullName)/user_ogsr.ltx" -Value "`nkeypress_on_start off" -Encoding ascii
 Get-ChildItem -LiteralPath "$seed/savedgames" -File | Where-Object { $_.BaseName -eq $SaveName } |
     Copy-Item -Destination "$($appdata.FullName)/savedgames"
-$fs = @(Get-Content -LiteralPath "$InstallRoot/fsgame-profiler.ltx")
-$fs[0] = '$app_data_root$ = true| false| $fs_root$| captures\' + $id + '\appdata\'
+$fs = @(Get-Content -LiteralPath "$InstallRoot/fsgame.ltx")
+$appRootLines = @(0..($fs.Count - 1) | Where-Object { $fs[$_] -match '^\s*\$app_data_root\$\s*=' })
+if ($appRootLines.Count -ne 1) { throw 'Expected one app_data_root entry in fsgame.ltx' }
+$fs[$appRootLines[0]] = '$app_data_root$ = true| false| $fs_root$| captures\' + $id + '\appdata\'
 $fsPath = "$($session.FullName)/fsgame.ltx"
 $fs | Set-Content -LiteralPath $fsPath -Encoding ascii
 # X-Ray's legacy -fsltx parser does not support quoting or spaces. Use a

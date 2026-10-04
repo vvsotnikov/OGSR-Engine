@@ -1,16 +1,18 @@
 -- Prove the loaded level's policy with a live NPC beyond both distance gates.
 return function(now, mode)
     alife():set_switch_distance(20)
-    local limit = 20 * (1 + system_ini():r_float("alife", "switch_factor")) + 30
+    local limit = 20 * (1 + system_ini():r_float("alife", "switch_factor"))
+    local best_distance = limit + 80
     local graph = game_graph()
     local current_level = graph:vertex(db.actor:game_vertex_id()):level_id()
     local selected, node = nil, nil
     for candidate = 0, level.vertex_count() - 1 do
-        if level.is_accessible_vertex_id(candidate) and level.vertex_position(candidate):distance_to(db.actor:position()) > limit then
+        local distance = level.vertex_position(candidate):distance_to(db.actor:position())
+        if level.is_accessible_vertex_id(candidate) and distance > best_distance then
             local id = cross_table():vertex(candidate):game_vertex_id()
             if graph:valid_vertex_id(id) and graph:vertex(id):level_id() == current_level then
                 selected, node = id, candidate
-                break
+                best_distance = distance
             end
         end
     end
@@ -22,7 +24,7 @@ return function(now, mode)
     return function()
         local object = assert(alife():object(id), "Policy probe disappeared")
         local distance = object.position:distance_to(db.actor:position())
-        assert(distance > limit, "Probe moved inside distance gate")
+        assert(distance > limit, "Policy probe inconclusive: actor or NPC moved inside the actual distance gate")
         local expected = mode == "whole-map"
         if now() >= sample then
             log1(string.format("[policy probe state] mode=%s id=%d distance=%.3f online=%s client=%s", mode, id, distance, tostring(object.online), tostring(level.object_by_id(id) ~= nil)))
