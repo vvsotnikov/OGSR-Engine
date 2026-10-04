@@ -39,8 +39,10 @@ on [archive/alife-experiments-2026-10-04](https://github.com/vvsotnikov/OGSR-Eng
 `python Summarize-Reconciliation.py <xray.log> [--first-frame N --last-frame N]`
 reads the emitted log directly. Frame limits are inclusive and optional. It rejects
 old or malformed metric formats rather than silently treating missing data as zero.
-Build the engine's `ReleaseTracyProfiler|x64` configuration for trace captures; use
-`Release|x64` for measurements without tracing overhead.
+Build traces with `MSBuild Engine.sln /p:Configuration=Release /p:Platform=x64
+/p:CONFIGURATION_GA=ReleaseTracyProfiler` (one command). `CONFIGURATION_GA` enables
+the Tracy definitions; it is not a solution configuration. Omit that property for
+ordinary Release measurements without tracing overhead.
 
 Tracy builds include `ALife/client spawn` and `ALife/client spawn batch` zones
 to distinguish client construction from server reconciliation and ongoing AI work.
