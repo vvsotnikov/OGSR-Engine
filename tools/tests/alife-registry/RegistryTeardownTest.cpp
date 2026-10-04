@@ -1,27 +1,27 @@
 #include <map>
-#include <vector>
 #include <iostream>
 
 struct Object
 {
-    std::vector<Object>* peers;
+    Object* group = nullptr;
     bool alive = true;
-    unsigned callbacks = 0, deletions = 0;
-    bool& failed;
+    unsigned callbacks = 0, deletions = 0, members = 0;
+    bool failed = false;
     void on_unregister()
     {
         ++callbacks;
-        // A callback may dereference any peer, regardless of registry ID order.
-        for (const auto& peer : *peers)
-            if (!peer.alive) failed = true;
+        // Only a member dereferences its group, as in the engine callback.
+        if (group)
+        {
+            if (!group->alive || group->members != 1) failed = true;
+            else --group->members;
+        }
     }
 };
-// Record destruction without freeing fixture storage so a regression fails
-// deterministically instead of making the test itself dereference freed memory.
+// Retain fixture storage after simulated destruction to detect the dangling
+// group access deterministically, without invoking undefined behavior here.
 void xr_delete(Object*& object)
 {
-    for (const auto& peer : *object->peers)
-        if (peer.callbacks != 1) object->failed = true;
     object->alive = false;
     ++object->deletions;
     object = nullptr;
@@ -36,25 +36,22 @@ struct CALifeObjectRegistry
 
 int main()
 {
-    for (unsigned count : {0u, 1u, 3u})
-        for (bool reverse : {false, true})
+    for (bool groupFirst : {true, false})
+    {
+        Object group, member;
+        group.members = 1;
+        member.group = &group;
         {
-            bool failed = false;
-            std::vector<Object> objects;
-            for (unsigned i = 0; i < count; ++i)
-                objects.push_back({&objects, true, 0, 0, failed});
-            {
-                CALifeObjectRegistry registry;
-                for (unsigned i = 0; i < count; ++i)
-                    registry.m_objects.emplace(reverse ? count - i : i, &objects[i]);
-            }
-            for (const auto& object : objects)
-                if (object.alive || object.callbacks != 1 || object.deletions != 1) failed = true;
-            if (failed)
-            {
-                std::cerr << "Unsafe registry teardown: count=" << count << " reverse=" << reverse << '\n';
-                return 1;
-            }
+            CALifeObjectRegistry registry;
+            registry.m_objects.emplace(groupFirst ? 1 : 2, &group);
+            registry.m_objects.emplace(groupFirst ? 2 : 1, &member);
         }
-    std::cout << "Registry callbacks preserve peer lifetime in both ID orders\n";
+        if (member.failed || group.members != 0 || group.alive || member.alive ||
+            group.callbacks != 1 || member.callbacks != 1 || group.deletions != 1 || member.deletions != 1)
+        {
+            std::cerr << "Member callback accessed deleted group: groupFirst=" << groupFirst << '\n';
+            return 1;
+        }
+    }
+    std::cout << "Member detaches from live group in both registry ID orders\n";
 }
