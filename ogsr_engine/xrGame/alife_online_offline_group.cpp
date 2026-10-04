@@ -162,7 +162,7 @@ void CSE_ALifeOnlineOfflineGroup::try_switch_online()
         VERIFY3((*I).second->can_switch_offline(), "Incorrect situation : some of the OnlineOffline group members cannot be switched online due to their personal properties",
                 (*I).second->name_replace());
 
-        if (alife().graph().actor()->o_Position.distance_to((*I).second->o_Position) > alife().offline_distance())
+        if (alife().uses_distance_switching() && alife().graph().actor()->o_Position.distance_to((*I).second->o_Position) > alife().offline_distance())
             continue;
 
         //.
@@ -197,7 +197,7 @@ void CSE_ALifeOnlineOfflineGroup::try_switch_offline()
         VERIFY3((*I).second->can_switch_online(), "Incorrect situation : some of the OnlineOffline group members cannot be switched online due to their personal properties",
                 (*I).second->name_replace());
 
-        if (alife().graph().actor()->o_Position.distance_to((*I).second->o_Position) <= alife().offline_distance())
+        if (!alife().uses_distance_switching() || alife().graph().actor()->o_Position.distance_to((*I).second->o_Position) <= alife().offline_distance())
             return;
     }
 
