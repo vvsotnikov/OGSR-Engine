@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <OgsrThirdPartyConfiguration>$(Configuration)</OgsrThirdPartyConfiguration>
+    <OgsrThirdPartyConfiguration Condition="'$(Configuration)'=='ReleaseTracyProfiler'">Release</OgsrThirdPartyConfiguration>
+    <OgsrEngineLibraryDir>$(SolutionDir)\ogsr_engine\_LIB\Engine\$(Configuration)\$(Platform)\</OgsrEngineLibraryDir>
+    <OgsrEngineIntermediateDir>$(SolutionDir)\ogsr_engine\_TEMP\Engine\$(Configuration)\$(Platform)\$(ProjectName)\</OgsrEngineIntermediateDir>
+    <OgsrEngineBinaryDir>$(SolutionDir)\bin_$(PlatformShortName)\</OgsrEngineBinaryDir>
+    <OgsrEngineBinaryDir Condition="'$(Configuration)'=='ReleaseTracyProfiler'">$(SolutionDir)\bin_$(PlatformShortName)_tracy\</OgsrEngineBinaryDir>
+    <OgsrEngineBinaryDir Condition="'$(Configuration)'=='Debug'">$(SolutionDir)\bin_$(PlatformShortName)_debug\</OgsrEngineBinaryDir>
+  </PropertyGroup>
+  <Target Name="RejectLegacyBuildSwitch" BeforeTargets="PrepareForBuild;PrepareForNMakeBuild">
+    <Error Condition="'$(CONFIGURATION_GA)'!=''" Text="CONFIGURATION_GA is no longer a build switch. Unset it and select Configuration=Release, ReleaseTracyProfiler, or Debug." />
+  </Target>
+</Project>

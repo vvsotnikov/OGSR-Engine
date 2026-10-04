@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <LuaJITSource Include="$(ProjectDir)**\*.c;$(ProjectDir)**\*.h;$(ProjectDir)**\*.lua;$(ProjectDir)**\*.dasc;$(ProjectDir)msvcbuild.bat"
+      Exclude="$(ProjectDir)host\buildvm_arch.h;$(ProjectDir)lj_bcdef.h;$(ProjectDir)lj_ffdef.h;$(ProjectDir)lj_libdef.h;$(ProjectDir)lj_recdef.h;$(ProjectDir)lj_folddef.h;$(ProjectDir)jit\vmdef.lua" />
+    <LuaJITDynasm Include="$(ProjectDir)..\dynasm\*.lua;$(ProjectDir)..\dynasm\*.h" />
+  </ItemGroup>
+  <Target Name="CollectLuaJITInputs" DependsOnTargets="PrepareForNMakeBuild">
+    <WriteLinesToFile File="$(IntDir)luajit-inputs.txt"
+      Lines="@(LuaJITSource);@(LuaJITDynasm);$(VCToolsInstallDir);$(WindowsSdkDir);$(WindowsTargetPlatformVersion);$(UniversalCRTSdkDir);$(UCRTVersion);$(Configuration);$(Platform)"
+      Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
+  <!-- The batch compiler generates files in its working directory. Never run it
+       in the checked-out sources or reuse another configuration's library. -->
+  <Target Name="CompileLuaJIT" DependsOnTargets="CollectLuaJITInputs"
+    Inputs="$(IntDir)luajit-inputs.txt;@(LuaJITSource);@(LuaJITDynasm);$(MSBuildProjectFullPath);$(MSBuildThisFileFullPath)"
+    Outputs="$(NMakeOutput)">
+    <RemoveDir Directories="$(LuaJITStage)" />
+    <MakeDir Directories="$(LuaJITStage)src;$(LuaJITStage)dynasm;$(OgsrEngineLibraryDir)" />
+    <Copy SourceFiles="@(LuaJITSource)" DestinationFiles="@(LuaJITSource->'$(LuaJITStage)src\%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Copy SourceFiles="@(LuaJITDynasm)" DestinationFolder="$(LuaJITStage)dynasm" />
+    <Exec WorkingDirectory="$(LuaJITStage)src" Command="call msvcbuild.bat $(PlatformShortName) static $(Configuration)" />
+    <Copy SourceFiles="$(LuaJITStage)bin\$(PlatformShortName)\LuaJIT.lib" DestinationFiles="$(NMakeOutput)" />
+  </Target>
+  <!-- Keep the Makefile project's reference resolution, target-path reporting,
+       and Clean pipeline. Rebuild runs _SetRebuildReferences before this hook. -->
+  <PropertyGroup>
+    <PreNMakeBuildTarget>$(PreNMakeBuildTarget);CompileLuaJIT</PreNMakeBuildTarget>
+    <NMakeBuildCommandLine>rem LuaJIT is compiled by CompileLuaJIT.</NMakeBuildCommandLine>
+    <NMakeReBuildCommandLine>rem LuaJIT is rebuilt by CompileLuaJIT.</NMakeReBuildCommandLine>
+    <NMakeCleanCommandLine>rem LuaJIT outputs are removed by CleanLuaJIT.</NMakeCleanCommandLine>
+  </PropertyGroup>
+  <Target Name="CleanLuaJIT" BeforeTargets="CoreClean;_SetRebuildReferences">
+    <Delete Files="$(NMakeOutput);$(IntDir)luajit-inputs.txt" />
+    <RemoveDir Directories="$(LuaJITStage)" />
+  </Target>
+</Project>

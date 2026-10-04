@@ -576,7 +576,7 @@
     <None Include="Effects description.txt" />
     <None Include="features.txt" />
     <None Include="TODO.txt" />
-    <None Include="generate_build_info.bat">
+    <None Include="BuildInfo.targets">
       <Filter>General\Resources</Filter>
     </None>
   </ItemGroup>

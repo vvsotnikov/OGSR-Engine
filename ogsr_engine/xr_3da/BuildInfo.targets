@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <ExtensionsToDeleteOnClean>$(ExtensionsToDeleteOnClean);$(IntDir)ogsr_variant_build_info.hpp;$(IntDir)build-version.txt</ExtensionsToDeleteOnClean>
+  </PropertyGroup>
+  <!-- Collect after project references have built, including a cold build. -->
+  <Target Name="CollectBuildInfoInputs">
+    <MakeDir Directories="$(IntDir)" />
+    <WriteLinesToFile File="$(IntDir)build-version.txt"
+      Lines="$(Configuration);$(APPVEYOR_BUILD_VERSION);$(APPVEYOR_REPO_NAME)"
+      Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <BuildInfoInput Include="@(ClCompile);@(ClInclude);@(ResourceCompile);$(OgsrEngineLibraryDir)*.lib;$(SolutionDir)3rd_party\_LIB\$(OgsrThirdPartyConfiguration)\$(Platform)\*.lib;$(MSBuildProjectFullPath);$(MSBuildThisFileFullPath);$(IntDir)build-version.txt"
+        Exclude="$(OgsrEngineLibraryDir)$(TargetName).lib" />
+    </ItemGroup>
+  </Target>
+  <Target Name="GenerateBuildInfo" BeforeTargets="ResourceCompile"
+    DependsOnTargets="CollectBuildInfoInputs" Inputs="@(BuildInfoInput)"
+    Outputs="$(IntDir)ogsr_variant_build_info.hpp">
+    <ItemGroup>
+      <BuildInfoLine Include="#define BUILD_DATE &quot;$([System.DateTime]::Now.ToString('dd.MM.yyyy'))&quot;" />
+      <BuildInfoLine Include="#define BUILD_TIME &quot;$([System.DateTime]::Now.ToString('HH:mm:ss'))&quot;" />
+      <BuildInfoLine Include="#define BUILD_YEAR &quot;$([System.DateTime]::Now.ToString('yyyy'))&quot;" />
+      <BuildInfoLine Include="#define CONFIGURATION_GA &quot;$(Configuration)&quot;" />
+      <BuildInfoLine Include="#define APPVEYOR_BUILD_VERSION &quot;$(APPVEYOR_BUILD_VERSION)&quot;" Condition="'$(APPVEYOR_BUILD_VERSION)'!=''" />
+      <BuildInfoLine Include="#define APPVEYOR_REPO_NAME &quot;$(APPVEYOR_REPO_NAME)&quot;" Condition="'$(APPVEYOR_BUILD_VERSION)'!=''" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(IntDir)ogsr_variant_build_info.hpp" Lines="@(BuildInfoLine)" Overwrite="true" />
+  </Target>
+</Project>
