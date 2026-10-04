@@ -24,7 +24,7 @@
     </ClCompile>
     <Link>
       <ImportLibrary>$(OgsrEngineLibraryDir)$(TargetName).lib</ImportLibrary>
-      <AdditionalLibraryDirectories>$(SolutionDir)\3rd_party\Src\NVIDIA_DLSS\DLSS\lib\Windows_x86_64\x64;$(SolutionDir)\3rd_party\_LIB\$(Configuration)\$(Platform);$(OgsrEngineLibraryDir);$(SolutionDir)\3rd_party\Src\OpenAL_Soft\libs\$(PlatformShortName);$(SolutionDir)\3rd_party\_LIB\Release\$(Platform);</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(SolutionDir)\3rd_party\Src\NVIDIA_DLSS\DLSS\lib\Windows_x86_64\x64;$(SolutionDir)\3rd_party\_LIB\$(OgsrThirdPartyConfiguration)\$(Platform);$(OgsrEngineLibraryDir);$(SolutionDir)\3rd_party\Src\OpenAL_Soft\libs\$(PlatformShortName);$(SolutionDir)\3rd_party\_LIB\Release\$(Platform);</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
 

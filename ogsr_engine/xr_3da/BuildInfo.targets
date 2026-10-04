@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <ExtensionsToDeleteOnClean>$(ExtensionsToDeleteOnClean);$(IntDir)ogsr_variant_build_info.hpp;$(IntDir)build-version.txt</ExtensionsToDeleteOnClean>
+  </PropertyGroup>
   <!-- Collect after project references have built, including a cold build. -->
   <Target Name="CollectBuildInfoInputs">
     <MakeDir Directories="$(IntDir)" />
@@ -7,7 +10,7 @@
       Lines="$(OgsrBuildVariant);$(APPVEYOR_BUILD_VERSION);$(APPVEYOR_REPO_NAME)"
       Overwrite="true" WriteOnlyWhenDifferent="true" />
     <ItemGroup>
-      <BuildInfoInput Include="@(ClCompile);@(ClInclude);@(ResourceCompile);$(OgsrEngineLibraryDir)*.lib;$(SolutionDir)3rd_party\_LIB\$(Configuration)\$(Platform)\*.lib;$(MSBuildProjectFullPath);$(MSBuildThisFileFullPath);$(IntDir)build-version.txt"
+      <BuildInfoInput Include="@(ClCompile);@(ClInclude);@(ResourceCompile);$(OgsrEngineLibraryDir)*.lib;$(SolutionDir)3rd_party\_LIB\$(OgsrThirdPartyConfiguration)\$(Platform)\*.lib;$(MSBuildProjectFullPath);$(MSBuildThisFileFullPath);$(IntDir)build-version.txt"
         Exclude="$(OgsrEngineLibraryDir)$(TargetName).lib" />
     </ItemGroup>
   </Target>

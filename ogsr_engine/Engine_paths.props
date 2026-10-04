@@ -3,6 +3,8 @@
   <PropertyGroup>
     <OgsrBuildVariant>$(Configuration)</OgsrBuildVariant>
     <OgsrBuildVariant Condition="'$(Configuration)'=='Release' and '$(CONFIGURATION_GA)'=='ReleaseTracyProfiler'">ReleaseTracyProfiler</OgsrBuildVariant>
+    <OgsrThirdPartyConfiguration>$(Configuration)</OgsrThirdPartyConfiguration>
+    <OgsrThirdPartyConfiguration Condition="'$(Configuration)'=='ReleaseTracyProfiler'">Release</OgsrThirdPartyConfiguration>
     <OgsrEngineLibraryDir>$(SolutionDir)\ogsr_engine\_LIB\Engine\$(OgsrBuildVariant)\$(Platform)\</OgsrEngineLibraryDir>
     <OgsrEngineIntermediateDir>$(SolutionDir)\ogsr_engine\_TEMP\Engine\$(OgsrBuildVariant)\$(Platform)\$(ProjectName)\</OgsrEngineIntermediateDir>
     <OgsrEngineBinaryDir>$(SolutionDir)\bin_$(PlatformShortName)\</OgsrEngineBinaryDir>

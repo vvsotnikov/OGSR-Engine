@@ -5,6 +5,8 @@ RD /s /q ogsr_engine\_TEMP
 RD /s /q ogsr_engine\LuaJIT\bin
 RD /s /q bin_x86\
 RD /s /q bin_x64\
+RD /s /q bin_x64_tracy\
+RD /s /q bin_x64_debug\
 for /d %%A in (.vs\Engine\*) do (
 	del %%A\*.VC.*
 	del %%A\*.bin*

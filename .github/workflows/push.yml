@@ -16,13 +16,6 @@ jobs:
 #        Configuration: [Debug, Release, ReleaseTracyProfiler]
         Configuration: [Release, ReleaseTracyProfiler]
         Platform: [x64]
-        include:
-#          - Configuration: Debug
-#            ConfigurationReal: Debug
-          - Configuration: Release
-            ConfigurationReal: Release
-          - Configuration: ReleaseTracyProfiler
-            ConfigurationReal: Release
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -39,9 +32,8 @@ jobs:
       run: |
         set APPVEYOR_BUILD_VERSION=3.${{ github.run_number }}
         set APPVEYOR_REPO_NAME=${{ github.repository }}
-        set CONFIGURATION_GA=${{ matrix.Configuration }}
         
-        msbuild Engine.sln /t:Rebuild /p:Configuration=${{ matrix.ConfigurationReal }} /p:Platform=${{ matrix.Platform }}
+        msbuild Engine.sln /t:Rebuild /p:Configuration=${{ matrix.Configuration }} /p:Platform=${{ matrix.Platform }}
     - name: Prepare artifacts
       shell: cmd
       run: |
@@ -52,13 +44,13 @@ jobs:
         set OGSR_BINARY_DIR=bin_%PLATFORM%
         if "%CONFIGURATION%"=="ReleaseTracyProfiler" set OGSR_BINARY_DIR=bin_%PLATFORM%_tracy
         if "%CONFIGURATION%"=="Debug" set OGSR_BINARY_DIR=bin_%PLATFORM%_debug
-        cd /d "%GITHUB_WORKSPACE%\%OGSR_BINARY_DIR%"
+        cd %OGSR_BINARY_DIR%
         
-        if not exist "%GITHUB_WORKSPACE%\Game\Resources_SoC_1.0006\bin_%PLATFORM%" md "%GITHUB_WORKSPACE%\Game\Resources_SoC_1.0006\bin_%PLATFORM%"
+        md ..\Game\Resources_SoC_1.0006\bin_%PLATFORM%
         
-        copy /Y *.* "%GITHUB_WORKSPACE%\Game\Resources_SoC_1.0006\bin_%PLATFORM%"
+        copy *.* ..\Game\Resources_SoC_1.0006\bin_%PLATFORM%
         
-        cd /d "%GITHUB_WORKSPACE%\Game\Resources_SoC_1.0006"
+        cd ..\Game\Resources_SoC_1.0006
         
         7z a -t7z -m0=LZMA2:d=96m:fb=273 -mx=9 -mmt=2 ..\..\%OGSR_ARTIFACT_NAME% .\
     - name: Upload OGSR artifact

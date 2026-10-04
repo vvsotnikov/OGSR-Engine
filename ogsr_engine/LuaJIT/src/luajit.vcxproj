@@ -5,6 +5,10 @@
       <Configuration>Release</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="ReleaseTracyProfiler|x64">
+      <Configuration>ReleaseTracyProfiler</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Debug|x64">
       <Configuration>Debug</Configuration>
       <Platform>x64</Platform>
@@ -64,7 +68,6 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Target Name="CopyLuaJITLibrary" AfterTargets="Build;Rebuild">
     <Copy SourceFiles="$(ProjectDir)..\bin\$(PlatformShortName)\LuaJIT.lib" DestinationFolder="$(OgsrEngineLibraryDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(ProjectDir)..\bin\$(PlatformShortName)\LuaJIT.exp" DestinationFolder="$(OgsrEngineLibraryDir)" SkipUnchangedFiles="true" Condition="Exists('$(ProjectDir)..\bin\$(PlatformShortName)\LuaJIT.exp')" />
   </Target>
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
