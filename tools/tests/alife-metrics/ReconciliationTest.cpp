@@ -34,7 +34,6 @@ struct Operations
     void try_switch_online(CSE_ALifeDynamicObject* p) { dispatch(p, "online"); }
     void try_switch_offline(CSE_ALifeDynamicObject* p) { dispatch(p, "offline"); }
 };
-struct Baseline : Operations { void switch_object(CSE_ALifeDynamicObject*); };
 struct Candidate : Operations
 {
     bool m_reconcile_sample = false;
@@ -53,12 +52,30 @@ int main()
         {
             CSE_ALifeDynamicObject original{bool(mask&1), bool(mask&2), bool(mask&4), bool(mask&8), bool(mask&16), bool(mask&32), bool(mask&64)};
             auto candidate = original;
-            Baseline{}.switch_object(&original);
+            Log expected{"redundant"};
+            bool released = original.pre_redundant;
+            bool evaluated = false;
+            bool online = original.m_bOnline;
+            if (released) expected.push_back("release");
+            else
+            {
+                expected.push_back("sync");
+                online ^= original.flip_sync;
+                if (original.sync_ok)
+                {
+                    evaluated = true;
+                    expected.push_back(online ? "offline" : "online");
+                    online ^= original.flip_transition;
+                    expected.push_back("redundant");
+                    released = original.post_redundant || original.become_redundant;
+                    if (released) expected.push_back("release");
+                }
+            }
             Candidate manager; manager.m_reconcile_sample = sampled;
             manager.switch_object(&candidate);
-            check(original.log == candidate.log);
-            check(original.m_bOnline == candidate.m_bOnline && original.released == candidate.released && original.evaluated == candidate.evaluated);
+            check(expected == candidate.log);
+            check(online == candidate.m_bOnline && released == candidate.released && evaluated == candidate.evaluated);
             check(manager.m_reconcile_objects == unsigned(sampled));
         }
-    std::cout << "256 real-method ordering comparisons passed (sampled and unsampled)\n";
+    std::cout << "256 real-method lifecycle invariant cases passed (sampled and unsampled)\n";
 }

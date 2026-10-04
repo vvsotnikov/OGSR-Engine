@@ -85,8 +85,9 @@ void CALifeUpdateManager::update_switch()
         begin_reconciliation();
         CTimer reconcile_timer;
         reconcile_timer.Start();
-        graph().level().update(CSwitchPredicate(this));
-        finish_reconciliation(reconcile_timer.GetElapsed_sec() * 1000.0);
+        const double budget_ms = graph().level().time_limit_ms();
+        const u32 visited = graph().level().update(CSwitchPredicate(this));
+        finish_reconciliation(reconcile_timer.GetElapsed_sec() * 1000.0, budget_ms, visited);
     }
     else
         graph().level().update(CSwitchPredicate(this));
@@ -157,9 +158,9 @@ void CALifeUpdateManager::report_metrics()
         }
     }
     Msg("[ALife metrics] game_ms=%u level=%u online=%u offline=%u living_online=%u living_offline=%u "
-        "spawns=%llu removals=%llu updates=%u switch_ms=%.3f scheduled_ms=%.3f",
+        "online_switches=%llu offline_switches=%llu updates=%u switch_ms=%.3f scheduled_ms=%.3f",
         Device.dwTimeGlobal, u32(graph().level().level_id()), online, offline, living_online, living_offline,
-        m_online_spawns, m_offline_removals, m_metrics_updates, m_metrics_switch_ms, m_metrics_scheduled_ms);
+        m_online_switches, m_offline_switches, m_metrics_updates, m_metrics_switch_ms, m_metrics_scheduled_ms);
     TracyPlot("ALife/online objects", int64_t(online));
     TracyPlot("ALife/living online", int64_t(living_online));
     TracyPlot("ALife/living offline", int64_t(living_offline));

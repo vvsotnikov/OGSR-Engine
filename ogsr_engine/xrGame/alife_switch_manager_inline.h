@@ -16,6 +16,8 @@ IC CALifeSwitchManager::CALifeSwitchManager(xrServer* server, LPCSTR section) : 
     if (m_reconcile_metrics)
         Msg("* ALife reconciliation timing: pass totals; stage sampling every 64 passes");
 
+    if (m_alife_diagnostics && !m_alife_metrics)
+        Msg("! -alife_diagnostics requires -alife_metrics");
     m_switch_distance = pSettings->r_float(section, "switch_distance");
     m_switch_factor = pSettings->r_float(section, "switch_factor");
     set_switch_distance(m_switch_distance);

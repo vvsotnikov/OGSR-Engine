@@ -75,7 +75,7 @@ void CALifeSwitchManager::add_online(CSE_ALifeDynamicObject* object, bool update
 #endif
 
     object->add_online(update_registries);
-    if (m_alife_metrics) ++m_online_spawns;
+    if (m_alife_metrics) ++m_online_switches;
     STOP_PROFILE
 }
 
@@ -106,7 +106,7 @@ void CALifeSwitchManager::remove_online(CSE_ALifeDynamicObject* object, bool upd
 #endif
 
     object->add_offline(m_saved_chidren, update_registries);
-    if (m_alife_metrics) ++m_offline_removals;
+    if (m_alife_metrics) ++m_offline_switches;
     STOP_PROFILE
 }
 
@@ -271,20 +271,20 @@ void CALifeSwitchManager::switch_object(CSE_ALifeDynamicObject* I)
     CTimer timer;
     timer.Start();
     const bool ready = maintain_before_switch(I);
-    m_reconcile_stage_ms[0] += timer.GetElapsed_sec() * 1000.0;
+    const double before_end = timer.GetElapsed_sec() * 1000.0;
+    m_reconcile_stage_ms[0] += before_end;
     if (!ready) return;
     const unsigned phase = I->m_bOnline ? 1 : 2;
-    timer.Start();
     evaluate_switch(I);
-    m_reconcile_stage_ms[phase] += timer.GetElapsed_sec() * 1000.0;
-    timer.Start();
+    const double dispatch_end = timer.GetElapsed_sec() * 1000.0;
+    m_reconcile_stage_ms[phase] += dispatch_end - before_end;
     maintain_after_switch(I);
-    m_reconcile_stage_ms[3] += timer.GetElapsed_sec() * 1000.0;
+    m_reconcile_stage_ms[3] += timer.GetElapsed_sec() * 1000.0 - dispatch_end;
 }
 
 void CALifeSwitchManager::begin_reconciliation()
 {
-    m_reconcile_sample = m_reconcile_metrics && (++m_reconcile_passes % 64 == 0);
+    m_reconcile_sample = m_reconcile_metrics && (++m_reconcile_slices % 64 == 0);
     if (m_reconcile_sample)
     {
         ++m_reconcile_samples;
@@ -293,13 +293,13 @@ void CALifeSwitchManager::begin_reconciliation()
     }
 }
 
-void CALifeSwitchManager::finish_reconciliation(double elapsed_ms)
+void CALifeSwitchManager::finish_reconciliation(double elapsed_ms, double budget_ms, u32 visited)
 {
-    // Emit outside the measured traversal, then stop per-object sampling so
-    // subsequent work cannot leak into this traversal's stage counters.
+    // Emit outside the measured slice, then stop per-object sampling so
+    // subsequent work cannot leak into this slice's stage counters.
     if (m_reconcile_metrics && (m_reconcile_sample || elapsed_ms >= 10.0))
-        Msg("[ALife reconcile] frame=%u pass=%u sampled=%u objects=%u total_ms=%.6f before_ms=%.6f online_dispatch_ms=%.6f offline_dispatch_ms=%.6f after_ms=%.6f",
-            Device.dwFrame, m_reconcile_passes, u32(m_reconcile_sample), m_reconcile_sample ? m_reconcile_objects : 0,
+        Msg("[ALife reconcile] frame=%u slice=%u sampled=%u objects=%u budget_ms=%.6f total_ms=%.6f before_ms=%.6f try_offline_ms=%.6f try_online_ms=%.6f after_ms=%.6f",
+            Device.dwFrame, m_reconcile_slices, u32(m_reconcile_sample), visited, budget_ms,
             elapsed_ms, m_reconcile_sample ? m_reconcile_stage_ms[0] : 0.0, m_reconcile_sample ? m_reconcile_stage_ms[1] : 0.0,
             m_reconcile_sample ? m_reconcile_stage_ms[2] : 0.0, m_reconcile_sample ? m_reconcile_stage_ms[3] : 0.0);
     m_reconcile_sample = false;
