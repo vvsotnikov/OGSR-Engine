@@ -40,6 +40,7 @@ impl Fixture {
         fs::create_dir_all(&root).unwrap();
         for file in [
             "Cargo.toml",
+            // Nested unit tests verify dependency roots against this provisioner.
             "Update_Components.cmd",
             "Cargo.lock",
             "rust-toolchain.toml",
@@ -558,7 +559,8 @@ fn path_only_commit_excludes_files_staged_in_the_real_index() {
         "{log}"
     );
     assert!(
-        log.contains("new_api.h") && log.contains("command failed"),
+        log.lines()
+            .any(|line| line.contains("C1083") && line.contains("new_api.h")),
         "{log}"
     );
     assert_eq!(tree, ok(&fixture.0, "git", &["write-tree"]).stdout);

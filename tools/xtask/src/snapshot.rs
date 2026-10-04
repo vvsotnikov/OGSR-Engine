@@ -68,12 +68,12 @@ pub fn is_build_input(path: &str) -> bool {
                 )
                 || lower == "cmakelists.txt"))
 }
-pub enum Index {
-    Hook,
-    Worktree,
+pub enum GitEnvironment {
+    Inherit,
+    Isolated,
 }
 
-pub fn extra_inputs(root: &Path, index: Index) -> Result<Vec<String>> {
+pub fn extra_inputs(root: &Path, environment: GitEnvironment) -> Result<Vec<String>> {
     let exclusions: Vec<_> = DEPENDENCIES
         .iter()
         .chain(CACHES)
@@ -103,7 +103,7 @@ pub fn extra_inputs(root: &Path, index: Index) -> Result<Vec<String>> {
     .collect();
     args.extend(roots.iter().map(String::as_str));
     args.extend(exclusions.iter().map(String::as_str));
-    Ok(git_with_index(root, &args, index)?
+    Ok(git_with_environment(root, &args, environment)?
         .split('\0')
         .filter(|p| is_build_input(p))
         .map(str::to_owned)
@@ -112,13 +112,13 @@ pub fn extra_inputs(root: &Path, index: Index) -> Result<Vec<String>> {
 
 // Snapshot operations must not inherit the developer hook's index or Git directory.
 pub fn git_isolated(root: &Path, args: &[&str]) -> Result<String> {
-    git_with_index(root, args, Index::Worktree)
+    git_with_environment(root, args, GitEnvironment::Isolated)
 }
 
-fn git_with_index(root: &Path, args: &[&str], index: Index) -> Result<String> {
+fn git_with_environment(root: &Path, args: &[&str], environment: GitEnvironment) -> Result<String> {
     let mut cmd = Command::new("git");
     cmd.current_dir(root).args(args);
-    if matches!(index, Index::Worktree) {
+    if matches!(environment, GitEnvironment::Isolated) {
         for (key, _) in env::vars().filter(|(key, _)| key.starts_with("GIT_")) {
             cmd.env_remove(key);
         }
@@ -214,7 +214,11 @@ fn check_owned(root: &Path, path: &Path) -> Result {
     if let Ok(metadata) = fs::symlink_metadata(path) {
         if reparse(&metadata) || !registered(root, path)? {
             return Err(format!(
-                "Refusing unregistered or redirected snapshot {}. If the repository moved, run git worktree repair with this snapshot path, then retry. A redirected snapshot must not be repaired this way.",
+                concat!(
+                    "Refusing unregistered or redirected snapshot {}. ",
+                    "If the repository moved, run git worktree repair with this snapshot path, ",
+                    "then retry. A redirected snapshot must not be repaired this way."
+                ),
                 path.display()
             )
             .into());
@@ -291,7 +295,8 @@ pub fn prepare(root: &Path, tree: &str) -> Result<PathBuf> {
         detach_links(&path, &path)?;
         git_isolated(&path, &["checkout", "--force", "--detach", &commit])?;
     }
-    // Explicitly materialize index contents even if repository sparse-checkout settings were inherited.
+    // Materialize the full index even if repository sparse-checkout settings
+    // were inherited.
     git_isolated(
         &path,
         &[

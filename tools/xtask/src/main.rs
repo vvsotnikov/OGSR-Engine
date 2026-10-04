@@ -52,7 +52,10 @@ fn validate_index() -> Result {
     let _lock = lock()?;
     let before = git(&["write-tree"])?;
     let unstaged = tracked_edits()?;
-    let extra = xtask::snapshot::extra_inputs(&env::current_dir()?, xtask::snapshot::Index::Hook)?;
+    let extra = xtask::snapshot::extra_inputs(
+        &env::current_dir()?,
+        xtask::snapshot::GitEnvironment::Inherit,
+    )?;
     let hidden = git(&["ls-files", "-v", "-z"])?.split('\0').any(|entry| {
         entry
             .as_bytes()
@@ -86,7 +89,7 @@ fn validate_index() -> Result {
         xtask::snapshot::git_isolated(&snapshot, &["diff", "--quiet", &before])
             .map_err(|e| format!("Snapshot source changed during validation: {e}"))?;
         if xtask::snapshot::git_isolated(&snapshot, &["write-tree"])? != before
-            || !xtask::snapshot::extra_inputs(&snapshot, xtask::snapshot::Index::Worktree)?
+            || !xtask::snapshot::extra_inputs(&snapshot, xtask::snapshot::GitEnvironment::Isolated)?
                 .is_empty()
         {
             return Err("Snapshot inputs changed during validation; retry the commit.".into());
@@ -94,8 +97,11 @@ fn validate_index() -> Result {
     } else {
         validate(None, false, false)?;
         if tracked_edits()?
-            || !xtask::snapshot::extra_inputs(&env::current_dir()?, xtask::snapshot::Index::Hook)?
-                .is_empty()
+            || !xtask::snapshot::extra_inputs(
+                &env::current_dir()?,
+                xtask::snapshot::GitEnvironment::Inherit,
+            )?
+            .is_empty()
         {
             return Err("Build inputs changed during validation; retry the commit.".into());
         }
@@ -237,7 +243,14 @@ fn install_hook(root: &Path) -> Result {
         return Err("Missing tracked pre-commit hook.".into());
     }
     fs::create_dir_all(&destination)?;
-    let bootstrap = "#!/bin/sh\nset -eu\nif [ ! -f .githooks/pre-commit ]; then\n    echo 'Local validation is required. Bring the validation infrastructure onto this branch before committing.' >&2\n    exit 1\nfi\nexec sh .githooks/pre-commit\n";
+    let bootstrap = r#"#!/bin/sh
+set -eu
+if [ ! -f .githooks/pre-commit ]; then
+    echo 'Local validation is required. Bring the validation infrastructure onto this branch before committing.' >&2
+    exit 1
+fi
+exec sh .githooks/pre-commit
+"#;
     for name in ["pre-commit", "pre-merge-commit"] {
         fs::write(destination.join(name), bootstrap)?;
     }
@@ -255,17 +268,29 @@ fn main_result() -> Result {
     let args: Vec<_> = env::args().skip(1).collect();
     let root = PathBuf::from(git(&["rev-parse", "--show-toplevel"])?);
     env::set_current_dir(&root)?;
-    match args.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
+    match args
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .as_slice()
+    {
         ["install-hooks"] => install_hook(&root),
         ["reset-snapshot"] => {
             let _lock = lock()?;
             xtask::snapshot::reset(&root)
-        },
+        }
         ["pre-commit"] => validate_index(),
         ["validate"] => validate(None, false, true),
         ["validate", "--tests-only"] => validate(None, true, true),
-        ["validate", "--configuration", c @ ("Debug" | "Release" | "ReleaseTracyProfiler")] => validate(Some(c), false, true),
-        _ => Err("Usage: cargo xtask {validate [--tests-only | --configuration Debug|Release|ReleaseTracyProfiler] | install-hooks | pre-commit | reset-snapshot}".into()),
+        ["validate", "--configuration", c @ ("Debug" | "Release" | "ReleaseTracyProfiler")] => {
+            validate(Some(c), false, true)
+        }
+        _ => Err(concat!(
+            "Usage: cargo xtask {validate [--tests-only | ",
+            "--configuration Debug|Release|ReleaseTracyProfiler] | ",
+            "install-hooks | pre-commit | reset-snapshot}"
+        )
+        .into()),
     }
 }
 
