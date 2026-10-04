@@ -473,18 +473,22 @@
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
     </ProjectReference>
     <ProjectReference Include="..\..\..\3rd_party\Src\imgui\imgui.vcxproj">
+      <!-- Project-only builds cannot use the solution's third-party mapping. -->
       <SetConfiguration Condition="'$(Configuration)'=='ReleaseTracyProfiler'">Configuration=Release</SetConfiguration>
       <Project>{c8fbc3ce-d6de-4fc3-bc15-7b647614db09}</Project>
     </ProjectReference>
     <ProjectReference Include="..\..\..\3rd_party\Src\DirectXTex\DirectXTex.vcxproj">
+      <!-- Project-only builds cannot use the solution's third-party mapping. -->
       <SetConfiguration Condition="'$(Configuration)'=='ReleaseTracyProfiler'">Configuration=Release</SetConfiguration>
       <Project>{286CC988-2191-467A-9F6D-ABB7954D4F78}</Project>
     </ProjectReference>
     <ProjectReference Include="..\..\..\3rd_party\Src\FidelityFX-SDK\ffx_backend_dx11_x64.vcxproj">
+      <!-- Project-only builds cannot use the solution's third-party mapping. -->
       <SetConfiguration Condition="'$(Configuration)'=='ReleaseTracyProfiler'">Configuration=Release</SetConfiguration>
       <Project>{2573F943-895F-3EB6-B3A2-EC66C5BD3507}</Project>
     </ProjectReference>
     <ProjectReference Include="..\..\..\3rd_party\Src\FidelityFX-SDK\ffx_fsr3upscaler_x64.vcxproj">
+      <!-- Project-only builds cannot use the solution's third-party mapping. -->
       <SetConfiguration Condition="'$(Configuration)'=='ReleaseTracyProfiler'">Configuration=Release</SetConfiguration>
       <Project>{900D55FB-392E-3485-AC4A-5F66868F6252}</Project>
     </ProjectReference>

@@ -28,7 +28,7 @@
     </Link>
   </ItemDefinitionGroup>
 
-  <ItemDefinitionGroup Condition="'$(OgsrBuildVariant)'=='ReleaseTracyProfiler'">
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='ReleaseTracyProfiler'">
     <ClCompile>
       <PreprocessorDefinitions>
         TRACY_ENABLE;

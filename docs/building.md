@@ -12,10 +12,11 @@ MSBuild Engine.sln /m:4 /p:Configuration=ReleaseTracyProfiler /p:Platform=x64
 
 Select `ReleaseTracyProfiler|x64` directly in Visual Studio's configuration selector.
 Its engine projects use Tracy instrumentation; third-party projects map to Release.
-For compatibility with existing scripts, `Configuration=Release` with
-`CONFIGURATION_GA=ReleaseTracyProfiler` still selects the same instrumented outputs.
-Use the real configuration in Visual Studio so its configuration selector reflects
-what is being built. Debug ignores the legacy Tracy switch.
+`CONFIGURATION_GA` is no longer accepted as a build switch: unset it before
+building. Select the desired configuration explicitly instead.
+The Release and Tracy project conditions share compiler settings. When changing
+one configuration through Visual Studio's property pages, inspect the resulting
+project diff to ensure shared settings still apply to both.
 
 | Variant | Executables | Engine libraries and intermediates |
 | --- | --- | --- |
@@ -29,8 +30,10 @@ launch commands and executable-directory links to use that directory.
 Library and intermediate paths are under `ogsr_engine`. Visual Studio and
 command-line builds use these same directories. Uninstrumented third-party release
 libraries are shared by both release variants; engine libraries never fall back
-to another variant. LuaJIT's provisioned library is copied into each variant only
-when its source changes.
+to another variant. LuaJIT is compiled from source in a private workspace under
+each configuration's intermediate directory, including its generated headers,
+objects and compiler PDB. Debug uses the Debug CRT; both release variants use
+the Release CRT. Previously provisioned LuaJIT libraries are not consumed.
 
 The executable's generated version header lives in its intermediate directory.
 MSBuild refreshes it when executable sources/resources, input libraries, its

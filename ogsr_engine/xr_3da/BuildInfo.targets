@@ -7,7 +7,7 @@
   <Target Name="CollectBuildInfoInputs">
     <MakeDir Directories="$(IntDir)" />
     <WriteLinesToFile File="$(IntDir)build-version.txt"
-      Lines="$(OgsrBuildVariant);$(APPVEYOR_BUILD_VERSION);$(APPVEYOR_REPO_NAME)"
+      Lines="$(Configuration);$(APPVEYOR_BUILD_VERSION);$(APPVEYOR_REPO_NAME)"
       Overwrite="true" WriteOnlyWhenDifferent="true" />
     <ItemGroup>
       <BuildInfoInput Include="@(ClCompile);@(ClInclude);@(ResourceCompile);$(OgsrEngineLibraryDir)*.lib;$(SolutionDir)3rd_party\_LIB\$(OgsrThirdPartyConfiguration)\$(Platform)\*.lib;$(MSBuildProjectFullPath);$(MSBuildThisFileFullPath);$(IntDir)build-version.txt"
@@ -21,7 +21,7 @@
       <BuildInfoLine Include="#define BUILD_DATE &quot;$([System.DateTime]::Now.ToString('dd.MM.yyyy'))&quot;" />
       <BuildInfoLine Include="#define BUILD_TIME &quot;$([System.DateTime]::Now.ToString('HH:mm:ss'))&quot;" />
       <BuildInfoLine Include="#define BUILD_YEAR &quot;$([System.DateTime]::Now.ToString('yyyy'))&quot;" />
-      <BuildInfoLine Include="#define CONFIGURATION_GA &quot;$(OgsrBuildVariant)&quot;" />
+      <BuildInfoLine Include="#define CONFIGURATION_GA &quot;$(Configuration)&quot;" />
       <BuildInfoLine Include="#define APPVEYOR_BUILD_VERSION &quot;$(APPVEYOR_BUILD_VERSION)&quot;" Condition="'$(APPVEYOR_BUILD_VERSION)'!=''" />
       <BuildInfoLine Include="#define APPVEYOR_REPO_NAME &quot;$(APPVEYOR_REPO_NAME)&quot;" Condition="'$(APPVEYOR_BUILD_VERSION)'!=''" />
     </ItemGroup>
