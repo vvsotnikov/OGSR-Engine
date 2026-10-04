@@ -20,7 +20,9 @@ fn output(command: &mut Command) -> Result<String> {
     if !result.status.success() {
         return Err(format!("{command:?}: {}", String::from_utf8_lossy(&result.stderr)).into());
     }
-    Ok(String::from_utf8(result.stdout)?.trim().to_owned())
+    Ok(String::from_utf8(result.stdout)?
+        .trim_end_matches(['\r', '\n'])
+        .to_owned())
 }
 
 fn git(args: &[&str]) -> Result<String> {
@@ -47,58 +49,10 @@ fn lock() -> Result<fs::File> {
 }
 
 fn extra_build_inputs() -> Result<bool> {
-    let paths = git(&["ls-files", "--others", "--exclude-standard", "-z"])?;
-    let tooling = git(&[
-        "ls-files",
-        "--others",
-        "-z",
-        "--",
-        "tools/tests",
-        "tools/xtask",
-        ".githooks",
-        ".cargo",
-    ])?;
-    Ok(paths
+    // Include ignored inputs too; only explicit generated/dependency roots are exempt.
+    Ok(git(&["ls-files", "--others", "-z"])?
         .split('\0')
-        .chain(tooling.split('\0'))
-        .filter(|p| !p.is_empty())
-        .any(|p| {
-            let extension = Path::new(p)
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("")
-                .to_ascii_lowercase();
-            if matches!(extension.as_str(), "log" | "md" | "pyc") {
-                return false;
-            }
-            p.starts_with("tools/")
-                || p.starts_with(".githooks/")
-                || p.starts_with(".cargo/")
-                || matches!(
-                    extension.as_str(),
-                    "cpp"
-                        | "c"
-                        | "h"
-                        | "hpp"
-                        | "hxx"
-                        | "inl"
-                        | "cxx"
-                        | "cc"
-                        | "props"
-                        | "targets"
-                        | "vcxproj"
-                        | "sln"
-                        | "bat"
-                        | "cmd"
-                        | "rc"
-                        | "def"
-                        | "asm"
-                        | "toml"
-                        | "lock"
-                        | "cmake"
-                        | "rs"
-                )
-        }))
+        .any(xtask::snapshot::is_build_input))
 }
 
 fn validate_index() -> Result {
@@ -116,6 +70,15 @@ fn validate_index() -> Result {
         }
         command.env("CARGO_TARGET_DIR", snapshot.join("target"));
         run(&mut command)?;
+        xtask::snapshot::git_at(&snapshot, &["diff", "--quiet", &before])
+            .map_err(|e| format!("Snapshot source changed during validation: {e}"))?;
+        if xtask::snapshot::git_at(&snapshot, &["write-tree"])? != before
+            || xtask::snapshot::git_at(&snapshot, &["ls-files", "--others", "-z"])?
+                .split('\0')
+                .any(xtask::snapshot::is_build_input)
+        {
+            return Err("Snapshot inputs changed during validation; retry the commit.".into());
+        }
     } else {
         validate(None, false, false)?;
         if tracked_edits()? || extra_build_inputs()? {
@@ -199,11 +162,6 @@ fn validate(configuration: Option<&str>, tests_only: bool, acquire_lock: bool) -
     ]))?;
     if !tests_only {
         let build = msbuild()?;
-        let native_tracy = xtask::has_solution_configuration(
-            &fs::read_to_string("Engine.sln")
-                .map_err(|error| format!("Cannot read Engine.sln configurations: {error}"))?,
-            "ReleaseTracyProfiler",
-        );
         let configurations = configuration
             .map(|c| vec![c])
             .unwrap_or_else(|| vec!["Release", "ReleaseTracyProfiler"]);
@@ -211,18 +169,10 @@ fn validate(configuration: Option<&str>, tests_only: bool, acquire_lock: bool) -
             let log = format!("target/validation/{variant}.log");
             let mut command = Command::new(&build);
             command.env_remove("CONFIGURATION_GA");
-            if !native_tracy {
-                command.env("CONFIGURATION_GA", variant);
-            }
-            let build_configuration = if variant == "ReleaseTracyProfiler" && !native_tracy {
-                "Release"
-            } else {
-                variant
-            };
             run(command.args([
                 "Engine.sln",
                 &format!("/m:{jobs}"),
-                &format!("/p:Configuration={build_configuration}"),
+                &format!("/p:Configuration={variant}"),
                 "/p:Platform=x64",
                 "/verbosity:minimal",
                 "/nologo",
@@ -268,11 +218,11 @@ fn install_hook(root: &Path) -> Result {
             }
         }
     }
-    fs::create_dir_all(&destination)?;
     if !root.join(".githooks/pre-commit").is_file() {
         return Err("Missing tracked pre-commit hook.".into());
     }
-    let bootstrap =  "#!/bin/sh\nset -eu\nif [ ! -f .githooks/pre-commit ]; then\n    echo 'Local validation is required. Bring the validation infrastructure onto this branch before committing.' >&2\n    exit 1\nfi\nexec sh .githooks/pre-commit\n";
+    fs::create_dir_all(&destination)?;
+    let bootstrap = "#!/bin/sh\nset -eu\nif [ ! -f .githooks/pre-commit ]; then\n    echo 'Local validation is required. Bring the validation infrastructure onto this branch before committing.' >&2\n    exit 1\nfi\nexec sh .githooks/pre-commit\n";
     for name in ["pre-commit", "pre-merge-commit"] {
         fs::write(destination.join(name), bootstrap)?;
     }
@@ -292,11 +242,15 @@ fn main_result() -> Result {
     env::set_current_dir(&root)?;
     match args.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
         ["install-hooks"] => install_hook(&root),
+        ["reset-snapshot"] => {
+            let _lock = lock()?;
+            xtask::snapshot::reset(&root)
+        },
         ["pre-commit"] => validate_index(),
         ["validate"] => validate(None, false, true),
         ["validate", "--tests-only"] => validate(None, true, true),
         ["validate", "--configuration", c @ ("Debug" | "Release" | "ReleaseTracyProfiler")] => validate(Some(c), false, true),
-        _ => Err("Usage: cargo xtask {validate [--tests-only | --configuration Debug|Release|ReleaseTracyProfiler] | install-hooks | pre-commit}".into()),
+        _ => Err("Usage: cargo xtask {validate [--tests-only | --configuration Debug|Release|ReleaseTracyProfiler] | install-hooks | pre-commit | reset-snapshot}".into()),
     }
 }
 

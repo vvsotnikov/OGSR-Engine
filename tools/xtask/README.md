@@ -1,58 +1,64 @@
 # Local validation
 
-Install Visual Studio C++ Build Tools (the engine's SDK/toolset requirements),
-Rust 1.89 or later with rustfmt, CMake, and Git. The workflow pins Rust 1.99.0.
-Rust is the chosen language for new project tooling and the planned simulation
-module. Python/PowerShell are additionally required by suites using them.
-Prepare engine dependencies separately; validation never runs the destructive
-`Update_Components.cmd` updater.
+Install Visual Studio C++ Build Tools, CMake, Git and rustup. The repository's
+`rust-toolchain.toml` selects Rust and rustfmt for both local and GitHub runs.
+Python/PowerShell are additionally required by suites using them. Provision engine
+dependencies separately; validation never runs `Update_Components.cmd`.
 
 ```powershell
 cargo xtask install-hooks
 cargo xtask validate
 ```
 
-Both pre-commit and pre-merge-commit run formatting, Rust tests, all immediate
-CMake test suites, and both x64 engine variants. `cargo xtask validate --tests-only`
-omits engine builds; `--configuration Release`, `ReleaseTracyProfiler`, or `Debug`
-selects one build. These options do not weaken the hooks.
-The validator reads the solution configuration table: when a real Tracy
-configuration exists, it selects it and clears inherited `CONFIGURATION_GA`.
-Older layouts receive the legacy switch and version metadata. This prevents a
-Tracy check from silently becoming a second ordinary Release build.
-Set `OGSR_BUILD_JOBS` to a positive integer to override the default four workers.
-CTest cases have a two-minute timeout. Rust hook integration tests require
-Windows/MSVC and test failures against real disposable Git repositories.
-Failed fixtures print their retained directory for diagnosis.
+`pre-commit` and `pre-merge-commit` run formatting, Rust tests, registered CTest
+suites, and native x64 Release and ReleaseTracyProfiler builds. An inherited
+`CONFIGURATION_GA` is cleared. Both variants retain separate incremental caches;
+an engine change must still compile in each variant, and a shared header can
+cause two broad rebuilds. `OGSR_BUILD_JOBS` overrides the default four workers.
+CTest cases have a two-minute timeout. Failed Rust integration fixtures are
+retained at the path printed in the failure output.
 
-Validation uses the engine's existing MSBuild configuration and output paths.
-Release and Tracy run sequentially and reuse their respective build caches. A partial commit, or untracked
-source/tooling that could enter a build, uses a persistent detached worktree of
-the Git index instead. Its separate cache is cold on first use. The hook does
-not stash, overwrite, or clean the developer's working files. Unrelated scratch
-files such as root-level notes and logs do not force isolation. An index change
-during validation fails the commit rather than approving a different tree.
+`cargo xtask validate --tests-only` omits engine builds. `--configuration Release`,
+`ReleaseTracyProfiler`, or `Debug` selects one build. These options do not weaken
+the hooks. GitHub workflow enablement is independent and remains disabled.
 
-The staged worktree borrows existing ignored third-party dependency checkouts
-and copies provisioned LuaJIT binaries for older build layouts; these remain local inputs, so this is not
-a hermetic build. It refuses staged files overlapping a borrowed dependency.
-Do not edit build inputs or run another build in the checkout being validated.
-An OS-backed per-worktree lock prevents overlapping validators and is released on
-process termination; the lock file may persist harmlessly. If killing only the
-validator leaves child build processes alive, stop those before starting another
-build. `cargo xtask validate` explicitly validates the working directory rather
-than the staged snapshot.
+A partial commit or extra source/tooling input uses a persistent detached worktree
+of the index. Only its named build caches survive reuse; tracked edits and stale
+untracked inputs are discarded there, including ignored files. This snapshot is
+owned by the validator, not a place to edit source. Developer working files and
+index contents are never stashed or cleaned. Root scratch notes/logs do not force
+isolation. Source/tooling roots are checked regardless of file extension or ignore
+rules; known dependencies, build outputs and Python bytecode caches are excluded.
+Put custom build outputs in `target/` or `tools/tests/<suite>/build/`.
 
-Installation writes shared dispatchers that execute the current worktree's
-tracked `.githooks/pre-commit`. Hook changes take effect without reinstallation;
-rerun installation to add a newly supported hook event. Linked worktrees inherit
-enforcement; branches missing the
-infrastructure must incorporate it before committing. Existing custom hooks,
-including global configuration, are not silently overridden. Hooks and the validator
-must themselves be runnable in the working directory to start staged validation.
-Git hooks are a local guard that can be bypassed, not server-side enforcement.
+The snapshot borrows the dependency directories provisioned by
+`Update_Components.cmd`. They remain local inputs, so validation is not hermetic.
+Staged files cannot overlap those directories or reserved cache paths. Junctions
+are detached before source cleanup without following their targets. A missing
+registered snapshot is recreated automatically. To discard its caches and source:
 
-Logs are in `target/validation` in the checkout being validated; CTest diagnostics are under
-`target/validation/tests/Testing/Temporary`. Passing these checks does not
-establish gameplay/E2E correctness. Game scenarios remain separate.
-GitHub workflow enablement is independent and remains disabled.
+```powershell
+cargo xtask reset-snapshot
+```
+
+Reset removes only this worktree's registered validation snapshot and its metadata,
+never dependency targets. Use that command instead of recursively deleting the
+snapshot by hand. Other registered worktrees are not pruned.
+
+Do not edit inputs or run another build in a checkout being validated. Per-worktree
+OS locks exclude overlapping validators and reset operations, and release on
+process termination. If killing a validator leaves child builds alive, stop them
+before another build. An index change during validation rejects the commit.
+`cargo xtask validate` checks working files rather than creating an index snapshot.
+
+Installation creates shared dispatchers that execute the current worktree's
+tracked hook; existing custom hooks are not overwritten. Linked worktrees inherit
+the dispatchers, and branches lacking validation tooling cannot commit through
+them. Reinstall to add newly supported hook events. Git rebase, cherry-pick,
+revert, am and fast-forward merges are not gated by these hooks: explicitly run
+`cargo xtask validate` on their result before publishing. Local hooks are
+bypassable and require runnable tooling; they are not server-side enforcement.
+
+Logs are in `target/validation` in the validated checkout; CTest diagnostics are
+under `target/validation/tests/Testing/Temporary`. These checks do not establish
+gameplay/E2E correctness; game scenarios remain separate.

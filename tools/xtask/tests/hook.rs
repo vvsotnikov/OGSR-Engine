@@ -41,6 +41,7 @@ impl Fixture {
         for file in [
             "Cargo.toml",
             "Cargo.lock",
+            "rust-toolchain.toml",
             ".gitattributes",
             ".cargo/config.toml",
             ".githooks/pre-commit",
@@ -61,6 +62,11 @@ impl Fixture {
         fs::write(root.join("tools/tests/fixture.cpp"), source_code).unwrap();
         fs::write(root.join("Fixture.vcxproj"), r#"<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="Build" /></Project>"#).unwrap();
         fs::write(root.join("Engine.sln"), "Microsoft Visual Studio Solution File, Format Version 12.00\nProject(\"{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}\") = \"Fixture\", \"Fixture.vcxproj\", \"{11111111-1111-1111-1111-111111111111}\"\nEndProject\nGlobal\n GlobalSection(SolutionConfigurationPlatforms) = preSolution\n Release|x64 = Release|x64\n EndGlobalSection\n GlobalSection(ProjectConfigurationPlatforms) = postSolution\n {11111111-1111-1111-1111-111111111111}.Release|x64.ActiveCfg = Release|x64\n {11111111-1111-1111-1111-111111111111}.Release|x64.Build.0 = Release|x64\n EndGlobalSection\nEndGlobal\n").unwrap();
+        let path = root.join("Engine.sln");
+        let solution = fs::read_to_string(&path).unwrap()
+        .replace(" Release|x64 = Release|x64", " Release|x64 = Release|x64\n ReleaseTracyProfiler|x64 = ReleaseTracyProfiler|x64")
+        .replace(" {11111111-1111-1111-1111-111111111111}.Release|x64.Build.0 = Release|x64", " {11111111-1111-1111-1111-111111111111}.Release|x64.Build.0 = Release|x64\n {11111111-1111-1111-1111-111111111111}.ReleaseTracyProfiler|x64.ActiveCfg = ReleaseTracyProfiler|x64\n {11111111-1111-1111-1111-111111111111}.ReleaseTracyProfiler|x64.Build.0 = ReleaseTracyProfiler|x64");
+        fs::write(path, solution).unwrap();
         ok(&root, "git", &["init"]);
         ok(&root, "git", &["config", "core.autocrlf", "true"]);
         ok(&root, "git", &["config", "user.name", "Validation Fixture"]);
@@ -205,20 +211,20 @@ fn automatic_merge_runs_validation() {
 #[test]
 fn snapshot_reuses_cache_and_protects_borrowed_dependencies() {
     let fixture = Fixture::new("int main() {}\n", "true");
-    let dependency = fixture.0.join("3rd_party/Src/borrowed dependency");
+    let dependency = fixture.0.join("3rd_party/Src/DirectXMath/DirectXMath");
     fs::create_dir_all(&dependency).unwrap();
     ok(&dependency, "git", &["init"]);
     fs::write(dependency.join("source.cpp"), "original dependency\n").unwrap();
     fs::write(
         fixture.0.join(".gitignore"),
-        "/target/\n/linked/\n/3rd_party/Src/borrowed dependency/\n",
+        "/target/\n/linked/\n/3rd_party/Src/DirectXMath/DirectXMath/\n",
     )
     .unwrap();
     ok(&fixture.0, "git", &["add", ".gitignore"]);
     let tree = String::from_utf8(ok(&fixture.0, "git", &["write-tree"]).stdout).unwrap();
     let snapshot = xtask::snapshot::prepare(&fixture.0, tree.trim()).unwrap();
     assert_eq!(
-        fs::read(snapshot.join("3rd_party/Src/borrowed dependency/source.cpp")).unwrap(),
+        fs::read(snapshot.join("3rd_party/Src/DirectXMath/DirectXMath/source.cpp")).unwrap(),
         b"original dependency\n"
     );
     fs::create_dir_all(snapshot.join("target")).unwrap();
@@ -250,7 +256,7 @@ fn snapshot_reuses_cache_and_protects_borrowed_dependencies() {
             "--cacheinfo",
             "100644",
             blob.trim(),
-            "3rd_party/Src/BORROWED DEPENDENCY/source.cpp",
+            "3rd_party/Src/DIRECTXMATH/DIRECTXMATH/source.cpp",
         ],
     );
     let tree = String::from_utf8(ok(&fixture.0, "git", &["write-tree"]).stdout).unwrap();
@@ -278,13 +284,6 @@ fn engine_failure_blocks_commit() {
     let fixture = Fixture::new("int main() {}\n", "true");
     ok(&fixture.0, "git", &["rm", "Engine.sln"]);
     Fixture::reject_at(&fixture.0, "Engine.sln");
-}
-#[test]
-fn tracy_failure_blocks_commit_after_release_passes() {
-    let fixture = Fixture::new("int main() {}\n", "true");
-    fs::write(fixture.0.join("Fixture.vcxproj"), r#"<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="Build"><Error Condition="'$(CONFIGURATION_GA)'==''" Text="LEGACY_METADATA_MISSING" /><Error Condition="'$(CONFIGURATION_GA)'=='ReleaseTracyProfiler'" Text="TRACY_FIXTURE_FAILURE" /></Target></Project>"#).unwrap();
-    ok(&fixture.0, "git", &["add", "Fixture.vcxproj"]);
-    Fixture::reject_at(&fixture.0, "TRACY_FIXTURE_FAILURE");
 }
 #[test]
 fn dispatcher_uses_current_hook_and_enforces_linked_worktrees() {
@@ -321,11 +320,6 @@ fn dispatcher_uses_current_hook_and_enforces_linked_worktrees() {
 #[test]
 fn native_tracy_selection_clears_inherited_legacy_switch() {
     let fixture = Fixture::new("int main() {}\n", "true");
-    let path = fixture.0.join("Engine.sln");
-    let solution = fs::read_to_string(&path).unwrap()
-        .replace(" Release|x64 = Release|x64", " Release|x64 = Release|x64\n ReleaseTracyProfiler|x64 = ReleaseTracyProfiler|x64")
-        .replace(" {11111111-1111-1111-1111-111111111111}.Release|x64.Build.0 = Release|x64", " {11111111-1111-1111-1111-111111111111}.Release|x64.Build.0 = Release|x64\n {11111111-1111-1111-1111-111111111111}.ReleaseTracyProfiler|x64.ActiveCfg = ReleaseTracyProfiler|x64\n {11111111-1111-1111-1111-111111111111}.ReleaseTracyProfiler|x64.Build.0 = ReleaseTracyProfiler|x64");
-    fs::write(path, solution).unwrap();
     fs::write(fixture.0.join("Fixture.vcxproj"), r#"<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="Build"><Error Condition="'$(CONFIGURATION_GA)'!=''" Text="UNEXPECTED_LEGACY_SWITCH" /><Error Condition="'$(Configuration)'=='ReleaseTracyProfiler'" Text="NATIVE_TRACY_FAILURE" /></Target></Project>"#).unwrap();
     ok(&fixture.0, "git", &["add", "Engine.sln", "Fixture.vcxproj"]);
     let before = ok(&fixture.0, "git", &["rev-parse", "HEAD"]).stdout;
@@ -346,4 +340,102 @@ fn native_tracy_selection_clears_inherited_legacy_switch() {
     );
     assert!(!log.contains("UNEXPECTED_LEGACY_SWITCH"), "{log}");
     assert_eq!(before, ok(&fixture.0, "git", &["rev-parse", "HEAD"]).stdout);
+}
+
+#[test]
+fn dirty_snapshot_and_changed_ignore_rules_cannot_supply_source() {
+    let fixture = Fixture::new("int main() {}\n", "true");
+    let tree = String::from_utf8(ok(&fixture.0, "git", &["write-tree"]).stdout).unwrap();
+    let snapshot = xtask::snapshot::prepare(&fixture.0, tree.trim()).unwrap();
+    fs::write(snapshot.join("tools/tests/fixture.cpp"), "contaminated").unwrap();
+    fs::create_dir_all(snapshot.join("tools/tests/stale")).unwrap();
+    fs::write(
+        snapshot.join("tools/tests/stale/CMakeLists.txt"),
+        "message(FATAL_ERROR stale)",
+    )
+    .unwrap();
+    fs::write(snapshot.join("old-input.inc"), "ignored source").unwrap();
+    fs::create_dir_all(snapshot.join("target")).unwrap();
+    fs::write(snapshot.join("target/cache-marker"), "keep").unwrap();
+    fs::write(
+        fixture.0.join(".gitignore"),
+        "/target/\n/old-input.inc\n/tools/tests/stale/\n",
+    )
+    .unwrap();
+    ok(&fixture.0, "git", &["add", ".gitignore"]);
+    let tree = String::from_utf8(ok(&fixture.0, "git", &["write-tree"]).stdout).unwrap();
+    xtask::snapshot::prepare(&fixture.0, tree.trim()).unwrap();
+    assert!(fs::read_to_string(snapshot.join("tools/tests/fixture.cpp"))
+        .unwrap()
+        .contains("int main"));
+    assert!(!snapshot.join("tools/tests/stale").exists());
+    assert!(!snapshot.join("old-input.inc").exists());
+    assert!(snapshot.join("target/cache-marker").exists());
+}
+
+#[test]
+fn reset_and_missing_snapshot_preserve_dependency_targets() {
+    let fixture = Fixture::new("int main() {}\n", "true");
+    let dependency = fixture.0.join("3rd_party/Src/DirectXMath/DirectXMath");
+    fs::create_dir_all(&dependency).unwrap();
+    fs::write(dependency.join("sentinel"), "keep dependency").unwrap();
+    let tree = String::from_utf8(ok(&fixture.0, "git", &["write-tree"]).stdout).unwrap();
+    let snapshot = xtask::snapshot::prepare(&fixture.0, tree.trim()).unwrap();
+    // A changed ignore rule must never cause cleanup to traverse this junction.
+    fs::write(fixture.0.join(".gitignore"), "# no dependency exclusions\n").unwrap();
+    ok(&fixture.0, "git", &["add", ".gitignore"]);
+    let tree = String::from_utf8(ok(&fixture.0, "git", &["write-tree"]).stdout).unwrap();
+    xtask::snapshot::prepare(&fixture.0, tree.trim()).unwrap();
+    xtask::snapshot::reset(&fixture.0).unwrap();
+    assert!(!snapshot.exists());
+    assert_eq!(
+        fs::read_to_string(dependency.join("sentinel")).unwrap(),
+        "keep dependency"
+    );
+    xtask::snapshot::prepare(&fixture.0, tree.trim()).unwrap();
+    // Simulate a missing checkout without deleting it or touching its links.
+    let moved = fixture.0.join("snapshot-moved");
+    fs::rename(&snapshot, &moved).unwrap();
+    xtask::snapshot::prepare(&fixture.0, tree.trim()).unwrap();
+    fs::remove_dir(moved.join("3rd_party/Src/DirectXMath/DirectXMath")).unwrap();
+    assert_eq!(
+        fs::read_to_string(dependency.join("sentinel")).unwrap(),
+        "keep dependency"
+    );
+    xtask::snapshot::reset(&fixture.0).unwrap();
+    xtask::snapshot::reset(&fixture.0).unwrap();
+}
+
+#[test]
+fn ignored_resource_input_forces_staged_validation() {
+    let fixture = Fixture::new("int main() {}\n", "true");
+    fs::create_dir_all(fixture.0.join("ogsr_engine")).unwrap();
+    fs::write(fixture.0.join("ogsr_engine/untracked.ico"), "not committed").unwrap();
+    fs::write(fixture.0.join(".gitignore"), "/target/\n*.ico\n").unwrap();
+    ok(&fixture.0, "git", &["add", ".gitignore"]);
+    let result = ok(
+        &fixture.0,
+        "git",
+        &["commit", "-m", "test: ignored resource"],
+    );
+    assert!(output_text(&result).contains("Validating staged files in"));
+    assert!(fixture.0.join("ogsr_engine/untracked.ico").exists());
+    assert!(!fixture.0.join(".git/v/ogsr_engine/untracked.ico").exists());
+}
+
+#[test]
+fn build_cannot_change_snapshot_source_and_approve_commit() {
+    let fixture = Fixture::new("int main() {}\n", "true");
+    fs::write(fixture.0.join("Fixture.vcxproj"), r#"<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="Build"><WriteLinesToFile File="tools/tests/fixture.cpp" Lines="changed by build" Overwrite="true" /></Target></Project>"#).unwrap();
+    ok(&fixture.0, "git", &["add", "Fixture.vcxproj"]);
+    fs::write(
+        fixture.0.join("tools/tests/fixture.cpp"),
+        "private working edit",
+    )
+    .unwrap();
+    Fixture::reject_at(&fixture.0, "Snapshot source changed");
+    assert_eq!(
+        fs::read_to_string(fixture.0.join("tools/tests/fixture.cpp")).unwrap(),
+        "private working edit"
+    );
 }

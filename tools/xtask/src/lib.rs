@@ -19,39 +19,35 @@ pub fn validation_lock(path: &Path) -> io::Result<File> {
     Ok(file)
 }
 
-/// Read only the solution's configuration table, not project-level mappings.
-pub fn has_solution_configuration(solution: &str, configuration: &str) -> bool {
-    let expected = format!("{configuration}|x64");
-    let mut in_configurations = false;
-    for line in solution.lines().map(str::trim) {
-        if line.starts_with("GlobalSection(SolutionConfigurationPlatforms)") {
-            in_configurations = true;
-        } else if line == "EndGlobalSection" {
-            in_configurations = false;
-        } else if in_configurations
-            && line
-                .split_once('=')
-                .is_some_and(|(key, value)| key.trim() == expected && value.trim() == expected)
-        {
-            return true;
-        }
-    }
-    false
-}
-
 #[cfg(test)]
 mod tests {
-    use super::has_solution_configuration;
-
+    use super::snapshot::is_build_input;
     #[test]
-    fn configuration_requires_a_solution_entry() {
-        let mapping = "GlobalSection(ProjectConfigurationPlatforms) = postSolution\nReleaseTracyProfiler|x64 = ReleaseTracyProfiler|x64\nEndGlobalSection";
-        assert!(!has_solution_configuration(mapping, "ReleaseTracyProfiler"));
-        let configurations = "GlobalSection(SolutionConfigurationPlatforms) = preSolution\n  ReleaseTracyProfiler|x64 = ReleaseTracyProfiler|x64\nEndGlobalSection";
-        assert!(has_solution_configuration(
-            configurations,
-            "ReleaseTracyProfiler"
+    fn build_roots_include_resources_but_exclude_known_outputs() {
+        for path in [
+            "ogsr_engine/new.ico",
+            "ogsr_engine/new.manifest",
+            "ogsr_engine/new.hlsl",
+            "ogsr_engine/new.inc",
+            "tools/fixture/data.md",
+            "tools/new.py",
+            "tools/fixture/ leading space.inc",
+        ] {
+            assert!(is_build_input(path), "{path}");
+        }
+        for path in [
+            "notes.txt",
+            "build.log",
+            "target/a.rs",
+            "ogsr_engine/_TEMP/generated.cpp",
+            "3rd_party/Src/DirectXMath/DirectXMath/source.h",
+            "tools/tests/scheduler/build/CMakeCache.txt",
+            "tools/__pycache__/a.pyc",
+        ] {
+            assert!(!is_build_input(path), "{path}");
+        }
+        assert!(is_build_input(
+            "3rd_party/Src/DirectXMath/DirectXMath-extra/source.h"
         ));
-        assert!(!has_solution_configuration(configurations, "Release"));
     }
 }

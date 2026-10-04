@@ -25,16 +25,16 @@ jobs:
       run: |
         ${{ github.workspace }}/Update_Components.cmd
 
-    - name: Setup Rust
-      shell: pwsh
-      run: |
-        rustup toolchain install 1.99.0 --profile minimal --component rustfmt
-        rustup override set 1.99.0
-    - name: Validate source tests
-      shell: pwsh
-      run: cargo xtask validate --tests-only
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v3
+    - name: Setup Rust
+      if: matrix.Configuration == 'Release'
+      shell: pwsh
+      run: rustup show active-toolchain
+    - name: Validate source tests
+      if: matrix.Configuration == 'Release'
+      shell: pwsh
+      run: cargo xtask validate --tests-only
     - name: MSBuild
       shell: cmd
       run: |

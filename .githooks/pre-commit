@@ -4,4 +4,8 @@ if [ ! -f tools/xtask/Cargo.toml ]; then
     echo 'Local validation is required. Bring the validation infrastructure onto this branch before committing.' >&2
     exit 1
 fi
+if ! command -v cargo >/dev/null 2>&1; then
+    echo 'Local validation needs cargo on PATH. Install rustup and restart your Git client.' >&2
+    exit 1
+fi
 exec cargo xtask pre-commit
