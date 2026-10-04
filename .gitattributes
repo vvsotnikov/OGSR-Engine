@@ -1,4 +1,5 @@
 # Custom
+.githooks/* text eol=lf
 *.script text=crlf linguist-language=Lua
 *.ltx    text=crlf linguist-language=INI
 *.puddles text=crlf linguist-language=INI
