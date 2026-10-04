@@ -8,7 +8,7 @@ if (Test-Path -LiteralPath $InstallRoot) { throw 'Use a new validation directory
 $sourcePackage = Join-Path $BaselineRoot $Package
 . "$PSScriptRoot/ValidationPackage.ps1"
 $build = Read-ValidationPackage "$sourcePackage/xrEngine.exe"
-if ($build.sourcePatch) { throw 'Expected a clean non-Tracy Release package' }
+if ($build.sourcePatch) { throw 'Expected an unpatched package (build.json has sourcePatch)' }
 New-Item -ItemType Directory $InstallRoot | Out-Null
 # Read-only game archives share storage. Loose resources/scripts are private copies.
 foreach ($archive in Get-ChildItem $BaselineRoot -File -Filter 'gamedata.db*') {
@@ -23,5 +23,5 @@ Copy-Item $sourcePackage "$InstallRoot/$Package" -Recurse
 $bootstrap = [IO.File]::ReadAllText("$PSScriptRoot/RegularBootstrap.lua")
 [IO.File]::AppendAllText("$InstallRoot/gamedata/scripts/_g.script", "`n"+$bootstrap, [Text.Encoding]::ASCII)
 @{sourceRoot=$BaselineRoot; sourceScriptSha256=(Get-FileHash "$BaselineRoot/gamedata/scripts/_g.script").Hash;
-  engineSha256=(Get-FileHash "$sourcePackage/xrEngine.exe").Hash; bootstrapSha256=(Get-FileHash "$PSScriptRoot/RegularBootstrap.lua").Hash} |
+  engineSha256=$build.sha256; bootstrapSha256=(Get-FileHash "$PSScriptRoot/RegularBootstrap.lua").Hash} |
     ConvertTo-Json | Set-Content "$InstallRoot/setup.json" -Encoding utf8
