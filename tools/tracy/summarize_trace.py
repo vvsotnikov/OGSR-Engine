@@ -1,4 +1,4 @@
-"""Summarize TraceSummary TSV output; retain durations in the selected window."""
+"""Summarize CPU trace TSV output; retain durations in the selected window."""
 import argparse
 import csv
 from array import array
@@ -29,7 +29,7 @@ def summarize(prefix, start, end):
             raise ValueError('Unexpected frame schema')
         for line in stream:
             index, timestamp, duration = map(int, line.split('\t'))
-            if index >= 2 and duration > 0 and timestamp >= lower and timestamp + duration <= upper:
+            if duration > 0 and timestamp >= lower and timestamp + duration <= upper:
                 frames.append(duration / 1e6)
     if not frames:
         raise ValueError('No complete frames in selected window')
@@ -37,18 +37,18 @@ def summarize(prefix, start, end):
     threads = defaultdict(set)
     with open(prefix + '-zones.tsv', encoding='utf-8', newline='') as stream:
         reader = csv.reader(stream, delimiter='\t')
-        if next(reader) != ['name', 'start_ns', 'duration_ns', 'thread_slot']:
+        if next(reader) != ['name', 'start_ns', 'duration_ns', 'thread_id', 'thread_name']:
             raise ValueError('Unexpected zone schema')
-        for name, timestamp, duration, thread in reader:
+        for name, timestamp, duration, thread, thread_name in reader:
             timestamp, duration = int(timestamp), int(duration)
             if duration >= 0 and timestamp >= lower and timestamp + duration <= upper:
                 zones[name].append(duration / 1e6)
-                threads[name].add(int(thread))
+                threads[name].add((int(thread), thread_name))
     return dict(startSeconds=start, endSeconds=end,
-                selection='Complete events in window; first two frame markers excluded. Inclusive and parallel zone times are not additive.',
+                selection='Complete events in window. Inclusive and parallel zone times are not additive.',
                 percentileMethod='nearest rank', frames=statistics(frames),
-                zonesInclusive=[dict(name=name, timing=statistics(values), threadSlots=sorted(threads[name]))
-                                for name, values in zones.items()])
+                zonesInclusive=[dict(name=name, timing=statistics(values), threads=[dict(id=tid, name=tname) for tid, tname in sorted(threads[name])])
+                                for name, values in sorted(zones.items(), key=lambda item: math.fsum(item[1]), reverse=True)])
 
 
 if __name__ == '__main__':
@@ -57,7 +57,10 @@ if __name__ == '__main__':
     parser.add_argument('start', type=float)
     parser.add_argument('end', type=float)
     args = parser.parse_args()
-    result = summarize(args.prefix, args.start, args.end)
-    with open(args.prefix + '-stream-summary.json', 'w', encoding='utf-8') as stream:
+    try:
+        result = summarize(args.prefix, args.start, args.end)
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
+    with open(args.prefix + '-summary.json', 'w', encoding='utf-8') as stream:
         json.dump(result, stream, indent=2, allow_nan=False)
     print(json.dumps(result['frames']))

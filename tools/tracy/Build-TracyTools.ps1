@@ -27,16 +27,16 @@ foreach ($header in @('TracyVersion.hpp', 'TracyProtocol.hpp', 'TracyQueue.hpp')
         throw "Embedded Tracy differs in $header; review compatibility before building."
     }
 }
-foreach ($tool in @('capture', 'csvexport')) {
+foreach ($tool in @('capture')) {
     Invoke-Checked $CMake @('--fresh', '-S', "$source/$tool", '-B', "$ToolRoot/build-$tool", '-G', $Generator, '-A', 'x64', "-DCPM_SOURCE_CACHE=$ToolRoot/.cpm-cache")
     Invoke-Checked $CMake @('--build', "$ToolRoot/build-$tool", '--config', 'Release', '--parallel', $Jobs)
 }
 $bin = New-Item -ItemType Directory -Force (Join-Path $ToolRoot 'bin')
-foreach ($tool in @('capture', 'csvexport')) {
+foreach ($tool in @('capture')) {
     Copy-Item "$ToolRoot/build-$tool/Release/tracy-$tool.exe" $bin.FullName
 }
-Invoke-Checked $CMake @('--fresh', '-S', $PSScriptRoot, '-B', "$ToolRoot/build-summary", '-G', $Generator, '-A', 'x64', "-DTRACY_SOURCE=$source", "-DCPM_SOURCE_CACHE=$ToolRoot/.cpm-cache")
-Invoke-Checked $CMake @('--build', "$ToolRoot/build-summary", '--config', 'Release', '--target', 'ogsr-trace-summary', '--parallel', $Jobs)
-Copy-Item "$ToolRoot/build-summary/Release/ogsr-trace-summary.exe" $bin.FullName
+Invoke-Checked $CMake @('--fresh', '-S', $PSScriptRoot, '-B', "$ToolRoot/build-export", '-G', $Generator, '-A', 'x64', "-DTRACY_SOURCE=$source", "-DCPM_SOURCE_CACHE=$ToolRoot/.cpm-cache")
+Invoke-Checked $CMake @('--build', "$ToolRoot/build-export", '--config', 'Release', '--target', 'ogsr-trace-export', '--parallel', $Jobs)
+Copy-Item "$ToolRoot/build-export/Release/ogsr-trace-export.exe" $bin.FullName
 @{ source = 'https://github.com/wolfpld/tracy'; revision = $revision; compatibilityHeaders = @('TracyVersion.hpp', 'TracyProtocol.hpp', 'TracyQueue.hpp') } |
     ConvertTo-Json | Set-Content "$ToolRoot/tools.json" -Encoding utf8
