@@ -10,11 +10,13 @@ struct SliceIterator
     std::map<int, int> m_objects{{1, 0}, {2, 0}, {3, 0}};
     _iterator cursor = m_objects.begin();
     bool m_first_update = false;
-    bool expired = true;
+    struct Clock { float elapsed = 1; float GetElapsed_sec() const { return elapsed; } } m_timer;
+    float m_max_process_time = 0;
+    bool use_time_limit = true;
     unsigned m_cycle_count = 0;
     bool empty() const { return m_objects.empty(); }
     void start_timer() {}
-    bool time_over() const { return expired && !m_first_update; }
+    bool time_over();
     _iterator& next() { return cursor; }
     void update_next() { if (++cursor == m_objects.end()) cursor = m_objects.begin(); }
     template <typename Predicate> u32 update(const Predicate&);
@@ -33,11 +35,13 @@ int main()
         if (iterator.update(predicate) != 1) return 1;
     for (const auto& entry : iterator.m_objects)
         if (entry.second == 0) return 2;
-    iterator.expired = false;
+    iterator.m_max_process_time = 2;
     if (iterator.update(predicate) != 3) return 3;
-    iterator.expired = true;
+    iterator.m_max_process_time = 0;
     iterator.m_first_update = true;
     if (iterator.update(predicate) != 3) return 4;
+    iterator.use_time_limit = false;
+    if (iterator.update(predicate) != 3) return 6;
     iterator.m_objects.clear();
     if (iterator.update(predicate) != 0) return 5;
 }

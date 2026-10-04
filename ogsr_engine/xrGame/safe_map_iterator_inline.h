@@ -100,7 +100,7 @@ IC u32 CSSafeMapIterator::update(const _update_predicate& predicate)
     ++m_cycle_count;
     _iterator I = next();
     VERIFY(I != m_objects.end());
-    // Even an exhausted budget must advance the cursor once; tiny budgets cannot starve switching.
+    // Always advance at least once per slice, even with an exhausted budget.
     u32 i = 0;
     for (; (I != m_objects.end()) && (i == 0 || !time_over()) && predicate(I, m_cycle_count, true); ++i)
     {
