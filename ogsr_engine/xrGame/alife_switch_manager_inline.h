@@ -38,7 +38,7 @@ IC void CALifeSwitchManager::set_switch_distance(float switch_distance)
 {
     if (m_whole_map_online && !m_distance_override_reported)
     {
-        Msg("* ALife whole-map policy: new switch_distance is stored but does not control switching");
+        Msg("* ALife whole-map policy: switch distance/factor changes are stored but does not control switching");
         m_distance_override_reported = true;
     }
     m_switch_distance = switch_distance;

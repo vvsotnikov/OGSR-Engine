@@ -31,6 +31,18 @@ assert(selected == 1, "Probe did not select farthest vertex")
 assert(not probe())
 object.position=position(24) -- Outside actual 22m gate, within the placement margin.
 clock=16000;assert(probe(), "Placement margin was incorrectly used as the gate")
-object.position=position(21);assert(not pcall(probe), "Crossing actual gate must invalidate the probe")
+object.position=position(21)
+local ok, err = pcall(probe)
+assert(not ok and string.find(err, "actual distance gate"), "Crossing actual gate must invalidate the probe")
 
-
+clock=0
+local distance_probe = dofile(root .. "/PolicyProbe.lua")(function() return clock end,"distance")
+object.online=false
+assert(not distance_probe())
+clock=16000;assert(distance_probe(), "Distance policy did not accept an offline probe")
+clock=0
+local timeout_probe = dofile(root .. "/PolicyProbe.lua")(function() return clock end,"distance")
+assert(not timeout_probe()) -- Mock remains online, so the distance control never settles.
+clock=30000
+ok, err = pcall(timeout_probe)
+assert(not ok and string.find(err, "timed out"), "Unsettled probe must time out")

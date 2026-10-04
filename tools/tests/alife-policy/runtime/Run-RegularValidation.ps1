@@ -14,8 +14,10 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/ValidationLog.ps1"
+. "$PSScriptRoot/ValidationPackage.ps1"
 $engine = Join-Path $InstallRoot "$Package/xrEngine.exe"
 if (!(Test-Path $engine) -or !(Test-Path "$InstallRoot/$Package/build.json")) { throw "Missing package or manifest: $engine" }
+$build = Read-ValidationPackage $engine
 if ($Mode -eq 'distance' -and $Eligibility) { throw 'Eligibility fixture requires whole-map mode' }
 if ($Transitions -and ($Count -ne 0 -or $Eligibility -or $SaveSnapshot -or $VerifySession)) { throw 'Transition fixture must run by itself' }
 $session = & "$PSScriptRoot/Prepare-Session.ps1" -InstallRoot $InstallRoot `
@@ -23,7 +25,7 @@ $session = & "$PSScriptRoot/Prepare-Session.ps1" -InstallRoot $InstallRoot `
 $path = Join-Path $session 'session.json'
 $meta = Get-Content -Raw $path | ConvertFrom-Json
 $meta.engineSha256 = (Get-FileHash $engine).Hash
-$meta.build = Get-Content -Raw "$InstallRoot/$Package/build.json" | ConvertFrom-Json
+$meta.build = $build
 $meta.package = $Package
 $meta | Add-Member distanceControl ([bool]$DistanceControl)
 $meta | Add-Member eligibilityRequested ([bool]$Eligibility)
