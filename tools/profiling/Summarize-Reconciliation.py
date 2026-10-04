@@ -11,8 +11,8 @@ from pathlib import Path
 
 pattern = re.compile(
     r'\[ALife reconcile\] frame=(\d+) update=(\d+) sampled=([01]) spike=([01]) '
-    r'suppressed=(\d+) objects=(\d+) budget_ms=(-?[\d.]+) total_ms=([\d.]+) '
-    r'before_ms=([\d.]+) try_offline_ms=([\d.]+) try_online_ms=([\d.]+) after_ms=([\d.]+)'
+    r'suppressed=(\d+) objects=(\d+) budget_ms=(-?\d+(?:\.\d+)?) total_ms=(\d+(?:\.\d+)?) '
+    r'before_ms=(\d+(?:\.\d+)?) try_offline_ms=(\d+(?:\.\d+)?) try_online_ms=(\d+(?:\.\d+)?) after_ms=(\d+(?:\.\d+)?)\s*$'
 )
 names = ['frame', 'update', 'sampled', 'spike', 'suppressed', 'objects',
          'budget', 'total', 'before', 'try_offline', 'try_online', 'after']
@@ -27,14 +27,18 @@ def stats(values):
                 p95=ordered[math.ceil(len(values) * .95) - 1], max=ordered[-1])
 
 
-def summarize(log_path, first_frame=0, last_frame=None):
+def summarize(log_path, first_frame=0, last_frame=None, skip_malformed=False):
     samples, spikes = [], []
     suppressed = 0
+    malformed = 0
     for line in log_path.read_text(encoding='utf-8', errors='replace').splitlines():
         if '[ALife reconcile]' not in line:
             continue
         match = pattern.search(line)
         if not match:
+            if skip_malformed:
+                malformed += 1
+                continue
             raise ValueError('Unsupported or malformed reconciliation line')
         row = dict(zip(names, [int(v) if i < 6 else float(v)
                               for i, v in enumerate(match.groups())]))
@@ -53,7 +57,7 @@ def summarize(log_path, first_frame=0, last_frame=None):
         raise ValueError('No reconciliation records in requested range')
     return dict(
         sampledUpdates=len(samples), frameRange=[first_frame, last_frame],
-        suppressedSpikes=suppressed,
+        suppressedSpikes=suppressed, malformedLines=malformed,
         objectsPerSample=stats([r['objects'] for r in samples]),
         sampledMilliseconds={key: stats([r[key] for r in samples]) for key in names[7:]},
         loggedUpdateSpikes=spikes,
@@ -61,7 +65,8 @@ def summarize(log_path, first_frame=0, last_frame=None):
             'Records cover update_switch invocations, not necessarily full traversals. '
             'The budget is the effective iterator limit; -1 means unlimited. '
             'Suppressed counts cover preceding reporting intervals, which may straddle '
-            'frame limits; an unreported final interval is absent. Logging and population '
+            'frame limits; an unreported final interval is absent. Malformed lines are counted '
+            'across the whole log. Logging and population '
             'inventory add cost outside these totals. No unsampled mean is available.'
         ),
     )
@@ -72,5 +77,7 @@ if __name__ == '__main__':
     parser.add_argument('log', type=Path)
     parser.add_argument('--first-frame', type=int, default=0)
     parser.add_argument('--last-frame', type=int)
+    parser.add_argument('--skip-malformed', action='store_true',
+                        help='Skip and count unparseable records, for truncated crash logs')
     args = parser.parse_args()
-    print(json.dumps(summarize(args.log, args.first_frame, args.last_frame), indent=2, allow_nan=False))
+    print(json.dumps(summarize(args.log, args.first_frame, args.last_frame, args.skip_malformed), indent=2, allow_nan=False))

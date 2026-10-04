@@ -123,7 +123,7 @@ void CALifeUpdateManager::update()
     m_metrics_switch_ms += timer.GetElapsed_sec() * 1000.0;
     timer.Start();
     update_scheduled(false);
-    m_metrics_scheduled_ms += timer.GetElapsed_sec() * 1000.0;
+    m_metrics_offline_scheduled_ms += timer.GetElapsed_sec() * 1000.0;
     ++m_metrics_updates;
     if (Device.dwTimeGlobal - m_metrics_time >= 1000)
         report_metrics();
@@ -158,19 +158,19 @@ void CALifeUpdateManager::report_metrics()
         }
     }
     Msg("[ALife metrics] game_ms=%u level=%u online=%u offline=%u living_online=%u living_offline=%u "
-        "online_switches=%llu offline_switches=%llu updates=%u switch_ms=%.3f scheduled_ms=%.3f",
+        "online_switches=%llu offline_switches=%llu updates=%u switch_ms=%.3f offline_scheduled_ms=%.3f",
         Device.dwTimeGlobal, u32(graph().level().level_id()), online, offline, living_online, living_offline,
-        m_online_switches, m_offline_switches, m_metrics_updates, m_metrics_switch_ms, m_metrics_scheduled_ms);
+        m_online_switches, m_offline_switches, m_metrics_updates, m_metrics_switch_ms, m_metrics_offline_scheduled_ms);
     TracyPlot("ALife/engine frame", int64_t(Device.dwFrame));
     TracyPlot("ALife/online objects", int64_t(online));
     TracyPlot("ALife/living online", int64_t(living_online));
     TracyPlot("ALife/living offline", int64_t(living_offline));
     TracyPlot("ALife/switch ms per sample", m_metrics_switch_ms);
-    TracyPlot("ALife/scheduled ms per sample", m_metrics_scheduled_ms);
+    TracyPlot("ALife/offline scheduled ms per sample", m_metrics_offline_scheduled_ms);
     m_metrics_time = Device.dwTimeGlobal;
     m_metrics_updates = 0;
     m_metrics_switch_ms = 0;
-    m_metrics_scheduled_ms = 0;
+    m_metrics_offline_scheduled_ms = 0;
 }
 
 void CALifeUpdateManager::shedule_Update(u32 dt)

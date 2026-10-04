@@ -14,7 +14,7 @@ struct CALifeUpdateManager
 {
     bool m_alife_metrics = false;
     std::uint32_t m_metrics_time = 0, m_metrics_updates = 0, m_metrics_samples = 0;
-    double m_metrics_switch_ms = 0, m_metrics_scheduled_ms = 0;
+    double m_metrics_switch_ms = 0, m_metrics_offline_scheduled_ms = 0;
     unsigned switches = 0, scheduled = 0;
     std::vector<unsigned> reported_updates;
     void update_switch() { ++switches; }
@@ -25,7 +25,7 @@ struct CALifeUpdateManager
         ++m_metrics_samples;
         m_metrics_time = Device.dwTimeGlobal;
         m_metrics_updates = 0;
-        m_metrics_switch_ms = m_metrics_scheduled_ms = 0;
+        m_metrics_switch_ms = m_metrics_offline_scheduled_ms = 0;
     }
     void update();
 };

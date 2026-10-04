@@ -297,7 +297,7 @@ void CALifeSwitchManager::finish_reconciliation(double elapsed_ms, double budget
     if (!m_reconcile_metrics) { m_reconcile_sample = false; return; }
     const bool spike = elapsed_ms >= reconcile_spike_ms;
     const bool report_spike = spike && Device.dwTimeGlobal - m_last_reconcile_spike_log >= reconcile_spike_log_interval_ms;
-    if (m_reconcile_metrics && (m_reconcile_sample || report_spike))
+    if (m_reconcile_sample || report_spike)
     {
         if (report_spike) m_last_reconcile_spike_log = Device.dwTimeGlobal;
         Msg("[ALife reconcile] frame=%u update=%u sampled=%u spike=%u suppressed=%u objects=%u budget_ms=%.6f total_ms=%.6f before_ms=%.6f try_offline_ms=%.6f try_online_ms=%.6f after_ms=%.6f",

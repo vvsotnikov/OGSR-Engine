@@ -1,48 +1,58 @@
 # A-Life diagnostics
 
-Launch the engine with `-alife_metrics` for population counts, cumulative online/offline switch
-counts and update timings, or `-alife_reconcile_metrics` for update totals and stage
-samples every 64 updates. `-alife_diagnostics` adds a periodic offline-object inventory
-only when population metrics are enabled. Exclude inventory runs from timing comparisons.
-No diagnostics flags means no metric timers, counters or registry scans.
+## Collection
 
-Metrics describe work accumulated during a reporting interval, not a CPU utilization
-percentage. Each record covers one cursor update; `objects` counts visits, not
-necessarily the population. `budget_ms` is the limit actually compared by the
-iterator, expressed in milliseconds; -1 denotes an unlimited first update.
-The effective limit may differ from the configured duration; diagnostics report
-the value actually used by the iterator. Sampling consumes that same allowance
-and can reduce the number of objects visited when the budget applies.
-One slow object can exceed the budget. Stage timers add observer overhead.
-`try_offline_ms` times dispatch for objects online after location synchronization,
-including virtual maintenance; `try_online_ms` starts from offline objects.
-Unsampled spike records are limited to one per second; sampled updates are still
-reported every 64 updates. Each emitted record counts spikes suppressed since the previous record. A final
-unreported interval can still contain suppressed spikes.
+Use `-alife_metrics` for population counts, cumulative online/offline switch
+counts and interval timings. `-alife_reconcile_metrics` reports update totals
+and stage samples every 64 calls. `-alife_diagnostics` adds an offline-object
+inventory only with population metrics; exclude those runs from timing comparisons.
+Without diagnostics flags, no metric timers, counters or registry scans run.
 
-Frame/time reads and counter updates rely on the engine's frame phases: FrameMove
-and its gameplay callbacks precede seqParallel, which is joined before the next
-FrameMove. A-Life work and network processing in that worker are sequential. These
-counters do not make concurrent world mutation safe; moving A-Life onto an independent
-worker would require synchronization of the registries as well as the counters.
+`update=` counts every `update_switch` call, including loading calls outside
+`CALifeUpdateManager::update()`. It therefore differs from the population log's
+`updates=` interval counter. A record's `objects` counts visits, not necessarily
+the population. `budget_ms` is the limit actually compared with the iterator's
+seconds clock, expressed in milliseconds; -1 means an unlimited first update.
 
-Population scans and log output cost time outside the reported switching stages.
-Stage timings preserve the existing callback order.
+`offline_scheduled_ms` measures server-side offline A-Life updates. Online
+objects leave that schedule registry: client AI, planners, visibility and
+`shedule_Update`/`UpdateCL` costs are not included. Use the existing scheduler and
+stalker Tracy scopes for those costs. Moving more NPCs online can reduce these
+server-side timings while increasing total frame time.
 
-Configure `tools/tests/alife-metrics` with CMake, build and run CTest for the extracted
-production-method fixtures (Python 3 and C++17 required).
+Stage timers add overhead inside the measured update. Population scans and log
+output cost time outside the switching-stage totals. Timings are accumulated
+work over a reporting interval, not CPU-utilization percentages.
+`try_offline_ms` times virtual dispatch for objects online after location sync;
+`try_online_ms` starts from offline objects. Switch counters include calls where
+registry updates are disabled, so they need not equal registry-size changes.
+
+The first spike reports immediately. Extra unsampled spike records are limited
+to one per second; sampled records still report every 64 calls. `suppressed`
+counts spikes since the previous record. A final unreported interval can still
+contain suppressed spikes. Unsampled stage zeros are placeholders.
+
+Counter access relies on the engine's frame phases: FrameMove precedes
+seqParallel, which is joined before the next FrameMove. A-Life and network work
+in that worker are sequential; load-time calls also occur on the main thread.
+These counters do not make concurrent world mutation safe.
+
+## Reading logs and traces
 
 `python Summarize-Reconciliation.py <xray.log> [--first-frame N --last-frame N]`
-reads the emitted log directly. Frame limits are inclusive and optional. It rejects
-old or malformed metric formats rather than silently treating missing data as zero.
-Build a tracing engine with `MSBuild Engine.sln /p:Configuration=ReleaseTracyProfiler
-/p:Platform=x64` (one command); ordinary Release omits tracing overhead.
-Tracy builds include `Level/client spawn` and `Level/client spawn batch` zones
-to distinguish client construction from server reconciliation and ongoing AI work.
-The batch includes the nested per-object scopes, so their times are not additive.
-These compile out of ordinary Release builds.
+reads the log directly. Frame limits are inclusive. The default rejects malformed
+or obsolete formats; `--skip-malformed` can recover complete records from a
+truncated crash log and reports the skipped-line count for the whole file.
+Suppression intervals may straddle a requested frame range.
 
-The `ALife/engine frame` plot records a frame anchor for every emitted
-reconciliation record, and once per population-report interval with `-alife_metrics`.
-Use it when joining runtime evidence to Tracy; do not assume capture indices equal
-engine frame numbers, especially around loading and late collector connections.
+Build tracing with `MSBuild Engine.sln /p:Configuration=ReleaseTracyProfiler
+/p:Platform=x64` (one command). The nested `Level/client spawn` and
+`Level/client spawn batch` scopes include client construction; their times are
+not additive. These scopes compile out of Release builds.
+
+The `ALife/engine frame` plot records an anchor for every emitted reconciliation
+record and once per population-report interval. Capture frame indices are not
+engine frame numbers, especially during loading or late collector connections.
+
+Configure `tools/tests/alife-metrics` with CMake, build and run CTest (Python 3
+and C++17 required). The production log emitter is also passed through the reader.

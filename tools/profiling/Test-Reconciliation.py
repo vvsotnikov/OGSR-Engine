@@ -15,11 +15,11 @@ SPIKE = ('[ALife reconcile] frame=101 update=65 sampled=0 spike=1 suppressed=3 o
 
 
 class Evidence(unittest.TestCase):
-    def summarize(self, text, *frames):
+    def summarize(self, text, *frames, **options):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'engine.log'
             path.write_text(text)
-            return probe.summarize(path, *frames)
+            return probe.summarize(path, *frames, **options)
 
     def test_samples_and_reporting_intervals(self):
         result = self.summarize(SAMPLE + SPIKE)
@@ -33,6 +33,14 @@ class Evidence(unittest.TestCase):
         self.assertEqual(result['suppressedSpikes'], 3)
         with self.assertRaisesRegex(ValueError, 'No reconciliation'):
             self.summarize(SAMPLE, 101)
+
+    def test_opt_in_truncated_log(self):
+        truncated = '[ALife reconcile] frame=102 update='
+        result = self.summarize(SAMPLE + truncated, skip_malformed=True)
+        self.assertEqual(result['sampledUpdates'], 1)
+        self.assertEqual(result['malformedLines'], 1)
+        with self.assertRaisesRegex(ValueError, 'No reconciliation'):
+            self.summarize(truncated, skip_malformed=True)
 
     def test_invalid_stages_and_format(self):
         for bad, error in [

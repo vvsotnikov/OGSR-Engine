@@ -17,7 +17,7 @@ struct Candidate
 {
 #include "log-constants.inc"
     bool m_reconcile_metrics = false, m_reconcile_sample = false;
-    u32 m_reconcile_updates = 0, m_last_reconcile_spike_log = 0, m_suppressed_spikes = 0;
+    u32 m_reconcile_updates = 0, m_suppressed_spikes = 0;
     double m_reconcile_stage_ms[4] = {};
     void begin_reconciliation();
     void finish_reconciliation(double, double, u32);
@@ -36,18 +36,18 @@ int main(int argc, char** argv)
     if (records || manager.m_reconcile_updates || manager.m_suppressed_spikes) return 2;
     manager.m_reconcile_metrics = true;
     update(0, 20);
-    if (records || manager.m_suppressed_spikes != 1) return 3;
+    if (records != 1 || manager.m_suppressed_spikes) return 3;
     update(1000, 12);
-    if (records != 1 || manager.m_suppressed_spikes) return 4;
+    if (records != 2 || manager.m_suppressed_spikes) return 4;
     update(1100, 11);
-    if (records != 1 || manager.m_suppressed_spikes != 1) return 5;
+    if (records != 2 || manager.m_suppressed_spikes != 1) return 5;
     manager.m_reconcile_updates = Candidate::reconcile_stage_cadence - 1;
     update(1200, 2);
-    if (records != 2 || manager.m_suppressed_spikes || manager.m_reconcile_sample) return 6;
+    if (records != 3 || manager.m_suppressed_spikes || manager.m_reconcile_sample) return 6;
     update(std::numeric_limits<u32>::max() - 200, 20);
     update(500, 20);
-    if (records != 3 || manager.m_suppressed_spikes != 1) return 7;
+    if (records != 4 || manager.m_suppressed_spikes != 1) return 7;
     update(800, 20);
-    if (records != 4 || manager.m_suppressed_spikes || anchors != records) return 8;
+    if (records != 5 || manager.m_suppressed_spikes || anchors != records) return 8;
     return std::fflush(stdout) == 0 ? 0 : 9;
 }

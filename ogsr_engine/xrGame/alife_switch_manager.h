@@ -27,7 +27,7 @@ protected:
     u32 m_reconcile_updates = 0;
     u32 m_suppressed_spikes = 0;
     double m_reconcile_stage_ms[4] = {};
-    u32 m_last_reconcile_spike_log = 0;
+    u32 m_last_reconcile_spike_log = u32(0) - reconcile_spike_log_interval_ms;
     u64 m_online_switches = 0;
     u64 m_offline_switches = 0;
 

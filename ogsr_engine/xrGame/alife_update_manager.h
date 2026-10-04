@@ -25,7 +25,7 @@ private:
     u32 m_metrics_updates = 0;
     u32 m_metrics_samples = 0;
     double m_metrics_switch_ms = 0;
-    double m_metrics_scheduled_ms = 0;
+    double m_metrics_offline_scheduled_ms = 0;
     void report_metrics();
 
 protected:
