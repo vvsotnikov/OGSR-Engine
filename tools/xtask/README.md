@@ -26,8 +26,7 @@ Windows/MSVC and test failures against real disposable Git repositories.
 Failed fixtures print their retained directory for diagnosis.
 
 Validation uses the engine's existing MSBuild configuration and output paths.
-Release and Tracy run sequentially; with shared output paths, switching variants
-recompiles affected objects. A partial commit, or untracked
+Release and Tracy run sequentially and reuse their respective build caches. A partial commit, or untracked
 source/tooling that could enter a build, uses a persistent detached worktree of
 the Git index instead. Its separate cache is cold on first use. The hook does
 not stash, overwrite, or clean the developer's working files. Unrelated scratch
