@@ -1,7 +1,7 @@
 // Microsoft Visual C++ generated resource script.
 //
 #include "resource.h"
-#include "ogsr_build_info.hpp"
+#include <ogsr_variant_build_info.hpp>
 
 #define APSTUDIO_READONLY_SYMBOLS
 #include "winres.h"

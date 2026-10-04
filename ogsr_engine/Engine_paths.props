@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <OgsrBuildVariant>$(Configuration)</OgsrBuildVariant>
+    <OgsrBuildVariant Condition="'$(Configuration)'=='Release' and '$(CONFIGURATION_GA)'=='ReleaseTracyProfiler'">ReleaseTracyProfiler</OgsrBuildVariant>
+    <OgsrEngineLibraryDir>$(SolutionDir)\ogsr_engine\_LIB\Engine\$(OgsrBuildVariant)\$(Platform)\</OgsrEngineLibraryDir>
+    <OgsrEngineIntermediateDir>$(SolutionDir)\ogsr_engine\_TEMP\Engine\$(OgsrBuildVariant)\$(Platform)\$(ProjectName)\</OgsrEngineIntermediateDir>
+    <OgsrEngineBinaryDir>$(SolutionDir)\bin_$(PlatformShortName)\</OgsrEngineBinaryDir>
+    <OgsrEngineBinaryDir Condition="'$(OgsrBuildVariant)'=='ReleaseTracyProfiler'">$(SolutionDir)\bin_$(PlatformShortName)_tracy\</OgsrEngineBinaryDir>
+    <OgsrEngineBinaryDir Condition="'$(Configuration)'=='Debug'">$(SolutionDir)\bin_$(PlatformShortName)_debug\</OgsrEngineBinaryDir>
+  </PropertyGroup>
+</Project>

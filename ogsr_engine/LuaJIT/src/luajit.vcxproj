@@ -45,15 +45,6 @@
 			copy /Y "..\bin\$(PlatformShortName)\LuaJIT.dll" "$(OutDir)LuaJIT.dll"
 			copy /Y "..\bin\$(PlatformShortName)\LuaJIT.pdb" "$(OutDir)LuaJIT.pdb"
 		)
-
-		if not exist "$(OutDir)..\ogsr_engine\_LIB\Engine\$(Configuration)\$(Platform)\*.*" (
-			md "$(OutDir)..\ogsr_engine\_LIB\Engine\$(Configuration)\$(Platform)\"
-		)
-
-		copy /Y "..\bin\$(PlatformShortName)\LuaJIT.lib" "$(OutDir)..\ogsr_engine\_LIB\Engine\$(Configuration)\$(Platform)\LuaJIT.lib"
-		if exist "..\bin\$(PlatformShortName)\LuaJIT.exp" (
-			copy /Y "..\bin\$(PlatformShortName)\LuaJIT.exp" "$(OutDir)..\ogsr_engine\_LIB\Engine\$(Configuration)\$(Platform)\LuaJIT.exp"
-		)
 	</NMakeBuildCommandLine>
     <NMakeReBuildCommandLine>
 		RD /S/Q ..\bin
@@ -67,19 +58,14 @@
 			copy /Y "..\bin\$(PlatformShortName)\LuaJIT.dll" "$(OutDir)LuaJIT.dll"
 			copy /Y "..\bin\$(PlatformShortName)\LuaJIT.pdb" "$(OutDir)LuaJIT.pdb"
 		)
-
-		if not exist "$(OutDir)..\ogsr_engine\_LIB\Engine\$(Configuration)\$(Platform)\*.*" (
-			md "$(OutDir)..\ogsr_engine\_LIB\Engine\$(Configuration)\$(Platform)\"
-		)
-
-		copy /Y "..\bin\$(PlatformShortName)\LuaJIT.lib" "$(OutDir)..\ogsr_engine\_LIB\Engine\$(Configuration)\$(Platform)\LuaJIT.lib"
-		if exist "..\bin\$(PlatformShortName)\LuaJIT.exp" (
-			copy /Y "..\bin\$(PlatformShortName)\LuaJIT.exp" "$(OutDir)..\ogsr_engine\_LIB\Engine\$(Configuration)\$(Platform)\LuaJIT.exp"
-		)
 	</NMakeReBuildCommandLine>
     <NMakeCleanCommandLine>RD /S/Q ..\bin</NMakeCleanCommandLine>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="CopyLuaJITLibrary" AfterTargets="Build;Rebuild">
+    <Copy SourceFiles="$(ProjectDir)..\bin\$(PlatformShortName)\LuaJIT.lib" DestinationFolder="$(OgsrEngineLibraryDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(ProjectDir)..\bin\$(PlatformShortName)\LuaJIT.exp" DestinationFolder="$(OgsrEngineLibraryDir)" SkipUnchangedFiles="true" Condition="Exists('$(ProjectDir)..\bin\$(PlatformShortName)\LuaJIT.exp')" />
+  </Target>
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>

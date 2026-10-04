@@ -49,13 +49,16 @@ jobs:
         set CONFIGURATION=${{ matrix.Configuration }}
         set PLATFORM=${{ matrix.Platform }}
         set OGSR_ARTIFACT_NAME=OGSR_Engine_SHOC_EDITION_%PLATFORM%_%APPVEYOR_BUILD_VERSION%_%CONFIGURATION%.7z
-        cd bin_%PLATFORM%
+        set OGSR_BINARY_DIR=bin_%PLATFORM%
+        if "%CONFIGURATION%"=="ReleaseTracyProfiler" set OGSR_BINARY_DIR=bin_%PLATFORM%_tracy
+        if "%CONFIGURATION%"=="Debug" set OGSR_BINARY_DIR=bin_%PLATFORM%_debug
+        cd /d "%GITHUB_WORKSPACE%\%OGSR_BINARY_DIR%"
         
-        md ..\Game\Resources_SoC_1.0006\bin_%PLATFORM%
+        if not exist "%GITHUB_WORKSPACE%\Game\Resources_SoC_1.0006\bin_%PLATFORM%" md "%GITHUB_WORKSPACE%\Game\Resources_SoC_1.0006\bin_%PLATFORM%"
         
-        copy *.* ..\Game\Resources_SoC_1.0006\bin_%PLATFORM%
+        copy /Y *.* "%GITHUB_WORKSPACE%\Game\Resources_SoC_1.0006\bin_%PLATFORM%"
         
-        cd ..\Game\Resources_SoC_1.0006
+        cd /d "%GITHUB_WORKSPACE%\Game\Resources_SoC_1.0006"
         
         7z a -t7z -m0=LZMA2:d=96m:fb=273 -mx=9 -mmt=2 ..\..\%OGSR_ARTIFACT_NAME% .\
     - name: Upload OGSR artifact
