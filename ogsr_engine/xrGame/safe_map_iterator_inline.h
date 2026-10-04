@@ -87,9 +87,6 @@ TEMPLATE_SPEZIALIZATION
 IC bool CSSafeMapIterator::first_update() const { return m_first_update; }
 
 TEMPLATE_SPEZIALIZATION
-IC bool CSSafeMapIterator::time_limit_reached() { return time_over(); }
-
-TEMPLATE_SPEZIALIZATION
 IC void CSSafeMapIterator::set_process_time(const float& process_time) { m_max_process_time = process_time; }
 
 TEMPLATE_SPEZIALIZATION

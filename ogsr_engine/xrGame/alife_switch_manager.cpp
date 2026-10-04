@@ -253,8 +253,8 @@ void CALifeSwitchManager::switch_object(CSE_ALifeDynamicObject* I)
 
 void CALifeSwitchManager::request_switch_online(CSE_ALifeDynamicObject* object)
 {
-    // Conservatively preserve immediate semantics for actor, story and forced-online objects.
-    if (m_collect_activations && object != graph().actor() && object->can_switch_offline() && object->m_story_id == INVALID_STORY_ID)
+    // Conservatively preserve immediate semantics for actor and story objects. Forced-online callers bypass this method.
+    if (m_collect_activations && object != graph().actor() && object->m_story_id == INVALID_STORY_ID)
     {
         m_activation_queue.enqueue(object->ID);
         return;
@@ -267,7 +267,7 @@ void CALifeSwitchManager::begin_activation_collection()
 {
     if (!m_activation_queue_enabled) return;
     m_collect_activations = !graph().level().first_update() && Device.dwPrecacheFrame == 0 && graph().actor()->m_bOnline;
-    if (!m_collect_activations) { m_activation_queue.clear(); return; }
+    if (!m_collect_activations) m_activation_queue.clear();
 }
 
 void CALifeSwitchManager::finish_activation_collection()
@@ -276,7 +276,7 @@ void CALifeSwitchManager::finish_activation_collection()
     m_collect_activations = false;
     if (!collected) return;
     ZoneScopedN("ALife/activation_queue");
-    m_activation_queue.drain([this]() { return graph().level().time_limit_reached(); }, [this](std::uint16_t id) {
+    m_activation_queue.drain([this]() { return graph().level().time_over(); }, [this](std::uint16_t id) {
         auto* object = objects().object(id, true);
         // Leaving this registry does not invalidate saved client data; the object
         // keeps it for its destination level instead of clearing it here.

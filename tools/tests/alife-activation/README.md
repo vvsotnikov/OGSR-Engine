@@ -15,12 +15,22 @@ saved client data invalid, so a skipped request does not erase it.
 
 Drain uses the iterator's own expiry predicate and clock, not a second allowance.
 It attempts at least one queued slot and at most 32; one activation is indivisible.
-On main's inflated allowance, the cap normally dominates. With corrected short
-budgets, a traversal that exhausts the allowance leaves only the progress attempt.
+On main's inflated allowance, the sweep already visits every object each update:
+this branch can measure only an activation throttle, not improved revisit latency.
+Wait for #12 to merge, update this independent branch onto main, and then measure
+the sweep-latency hypothesis. With corrected short
+budgets, a traversal that exhausts the allowance leaves only one slot pop, which may be stale and activate nothing.
 Measurements across those base versions are not directly comparable. The queued
 request plot may include released IDs until they are consumed; it is not a count
 of live NPCs. Consumers must not reset the world or recursively drain the queue.
 
 No gameplay benefit is established. Before adopting the experiment, compare
-registry revisit latency, updates-to-online, and frame cost under the same engine
+registry revisit latency, updates-to-online for the last member of a group, and frame cost under the same engine
 budget, including the cost of rechecking deferred objects.
+
+The manager contract fixture runs five production manager methods with fake
+registry/object boundaries. It checks saved-state ownership and queue lifecycle;
+it does not execute dynamic-object distance decisions, group overrides or actual
+client spawning. Those still require game validation. Source extraction fails at
+configure time if expected method boundaries disappear. Both CTests run locally
+through the validation hook; GitHub builds remain intentionally disabled.

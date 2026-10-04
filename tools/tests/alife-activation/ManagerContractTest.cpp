@@ -14,13 +14,12 @@ struct Manager;
 struct CSE_ALifeDynamicObject
 {
     unsigned ID = 7, ID_Parent = 0xffff, m_story_id = INVALID_STORY_ID;
-    bool m_bOnline = false, allowed = true, keep = false, requests = true, can_offline = true;
+    bool m_bOnline = false, allowed = true, keep = false, requests = true;
     bool invalid_location = false, obsolete = false, released = false;
     unsigned attempts = 0;
     Manager* manager = nullptr;
     std::vector<unsigned char> client_data{1, 2, 3};
     bool can_switch_online() const { return allowed; }
-    bool can_switch_offline() const { return can_offline; }
     bool keep_saved_data_anyway() const { return keep; }
     bool redundant() const { return obsolete; }
     void try_switch_online();
@@ -30,7 +29,7 @@ struct Registry
     std::map<unsigned, CSE_ALifeDynamicObject*> values;
     bool first = false, expired = false;
     bool first_update() const { return first; }
-    bool time_limit_reached() const { return expired; }
+    bool time_over() const { return expired; }
     CSE_ALifeDynamicObject* object(unsigned id, bool) {
         auto entry = values.find(id);
         return entry == values.end() ? nullptr : entry->second;
@@ -75,7 +74,7 @@ void CSE_ALifeDynamicObject::try_switch_online() {
     if (allowed && requests) manager->request_switch_online(this);
 }
 #include "online-method.inc"
-void check(bool condition) { if (!condition) throw std::runtime_error("activation integration invariant"); }
+void check(bool condition) { if (!condition) throw std::runtime_error("activation manager contract"); }
 int main()
 {
     for (bool deferred : {false, true})
@@ -99,14 +98,13 @@ int main()
         check(object.client_data.empty() == (!attached && !queued && !online && !keep));
         check(object.attempts == (attached ? 0u : 1u));
     }
-    for (unsigned bypass = 0; bypass < 3; ++bypass)
+    for (unsigned bypass = 0; bypass < 2; ++bypass)
     {
         Manager manager;
         CSE_ALifeDynamicObject object;
         auto* target = bypass == 0 ? manager.graph().actor() : &object;
         manager.add(*target); target->m_bOnline = false;
         if (bypass == 1) target->m_story_id = 1;
-        if (bypass == 2) target->can_offline = false;
         manager.m_collect_activations = true;
         manager.request_switch_online(target);
         check(target->m_bOnline && manager.m_activation_queue.size() == 0);
@@ -143,6 +141,7 @@ int main()
         manager.finish_activation_collection();
         check(!manager.m_collect_activations && manager.m_activation_queue.size() == 0);
         check(manager.activated == (state == 6 ? 1u : 0u));
+        check(manager.checked == (state >= 3 ? 1u : 0u));
         if (state == 2 || state == 3) check(!original.client_data.empty());
         if (state == 6) check(replacement.m_bOnline && !original.m_bOnline);
     }
