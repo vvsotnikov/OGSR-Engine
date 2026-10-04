@@ -243,11 +243,14 @@ virtual void add_online(const bool& update_registries);
 virtual void add_offline(const xr_vector<ALife::_OBJECT_ID>& saved_children, const bool& update_registries);
 virtual bool redundant() const;
 void attach(CSE_ALifeInventoryItem* tpALifeInventoryItem, bool bALifeRequest, bool bAddChildren = true);
+private:
 // Standard dynamic-object policy only; group overrides retain their own traversal semantics.
 enum class OnlineSwitchDecision { denied, outside_distance, activate };
 void maintain_offline_schedule();
 OnlineSwitchDecision evaluate_online_switch();
 bool evaluate_offline_switch();
+
+public:
 void detach(CSE_ALifeInventoryItem* tpALifeInventoryItem, ALife::OBJECT_IT* I = 0, bool bALifeRequest = true, bool bRemoveChildren = true);
 #endif
 virtual CSE_ALifeDynamicObject* cast_alife_dynamic_object() { return this; }

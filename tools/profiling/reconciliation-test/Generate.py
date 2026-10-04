@@ -25,3 +25,7 @@ Path(sys.argv[3]).write_text(candidate, encoding='utf-8')
 source = (root / 'ogsr_engine/xrGame/alife_object_registry.cpp').read_text(encoding='utf-8')
 candidate = region(source, '\nCALifeObjectRegistry::~CALifeObjectRegistry()', '\nvoid CALifeObjectRegistry::save(IWriter& memory_stream,')
 Path(sys.argv[4]).write_text(candidate, encoding='utf-8')
+
+source = (root / 'ogsr_engine/xrGame/alife_update_manager.cpp').read_text(encoding='utf-8')
+candidate = region(source, '\nvoid CALifeUpdateManager::update()', '\nvoid CALifeUpdateManager::report_metrics()')
+Path(sys.argv[5]).write_text(candidate, encoding='utf-8')

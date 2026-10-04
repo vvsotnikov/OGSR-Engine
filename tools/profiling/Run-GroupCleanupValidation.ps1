@@ -12,9 +12,12 @@ if ($ReloadSession) {
     if ($source.status -ne 'group-cleanup-completed') { throw 'Reload source did not pass' }
     $seed = [IO.Path]::GetRelativePath((Resolve-Path $InstallRoot).Path, (Resolve-Path "$ReloadSession/appdata").Path); $save = 'group_validation'
 }
+$config = "$InstallRoot/gamedata/config/misc/items.ltx"
+if (Select-String -LiteralPath $config -Pattern '^\s*\[validation_online_group\]' -Quiet) {
+    throw "Existing [validation_online_group] section in $config. A previous runner may have been interrupted. With the game closed, compare captures/*/items-before-group-test.ltx with this file and restore a verified clean backup (one without that section), preserving any unrelated edits. Do not blindly restore the latest backup."
+}
 $session = & "$PSScriptRoot/Capture-Session.ps1" -InstallRoot $InstallRoot -ToolRoot $ToolRoot -Package $package -Mode distance -SeedAppData $seed -SaveName $save -PrepareOnly
 # Only the isolated validation installation receives this server-only test section.
-$config = "$InstallRoot/gamedata/config/misc/items.ltx"
 $originalConfig = [IO.File]::ReadAllBytes($config)
 [IO.File]::WriteAllBytes("$session/items-before-group-test.ltx", $originalConfig)
 $metaPath = "$session/session.json"

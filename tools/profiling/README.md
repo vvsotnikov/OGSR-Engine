@@ -107,7 +107,10 @@ the saved group membership, offline state and cleared data. The runner adds a
 server-only section to the isolated installation's loose `misc/items.ltx` and
 restores its original bytes after the process exits, including failed runs.
 Each session retains a backup for recovery if the runner itself is forcibly
-terminated. Saves are private to each session. Do not use these saves in a normal
+terminated. A pre-existing test section is rejected before a session is created.
+With the game closed, compare the saved backups and restore a verified clean
+version without the test section, preserving unrelated edits; the newest backup
+is not necessarily clean. Saves are private to each session. Do not use these saves in a normal
 installation: loading them requires the temporary group section.
 
 The probe quits with its member still attached, exercising normal registry

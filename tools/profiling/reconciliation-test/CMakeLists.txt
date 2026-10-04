@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.19)
 project(reconciliation-test LANGUAGES CXX)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../ogsr_engine/xrGame/alife_update_manager.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../ogsr_engine/xrGame/alife_object_registry.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../ogsr_engine/xrGame/alife_switch_manager.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../ogsr_engine/xrGame/alife_group_abstract.cpp"
@@ -9,7 +10,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/GroupBaseline.inc"
     "${CMAKE_CURRENT_SOURCE_DIR}/Generate.py")
 execute_process(COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/Generate.py"
-    "${CMAKE_CURRENT_BINARY_DIR}/methods.inc" "${CMAKE_CURRENT_BINARY_DIR}/group-methods.inc" "${CMAKE_CURRENT_BINARY_DIR}/online-method.inc" "${CMAKE_CURRENT_BINARY_DIR}/registry-destructor.inc" COMMAND_ERROR_IS_FATAL ANY)
+    "${CMAKE_CURRENT_BINARY_DIR}/methods.inc" "${CMAKE_CURRENT_BINARY_DIR}/group-methods.inc" "${CMAKE_CURRENT_BINARY_DIR}/online-method.inc" "${CMAKE_CURRENT_BINARY_DIR}/registry-destructor.inc" "${CMAKE_CURRENT_BINARY_DIR}/metrics-update.inc" COMMAND_ERROR_IS_FATAL ANY)
 add_executable(reconciliation-test ReconciliationTest.cpp)
 target_compile_features(reconciliation-test PRIVATE cxx_std_17)
 target_include_directories(reconciliation-test PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
@@ -29,3 +30,8 @@ add_executable(registry-teardown-test RegistryTeardownTest.cpp)
 target_compile_features(registry-teardown-test PRIVATE cxx_std_17)
 target_include_directories(registry-teardown-test PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 add_test(NAME registry-teardown-lifetime COMMAND registry-teardown-test)
+
+add_executable(metrics-interval-test MetricsIntervalTest.cpp)
+target_compile_features(metrics-interval-test PRIVATE cxx_std_17)
+target_include_directories(metrics-interval-test PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+add_test(NAME metrics-interval COMMAND metrics-interval-test)

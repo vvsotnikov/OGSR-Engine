@@ -110,6 +110,10 @@ void CALifeUpdateManager::update()
         return;
     }
 
+    // Device time may already include loading; start the first interval here.
+    if (!m_metrics_samples && !m_metrics_updates)
+        m_metrics_time = Device.dwTimeGlobal;
+
     CTimer timer;
     timer.Start();
     update_switch();

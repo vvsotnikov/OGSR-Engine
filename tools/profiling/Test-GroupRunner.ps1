@@ -38,3 +38,18 @@ foreach ($scenario in @('success','launch-failure','bad-log')) {
     if ((Get-FileHash $config).Hash -ne $before) { throw "Configuration changed after $scenario" }
 }
 Write-Output 'Group configuration restored byte-for-byte after success, launch failure and log failure'
+
+Add-Content -LiteralPath $config -Value "`n[validation_online_group]`nclass = ON_OFF_G" -Encoding ascii
+$contaminated = (Get-FileHash $config).Hash
+$sessionsBefore = @(Get-ChildItem "$root/captures" -Directory).Count
+$rejected = $false
+try { & "$PSScriptRoot/Run-GroupCleanupValidation.ps1" -InstallRoot $root -ToolRoot "$root/tools" | Out-Null }
+catch {
+    if ($_.Exception.Message -notlike 'Existing [[]validation_online_group]*') { throw }
+    $rejected = $true
+}
+if (!$rejected) { throw 'Accepted leftover test section' }
+if ((Get-FileHash $config).Hash -ne $contaminated -or @(Get-ChildItem "$root/captures" -Directory).Count -ne $sessionsBefore) {
+    throw 'Interrupted-run detection modified configuration or created misleading evidence'
+}
+Write-Output 'Leftover group section rejected without modifying configuration or creating a session'
