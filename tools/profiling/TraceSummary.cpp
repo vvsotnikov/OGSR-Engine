@@ -26,7 +26,7 @@ int main(int argc, char** argv)
         for (const auto* plot : worker.GetPlots())
         {
             const std::string name = worker.GetString(plot->name);
-            if (name != "activation/gc_budget_us" && name != "ALife/pending activation") continue;
+            if (name.rfind("ALife/", 0) != 0) continue;
             for (const auto& point : plot->data)
                 plots << name << '\t' << point.time.Val() << '\t' << point.val << '\n';
         }
@@ -39,11 +39,9 @@ int main(int argc, char** argv)
         {
             const auto& location = worker.GetSourceLocation(entry.first);
             const std::string name = worker.GetString(location.name.active ? location.name : location.function);
-            if (name != "ALife/switch" && name != "ALife/scheduled" && name != "CLevel::script_gc" &&
-                name != "ALife/activation_queue" && name != "WaitSecondThread" && name != "Render process" &&
+            if (name.rfind("ALife/", 0) != 0 && name != "CLevel::script_gc" &&
+                name != "WaitSecondThread" && name != "Render process" &&
                 name != "DoRender" && name != "DoRender End" && name != "seqParallel" && name != "seqFrameMT" &&
-                name != "activation/client_packet" && name != "activation/client_spawn" && name != "activation/client_queue" &&
-                name != "ALife/switch/add_online" && name != "ALife/switch/remove_online" &&
                 name != "CSheduler::Update" && name != "CSheduler::ProcessStep" && name != "CSheduler::ProcessStep2" &&
                 name.rfind("stalker/", 0) != 0) continue;
             for (const auto& event : entry.second.zones)
