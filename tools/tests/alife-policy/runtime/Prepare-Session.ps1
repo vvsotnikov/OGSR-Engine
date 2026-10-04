@@ -46,8 +46,5 @@ $metadata = [ordered]@{
     sourceDirtyAtLaunch = [bool](& git -C $repo status --porcelain)
     arguments = $argsText; status = 'prepared'
 }
-if (Test-Path "$InstallRoot/$Package/build.json") {
-    $metadata.build = Get-Content -Raw "$InstallRoot/$Package/build.json" | ConvertFrom-Json
-}
 $metadata | ConvertTo-Json -Depth 6 | Set-Content "$($session.FullName)/session.json" -Encoding utf8
 Write-Output $session.FullName

@@ -6,8 +6,9 @@ param(
 $ErrorActionPreference = 'Stop'
 if (Test-Path -LiteralPath $InstallRoot) { throw 'Use a new validation directory; existing data will not be overwritten' }
 $sourcePackage = Join-Path $BaselineRoot $Package
-$build = Get-Content -Raw "$sourcePackage/build.json" | ConvertFrom-Json
-if ($build.tracyEnabled -ne $false -or $build.sourcePatch) { throw 'Expected a clean non-Tracy Release package' }
+. "$PSScriptRoot/ValidationPackage.ps1"
+$build = Read-ValidationPackage "$sourcePackage/xrEngine.exe"
+if ($build.sourcePatch) { throw 'Expected a clean non-Tracy Release package' }
 New-Item -ItemType Directory $InstallRoot | Out-Null
 # Read-only game archives share storage. Loose resources/scripts are private copies.
 foreach ($archive in Get-ChildItem $BaselineRoot -File -Filter 'gamedata.db*') {
