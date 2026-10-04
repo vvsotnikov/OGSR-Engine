@@ -13,6 +13,9 @@ IC CALifeSwitchManager::CALifeSwitchManager(xrServer* server, LPCSTR section) : 
     m_switch_distance = pSettings->r_float(section, "switch_distance");
     m_switch_factor = pSettings->r_float(section, "switch_factor");
     set_switch_distance(m_switch_distance);
+    m_activation_queue_enabled = strstr(Core.Params, "-alife_activation_queue") != nullptr;
+    if (m_activation_queue_enabled)
+        Msg("* Experimental A-Life activation batching enabled; shares switch budget, at most %u attempts per update", activation_attempt_limit);
 }
 
 IC float CALifeSwitchManager::online_distance() const { return (m_online_distance); }

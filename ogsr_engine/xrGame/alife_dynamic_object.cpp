@@ -143,7 +143,7 @@ void CSE_ALifeDynamicObject::try_switch_online()
 
     if (!can_switch_offline())
     {
-        alife().switch_online(this);
+        alife().request_switch_online(this);
         return;
     }
 
@@ -158,7 +158,7 @@ void CSE_ALifeDynamicObject::try_switch_online()
         return;
     }
 
-    alife().switch_online(this);
+    alife().request_switch_online(this);
 }
 
 void CSE_ALifeDynamicObject::try_switch_offline()

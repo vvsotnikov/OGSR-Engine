@@ -9,6 +9,7 @@
 #pragma once
 
 #include "alife_simulator_base.h"
+#include "alife_activation_queue.h"
 
 class CALifeSwitchManager : public virtual CALifeSimulatorBase
 {
@@ -23,6 +24,13 @@ protected:
     float m_offline_distance;
 
 private:
+    static constexpr unsigned activation_attempt_limit = 32;
+    ALifeActivationQueue m_activation_queue;
+    bool m_activation_queue_enabled = false;
+    bool m_collect_activations = false;
+    u32 m_activation_level = u32(-1);
+    CTimer m_activation_timer;
+    double m_activation_budget_ms = 0;
     OBJECT_VECTOR m_saved_chidren;
 
 protected:
@@ -32,6 +40,9 @@ public:
     void try_switch_online(CSE_ALifeDynamicObject* object);
     void try_switch_offline(CSE_ALifeDynamicObject* object);
     void switch_online(CSE_ALifeDynamicObject* object);
+    void request_switch_online(CSE_ALifeDynamicObject* object);
+    void begin_activation_collection();
+    void finish_activation_collection();
     void switch_offline(CSE_ALifeDynamicObject* object);
     void remove_online(CSE_ALifeDynamicObject* object, bool update_registries = true);
     void add_online(CSE_ALifeDynamicObject* object, bool update_registries = true);
