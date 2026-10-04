@@ -1,4 +1,3 @@
-#include <cassert>
 #include <map>
 #include <stdexcept>
 #define IC
@@ -41,7 +40,7 @@ int main()
     iterator.m_first_update = true;
     if (iterator.update(predicate) != 3) return 4;
     iterator.use_time_limit = false;
-    if (iterator.update(predicate) != 3) return 6;
+    if (iterator.update(predicate) != 3) return 5;
     iterator.m_objects.clear();
-    if (iterator.update(predicate) != 0) return 5;
+    if (iterator.update(predicate) != 0) return 6;
 }

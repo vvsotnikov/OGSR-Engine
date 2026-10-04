@@ -57,6 +57,8 @@ CALifeUpdateManager::CALifeUpdateManager(xrServer* server, LPCSTR section)
 
     m_max_process_time = pSettings->r_s32(section, "process_time");
     m_update_monster_factor = pSettings->r_float(section, "update_monster_factor");
+    if (!(m_update_monster_factor >= 0.f && m_update_monster_factor < 1.f))
+        Msg("! ALife [%s]: update_monster_factor=%.6g is outside the usual [0, 1) range; check the switch-time allowance", section, m_update_monster_factor);
     m_objects_per_update = pSettings->r_u32(section, "objects_per_update");
     m_changing_level = false;
     m_first_time = true;
