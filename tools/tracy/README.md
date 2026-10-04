@@ -13,8 +13,9 @@ Only one collector may connect. Regular Release builds cannot emit traces.
 
 `ogsr-trace-export.exe <trace> <prefix>` loads the trace through Tracy's reader
 and exports complete CPU zones with static source names, base-frame boundaries,
-and typed plots (user, CPU usage, memory and power). Source IDs, files and lines keep same-named scopes distinct; IDs are
-local to one capture. GPU timelines, dynamic zone names/text and messages remain available
+and typed plots (user, CPU usage and power). Source IDs, files and lines keep same-named scopes distinct; IDs are
+local to one capture. Memory-event reconstruction is disabled to bound loading cost; memory plots are
+therefore not loaded. GPU timelines, dynamic zone names/text and messages remain available
 in the original trace but are not exported. Thread IDs are OS IDs accompanied by
 Tracy thread names; they are not stable identities across runs. Plot export also
 supports existing captures with instrumentation absent from the current engine;
@@ -31,8 +32,9 @@ the same name can sum to more than the frame duration. Capture frame indices do
 not identify engine frame numbers after late collector connections or loading.
 
 TSV fields use CSV quoting and preserve embedded newlines; readers decode UTF-8 with surrogate escapes for undecodable bytes, such as
-legacy Windows source paths. JSON escapes preserve those bytes without guessing
-a code page. Plot type/name pairs distinguish built-in and same-named user plots. Exports can be
+legacy Windows source paths. Python consumers can recover those bytes with
+`encode('utf-8', 'surrogateescape')`; other JSON consumers may reject or replace
+the lone surrogate escapes. No code page is guessed. Plot type/name pairs distinguish built-in and same-named user plots. Exports can be
 large, and aggregation retains selected durations in memory. Keep the original
 trace for GPU analysis and other data not represented by these reports.
 
@@ -49,5 +51,5 @@ ctest --test-dir <build-dir> -C Release --output-on-failure
 The tools are compiled for the local machine's instruction set; rebuild them
 when moving to a machine with different CPU capabilities.
 
-`tools.json` records the pinned tool-source revision and compatibility headers
+`bin/tools.json` records the pinned tool-source revision and compatibility headers
 for identifying a copied binary package.
