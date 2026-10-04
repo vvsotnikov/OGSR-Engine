@@ -100,8 +100,9 @@ IC u32 CSSafeMapIterator::update(const _update_predicate& predicate)
     ++m_cycle_count;
     _iterator I = next();
     VERIFY(I != m_objects.end());
+    // Even an exhausted budget must advance the cursor once; tiny budgets cannot starve switching.
     u32 i = 0;
-    for (; (I != m_objects.end()) && !time_over() && predicate(I, m_cycle_count, true); ++i)
+    for (; (I != m_objects.end()) && (i == 0 || !time_over()) && predicate(I, m_cycle_count, true); ++i)
     {
         update_next();
         predicate(I, m_cycle_count);

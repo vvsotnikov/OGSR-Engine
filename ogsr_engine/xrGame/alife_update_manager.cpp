@@ -118,7 +118,11 @@ void CALifeUpdateManager::shedule_Update(u32 dt)
     STOP_PROFILE
 }
 
-void CALifeUpdateManager::set_process_time(int microseconds) { graph().set_process_time(float(microseconds) * (1.f - update_monster_factor()) / 1000000.f); }
+void CALifeUpdateManager::set_process_time(int microseconds)
+{
+    // The level iterator compares elapsed seconds; apply conversion after the fraction.
+    graph().set_process_time(float(microseconds) * (1.f - update_monster_factor()) / 1000000.f);
+}
 
 void CALifeUpdateManager::objects_per_update(const u32& objects_per_update) { scheduled().objects_per_update(objects_per_update); }
 

@@ -13,6 +13,7 @@ struct CALifeUpdateManager
 int main()
 {
     struct Case { int microseconds; float factor, seconds; };
+    // Zero remainder is valid arithmetic; the iterator must still make one-object progress.
     for (const auto& c : {Case{900, .1f, .00081f}, {1000000, .25f, .75f}, {1000, 0, .001f}, {1000, 1, 0}, {0, .1f, 0}})
     {
         CALifeUpdateManager manager;
