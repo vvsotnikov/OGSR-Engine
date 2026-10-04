@@ -2,7 +2,7 @@
 
 Install Visual Studio C++ Build Tools, CMake, Git and rustup. The repository's
 `rust-toolchain.toml` selects Rust and rustfmt for both local and GitHub runs.
-Python/PowerShell are additionally required by suites using them. Provision engine
+Provision engine
 dependencies separately; validation never runs `Update_Components.cmd`.
 
 ```powershell
@@ -29,6 +29,11 @@ owned by the validator, not a place to edit source. Developer working files and
 index contents are never stashed or cleaned. Root scratch notes/logs do not force
 isolation. Source/tooling roots are checked regardless of file extension or ignore
 rules; known dependencies, build outputs and Python bytecode caches are excluded.
+The hook prints paths that force isolation. Local `.vcxproj.user` files and
+`build_config_overrides/` can change build settings and therefore remain inputs.
+Keep them if needed and accept isolation; move unused files outside the checkout.
+Resource-editor `.aps` files and obsolete `ogsr_engine/LuaJIT/bin` output also
+trigger isolation; archive them outside source directories when no longer needed.
 Put custom build outputs in `target/` or `tools/tests/<suite>/build/`.
 
 The snapshot borrows the dependency directories provisioned by
@@ -43,7 +48,10 @@ cargo xtask reset-snapshot
 
 Reset removes only this worktree's registered validation snapshot and its metadata,
 never dependency targets. Use that command instead of recursively deleting the
-snapshot by hand. Other registered worktrees are not pruned.
+snapshot by hand. Other registered worktrees are not pruned. After moving a repository, repair Git's
+absolute worktree paths with `git worktree repair <snapshot-path>` before retrying.
+The refusal message gives the snapshot path. Do not repair a path redirected by a
+junction; the ownership check intentionally rejects it.
 
 Do not edit inputs or run another build in a checkout being validated. Per-worktree
 OS locks exclude overlapping validators and reset operations, and release on

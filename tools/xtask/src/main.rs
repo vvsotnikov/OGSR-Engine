@@ -48,17 +48,21 @@ fn lock() -> Result<fs::File> {
         .map_err(|e| format!("Validation lock {}: {e}", path.display()))?)
 }
 
-fn extra_build_inputs() -> Result<bool> {
-    // Include ignored inputs too; only explicit generated/dependency roots are exempt.
-    Ok(git(&["ls-files", "--others", "-z"])?
-        .split('\0')
-        .any(xtask::snapshot::is_build_input))
-}
-
 fn validate_index() -> Result {
     let _lock = lock()?;
     let before = git(&["write-tree"])?;
-    let isolated = tracked_edits()? || extra_build_inputs()?;
+    let unstaged = tracked_edits()?;
+    let extra = xtask::snapshot::extra_inputs(&env::current_dir()?)?;
+    let isolated = unstaged || !extra.is_empty();
+    if unstaged {
+        eprintln!("Isolating: tracked working changes differ from the index.");
+    }
+    for path in extra.iter().take(5) {
+        eprintln!("Isolating: untracked build input {path}");
+    }
+    if extra.len() > 5 {
+        eprintln!("... and {} more build inputs", extra.len() - 5);
+    }
     if isolated {
         let root = env::current_dir()?;
         let snapshot = xtask::snapshot::prepare(&root, &before)?;
@@ -73,15 +77,13 @@ fn validate_index() -> Result {
         xtask::snapshot::git_at(&snapshot, &["diff", "--quiet", &before])
             .map_err(|e| format!("Snapshot source changed during validation: {e}"))?;
         if xtask::snapshot::git_at(&snapshot, &["write-tree"])? != before
-            || xtask::snapshot::git_at(&snapshot, &["ls-files", "--others", "-z"])?
-                .split('\0')
-                .any(xtask::snapshot::is_build_input)
+            || !xtask::snapshot::extra_inputs(&snapshot)?.is_empty()
         {
             return Err("Snapshot inputs changed during validation; retry the commit.".into());
         }
     } else {
         validate(None, false, false)?;
-        if tracked_edits()? || extra_build_inputs()? {
+        if tracked_edits()? || !xtask::snapshot::extra_inputs(&env::current_dir()?)?.is_empty() {
             return Err("Build inputs changed during validation; retry the commit.".into());
         }
     }

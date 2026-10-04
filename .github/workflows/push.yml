@@ -30,7 +30,7 @@ jobs:
     - name: Setup Rust
       if: matrix.Configuration == 'Release'
       shell: pwsh
-      run: rustup show active-toolchain
+      run: rustup toolchain install
     - name: Validate source tests
       if: matrix.Configuration == 'Release'
       shell: pwsh

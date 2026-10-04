@@ -40,7 +40,8 @@ pub fn is_build_input(path: &str) -> bool {
     if path.is_empty() || DEPENDENCIES.iter().chain(CACHES).any(|r| within(path, r)) {
         return false;
     }
-    let parts: Vec<_> = path.split('/').collect();
+    let lower = path.to_ascii_lowercase();
+    let parts: Vec<_> = lower.split('/').collect();
     if parts.contains(&"__pycache__")
         || (parts.len() >= 4 && parts[0] == "tools" && parts[1] == "tests" && parts[3] == "build")
     {
@@ -63,6 +64,21 @@ pub fn is_build_input(path: &str) -> bool {
                 )
                 || path == "CMakeLists.txt"))
 }
+pub fn extra_inputs(root: &Path) -> Result<Vec<String>> {
+    let exclusions: Vec<_> = DEPENDENCIES
+        .iter()
+        .chain(CACHES)
+        .map(|path| format!(":(top,icase,exclude){path}"))
+        .collect();
+    let mut args = vec!["ls-files", "--others", "-z", "--"];
+    args.extend(exclusions.iter().map(String::as_str));
+    Ok(git_at(root, &args)?
+        .split('\0')
+        .filter(|p| is_build_input(p))
+        .map(str::to_owned)
+        .collect())
+}
+
 pub fn git_at(root: &Path, args: &[&str]) -> Result<String> {
     let mut cmd = Command::new("git");
     cmd.current_dir(root).args(args);
@@ -96,7 +112,7 @@ fn reparse(metadata: &fs::Metadata) -> bool {
         metadata.file_type().is_symlink()
     }
 }
-// Never recurse through a junction, even one absent from the dependency manifest.
+// Never recurse through a junction, including unexpected links.
 fn unlink(path: &Path, metadata: &fs::Metadata) -> Result {
     #[cfg(windows)]
     let directory = {
@@ -152,7 +168,7 @@ fn check_owned(root: &Path, path: &Path) -> Result {
     if let Ok(metadata) = fs::symlink_metadata(path) {
         if reparse(&metadata) || !registered(root, path)? {
             return Err(format!(
-                "Refusing unregistered or redirected snapshot {}",
+                "Refusing unregistered or redirected snapshot {}. If the repository moved, run git worktree repair with this snapshot path, then retry. A redirected snapshot must not be repaired this way.",
                 path.display()
             )
             .into());
@@ -177,10 +193,6 @@ pub fn reset(root: &Path) -> Result {
                 path.to_str().ok_or("Non-Unicode snapshot path")?,
             ],
         )?;
-    }
-    let manifest = path.with_extension("dependencies");
-    if manifest.exists() {
-        fs::remove_file(manifest)?;
     }
     Ok(())
 }
@@ -264,10 +276,6 @@ pub fn prepare(root: &Path, tree: &str) -> Result<PathBuf> {
         }
         #[cfg(not(windows))]
         std::os::unix::fs::symlink(&source, &target)?;
-    }
-    let manifest = path.with_extension("dependencies");
-    if manifest.exists() {
-        fs::remove_file(manifest)?;
     }
     Ok(path)
 }

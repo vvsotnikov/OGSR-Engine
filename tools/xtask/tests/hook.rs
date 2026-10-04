@@ -46,27 +46,35 @@ impl Fixture {
             ".cargo/config.toml",
             ".githooks/pre-commit",
             "tools/xtask/Cargo.toml",
-            "tools/xtask/src/main.rs",
-            "tools/xtask/src/lib.rs",
-            "tools/xtask/src/snapshot.rs",
             "tools/tests/CMakeLists.txt",
         ] {
             let dest = root.join(file);
             fs::create_dir_all(dest.parent().unwrap()).unwrap();
             fs::copy(source.join(file), dest).unwrap();
         }
+        fn copy_sources(source: &Path, destination: &Path) {
+            fs::create_dir_all(destination).unwrap();
+            for entry in fs::read_dir(source).unwrap() {
+                let entry = entry.unwrap();
+                let target = destination.join(entry.file_name());
+                if entry.file_type().unwrap().is_dir() {
+                    copy_sources(&entry.path(), &target);
+                } else {
+                    fs::copy(entry.path(), target).unwrap();
+                }
+            }
+        }
+        copy_sources(
+            &source.join("tools/xtask/src"),
+            &root.join("tools/xtask/src"),
+        );
         fs::write(root.join(".gitignore"), "/target/\n/linked/\n").unwrap();
         fs::create_dir_all(root.join("tools/tests/fixture")).unwrap();
         fs::write(root.join("tools/tests/fixture/CMakeLists.txt"), format!(
             "add_executable(fixture ../fixture.cpp)\nadd_test(NAME assertion COMMAND ${{CMAKE_COMMAND}} -E {assertion})\n")).unwrap();
         fs::write(root.join("tools/tests/fixture.cpp"), source_code).unwrap();
         fs::write(root.join("Fixture.vcxproj"), r#"<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="Build" /></Project>"#).unwrap();
-        fs::write(root.join("Engine.sln"), "Microsoft Visual Studio Solution File, Format Version 12.00\nProject(\"{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}\") = \"Fixture\", \"Fixture.vcxproj\", \"{11111111-1111-1111-1111-111111111111}\"\nEndProject\nGlobal\n GlobalSection(SolutionConfigurationPlatforms) = preSolution\n Release|x64 = Release|x64\n EndGlobalSection\n GlobalSection(ProjectConfigurationPlatforms) = postSolution\n {11111111-1111-1111-1111-111111111111}.Release|x64.ActiveCfg = Release|x64\n {11111111-1111-1111-1111-111111111111}.Release|x64.Build.0 = Release|x64\n EndGlobalSection\nEndGlobal\n").unwrap();
-        let path = root.join("Engine.sln");
-        let solution = fs::read_to_string(&path).unwrap()
-        .replace(" Release|x64 = Release|x64", " Release|x64 = Release|x64\n ReleaseTracyProfiler|x64 = ReleaseTracyProfiler|x64")
-        .replace(" {11111111-1111-1111-1111-111111111111}.Release|x64.Build.0 = Release|x64", " {11111111-1111-1111-1111-111111111111}.Release|x64.Build.0 = Release|x64\n {11111111-1111-1111-1111-111111111111}.ReleaseTracyProfiler|x64.ActiveCfg = ReleaseTracyProfiler|x64\n {11111111-1111-1111-1111-111111111111}.ReleaseTracyProfiler|x64.Build.0 = ReleaseTracyProfiler|x64");
-        fs::write(path, solution).unwrap();
+        fs::write(root.join("Engine.sln"), "Microsoft Visual Studio Solution File, Format Version 12.00\nProject(\"{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}\") = \"Fixture\", \"Fixture.vcxproj\", \"{11111111-1111-1111-1111-111111111111}\"\nEndProject\nGlobal\n GlobalSection(SolutionConfigurationPlatforms) = preSolution\n Release|x64 = Release|x64\n ReleaseTracyProfiler|x64 = ReleaseTracyProfiler|x64\n EndGlobalSection\n GlobalSection(ProjectConfigurationPlatforms) = postSolution\n {11111111-1111-1111-1111-111111111111}.Release|x64.ActiveCfg = Release|x64\n {11111111-1111-1111-1111-111111111111}.Release|x64.Build.0 = Release|x64\n {11111111-1111-1111-1111-111111111111}.ReleaseTracyProfiler|x64.ActiveCfg = ReleaseTracyProfiler|x64\n {11111111-1111-1111-1111-111111111111}.ReleaseTracyProfiler|x64.Build.0 = ReleaseTracyProfiler|x64\n EndGlobalSection\nEndGlobal\n").unwrap();
         ok(&root, "git", &["init"]);
         ok(&root, "git", &["config", "core.autocrlf", "true"]);
         ok(&root, "git", &["config", "user.name", "Validation Fixture"]);
@@ -419,6 +427,9 @@ fn ignored_resource_input_forces_staged_validation() {
         &["commit", "-m", "test: ignored resource"],
     );
     assert!(output_text(&result).contains("Validating staged files in"));
+    assert!(
+        output_text(&result).contains("Isolating: untracked build input ogsr_engine/untracked.ico")
+    );
     assert!(fixture.0.join("ogsr_engine/untracked.ico").exists());
     assert!(!fixture.0.join(".git/v/ogsr_engine/untracked.ico").exists());
 }
@@ -438,4 +449,78 @@ fn build_cannot_change_snapshot_source_and_approve_commit() {
         fs::read_to_string(fixture.0.join("tools/tests/fixture.cpp")).unwrap(),
         "private working edit"
     );
+}
+
+#[test]
+fn moved_repository_has_safe_documented_recovery() {
+    let mut fixture = Fixture::new("int main() {}\n", "true");
+    let tree = String::from_utf8(ok(&fixture.0, "git", &["write-tree"]).stdout).unwrap();
+    xtask::snapshot::prepare(&fixture.0, tree.trim()).unwrap();
+    let moved = fixture.0.with_extension("moved");
+    fs::rename(&fixture.0, &moved).unwrap();
+    fixture.0 = moved;
+    assert!(xtask::snapshot::reset(&fixture.0)
+        .unwrap_err()
+        .to_string()
+        .contains("git worktree repair"));
+    let snapshot = fixture.0.join(".git/v");
+    ok(
+        &fixture.0,
+        "git",
+        &["worktree", "repair", snapshot.to_str().unwrap()],
+    );
+    xtask::snapshot::prepare(&fixture.0, tree.trim()).unwrap();
+    xtask::snapshot::reset(&fixture.0).unwrap();
+    assert!(!snapshot.exists());
+}
+#[test]
+fn installing_hooks_twice_is_idempotent() {
+    let fixture = Fixture::new("int main() {}\n", "true");
+    let hook = fixture.0.join(".git/ogsr-hooks/pre-commit");
+    let original = fs::read(&hook).unwrap();
+    ok(&fixture.0, env!("CARGO_BIN_EXE_xtask"), &["install-hooks"]);
+    assert_eq!(fs::read(hook).unwrap(), original);
+}
+
+#[test]
+fn clean_validation_rejects_changed_source_and_index() {
+    for (action, expected) in [
+        (
+            r#"<WriteLinesToFile File="tools/tests/fixture.cpp" Lines="changed source" Overwrite="true" />"#,
+            "Build inputs changed",
+        ),
+        (
+            r#"<WriteLinesToFile File="note.txt" Lines="changed index" Overwrite="true" /><Exec Command="git add note.txt" />"#,
+            "Index changed",
+        ),
+    ] {
+        let fixture = Fixture::new("int main() {}\n", "true");
+        fs::write(fixture.0.join("Fixture.vcxproj"), format!(r#"<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="Build">{action}</Target></Project>"#)).unwrap();
+        ok(&fixture.0, "git", &["add", "Fixture.vcxproj"]);
+        Fixture::reject_at(&fixture.0, expected);
+    }
+}
+#[test]
+fn provisioned_dependency_roots_match_updater() {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let script = fs::read_to_string(source.join("Update_Components.cmd")).unwrap();
+    let destinations: Vec<_> = script
+        .lines()
+        .filter(|l| l.starts_with("git clone "))
+        .map(|l| l.split_whitespace().last().unwrap().replace('\\', "/"))
+        .collect();
+    for path in &destinations {
+        assert!(
+            xtask::snapshot::DEPENDENCIES
+                .iter()
+                .any(|root| path == root || path.starts_with(&format!("{root}/"))),
+            "Missing dependency: {path}"
+        );
+    }
+    for root in xtask::snapshot::DEPENDENCIES {
+        assert!(
+            destinations.iter().any(|path| path == root),
+            "Stale dependency: {root}"
+        );
+    }
 }
