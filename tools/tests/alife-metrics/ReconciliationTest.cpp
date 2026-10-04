@@ -4,7 +4,7 @@
 #include <iostream>
 using Log = std::vector<std::string>;
 void check(bool ok) { if (!ok) throw std::runtime_error("lifecycle ordering mismatch"); }
-struct CTimer { void Start() {} float GetElapsed_sec() { return 0.000001f; } };
+struct CTimer { unsigned ticks = 0; void Start() { ticks = 0; } float GetElapsed_sec() { return ++ticks * 0.000001f; } };
 struct CSE_ALifeDynamicObject
 {
     bool m_bOnline, pre_redundant, post_redundant, sync_ok, flip_sync, flip_transition, become_redundant;
@@ -50,6 +50,7 @@ int main()
         for (bool sampled : {false, true})
         {
             CSE_ALifeDynamicObject original{bool(mask&1), bool(mask&2), bool(mask&4), bool(mask&8), bool(mask&16), bool(mask&32), bool(mask&64)};
+            const bool online_after_sync = original.m_bOnline ^ original.flip_sync;
             auto candidate = original;
             Log expected{"redundant"};
             bool released = original.pre_redundant;
@@ -73,6 +74,10 @@ int main()
             Candidate manager; manager.m_reconcile_sample = sampled;
             manager.switch_object(&candidate);
             check(expected == candidate.log);
+            check((manager.m_reconcile_stage_ms[0] > 0) == sampled);
+            check((manager.m_reconcile_stage_ms[1] > 0) == (sampled && evaluated && online_after_sync));
+            check((manager.m_reconcile_stage_ms[2] > 0) == (sampled && evaluated && !online_after_sync));
+            check((manager.m_reconcile_stage_ms[3] > 0) == (sampled && evaluated));
             check(online == candidate.m_bOnline && released == candidate.released && evaluated == candidate.evaluated);
         }
     std::cout << "256 real-method lifecycle invariant cases passed (sampled and unsampled)\n";
