@@ -37,7 +37,6 @@ struct Operations
 struct Candidate : Operations
 {
     bool m_reconcile_sample = false;
-    unsigned m_reconcile_objects = 0;
     double m_reconcile_stage_ms[4] = {};
     bool maintain_before_switch(CSE_ALifeDynamicObject*);
     void evaluate_switch(CSE_ALifeDynamicObject*);
@@ -75,7 +74,6 @@ int main()
             manager.switch_object(&candidate);
             check(expected == candidate.log);
             check(online == candidate.m_bOnline && released == candidate.released && evaluated == candidate.evaluated);
-            check(manager.m_reconcile_objects == unsigned(sampled));
         }
     std::cout << "256 real-method lifecycle invariant cases passed (sampled and unsampled)\n";
 }

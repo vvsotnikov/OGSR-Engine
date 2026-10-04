@@ -22,8 +22,6 @@ protected:
     bool m_reconcile_metrics = false;
     bool m_reconcile_sample = false;
     u32 m_reconcile_slices = 0;
-    u32 m_reconcile_samples = 0;
-    u32 m_reconcile_objects = 0;
     double m_reconcile_stage_ms[4] = {};
     u64 m_online_switches = 0;
     u64 m_offline_switches = 0;

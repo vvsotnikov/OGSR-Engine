@@ -267,7 +267,6 @@ void CALifeSwitchManager::switch_object(CSE_ALifeDynamicObject* I)
         maintain_after_switch(I);
         return;
     }
-    ++m_reconcile_objects;
     CTimer timer;
     timer.Start();
     const bool ready = maintain_before_switch(I);
@@ -287,8 +286,6 @@ void CALifeSwitchManager::begin_reconciliation()
     m_reconcile_sample = m_reconcile_metrics && (++m_reconcile_slices % 64 == 0);
     if (m_reconcile_sample)
     {
-        ++m_reconcile_samples;
-        m_reconcile_objects = 0;
         for (auto& value : m_reconcile_stage_ms) value = 0;
     }
 }
