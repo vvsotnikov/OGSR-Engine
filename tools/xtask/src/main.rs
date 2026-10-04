@@ -53,7 +53,16 @@ fn validate_index() -> Result {
     let before = git(&["write-tree"])?;
     let unstaged = tracked_edits()?;
     let extra = xtask::snapshot::extra_inputs(&env::current_dir()?)?;
-    let isolated = unstaged || !extra.is_empty();
+    let hidden = git(&["ls-files", "-v", "-z"])?.split('\0').any(|entry| {
+        entry
+            .as_bytes()
+            .first()
+            .is_some_and(|tag| *tag == b'S' || tag.is_ascii_lowercase())
+    });
+    let isolated = unstaged || hidden || !extra.is_empty();
+    if hidden {
+        eprintln!("Isolating: index contains assume-unchanged or skip-worktree entries.");
+    }
     if unstaged {
         eprintln!("Isolating: tracked working changes differ from the index.");
     }

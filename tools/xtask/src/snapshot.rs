@@ -41,6 +41,10 @@ pub fn is_build_input(path: &str) -> bool {
         return false;
     }
     let lower = path.to_ascii_lowercase();
+    let filename = lower.rsplit('/').next().unwrap_or("");
+    if lower.ends_with(".aps") || ["thumbs.db", "ehthumbs.db", "desktop.ini"].contains(&filename) {
+        return false;
+    }
     let parts: Vec<_> = lower.split('/').collect();
     if parts.contains(&"__pycache__")
         || (parts.len() >= 4 && parts[0] == "tools" && parts[1] == "tests" && parts[3] == "build")
@@ -51,18 +55,18 @@ pub fn is_build_input(path: &str) -> bool {
         .iter()
         .any(|r| within(path, r))
         || (!path.contains('/')
-            && (path.starts_with("Cargo.")
-                || path == "rust-toolchain.toml"
+            && (lower.starts_with("cargo.")
+                || lower == "rust-toolchain.toml"
                 || [
                     "sln", "props", "targets", "cmake", "cmd", "bat", "ps1", "py",
                 ]
                 .contains(
-                    &Path::new(path)
+                    &Path::new(&lower)
                         .extension()
                         .and_then(|x| x.to_str())
                         .unwrap_or(""),
                 )
-                || path == "CMakeLists.txt"))
+                || lower == "cmakelists.txt"))
 }
 pub fn extra_inputs(root: &Path) -> Result<Vec<String>> {
     let exclusions: Vec<_> = DEPENDENCIES
@@ -70,7 +74,27 @@ pub fn extra_inputs(root: &Path) -> Result<Vec<String>> {
         .chain(CACHES)
         .map(|path| format!(":(top,icase,exclude){path}"))
         .collect();
-    let mut args = vec!["ls-files", "--others", "-z", "--"];
+    let mut args = vec![
+        "ls-files",
+        "--others",
+        "-z",
+        "--",
+        ":(top,icase)ogsr_engine",
+        ":(top,icase)3rd_party",
+        ":(top,icase)tools",
+        ":(top,icase).githooks",
+        ":(top,icase).cargo",
+        ":(top,icase,glob)Cargo.*",
+        ":(top,icase)rust-toolchain.toml",
+        ":(top,icase)CMakeLists.txt",
+    ];
+    let roots: Vec<_> = [
+        "sln", "props", "targets", "cmake", "cmd", "bat", "ps1", "py",
+    ]
+    .iter()
+    .map(|extension| format!(":(top,icase,glob)*.{extension}"))
+    .collect();
+    args.extend(roots.iter().map(String::as_str));
     args.extend(exclusions.iter().map(String::as_str));
     Ok(git_at(root, &args)?
         .split('\0')
@@ -135,14 +159,20 @@ fn unlink(path: &Path, metadata: &fs::Metadata) -> Result {
     result.map_err(|e| format!("Cannot unlink {}: {e}", path.display()))?;
     Ok(())
 }
-fn detach_links(path: &Path) -> Result {
+fn detach_links(root: &Path, path: &Path) -> Result {
     for entry in fs::read_dir(path)? {
         let path = entry?.path();
         let metadata = fs::symlink_metadata(&path)?;
         if reparse(&metadata) {
             unlink(&path, &metadata)?;
         } else if metadata.is_dir() {
-            detach_links(&path)?;
+            let relative = path
+                .strip_prefix(root)?
+                .to_string_lossy()
+                .replace('\\', "/");
+            if !CACHES.iter().any(|cache| within(&relative, cache)) {
+                detach_links(root, &path)?;
+            }
         }
     }
     Ok(())
@@ -242,9 +272,20 @@ pub fn prepare(root: &Path, tree: &str) -> Result<PathBuf> {
             ],
         )?;
     } else {
-        detach_links(&path)?;
+        detach_links(&path, &path)?;
         git_at(&path, &["checkout", "--force", "--detach", &commit])?;
     }
+    // Explicitly materialize index contents even if sparse/hidden flags were set.
+    git_at(
+        &path,
+        &[
+            "read-tree",
+            "--reset",
+            "-u",
+            "--no-sparse-checkout",
+            &commit,
+        ],
+    )?;
     // Ignore rules may change between staged trees. They must not preserve stale source.
     let mut clean = vec!["clean", "-ffdx"];
     let exclusions: Vec<_> = CACHES.iter().map(|p| format!("/{p}/")).collect();

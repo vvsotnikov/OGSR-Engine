@@ -524,3 +524,30 @@ fn provisioned_dependency_roots_match_updater() {
         );
     }
 }
+
+#[test]
+fn hidden_working_edits_validate_index_bytes() {
+    for flag in ["--assume-unchanged", "--skip-worktree"] {
+        let fixture = Fixture::new("int main() {}\n", "true");
+        ok(
+            &fixture.0,
+            "git",
+            &["update-index", flag, "tools/tests/fixture.cpp"],
+        );
+        fs::write(
+            fixture.0.join("tools/tests/fixture.cpp"),
+            "hidden broken source",
+        )
+        .unwrap();
+        let result = ok(
+            &fixture.0,
+            "git",
+            &["commit", "--allow-empty", "-m", "test: hidden input"],
+        );
+        assert!(output_text(&result).contains("Isolating: index contains"));
+        assert_eq!(
+            fs::read_to_string(fixture.0.join("tools/tests/fixture.cpp")).unwrap(),
+            "hidden broken source"
+        );
+    }
+}

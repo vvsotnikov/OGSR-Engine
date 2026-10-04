@@ -22,7 +22,8 @@ retained at the path printed in the failure output.
 `ReleaseTracyProfiler`, or `Debug` selects one build. These options do not weaken
 the hooks. GitHub workflow enablement is independent and remains disabled.
 
-A partial commit or extra source/tooling input uses a persistent detached worktree
+A partial commit, hidden index flags, or extra source/tooling input uses a
+persistent detached worktree
 of the index. Only its named build caches survive reuse; tracked edits and stale
 untracked inputs are discarded there, including ignored files. This snapshot is
 owned by the validator, not a place to edit source. Developer working files and
@@ -32,8 +33,9 @@ rules; known dependencies, build outputs and Python bytecode caches are excluded
 The hook prints paths that force isolation. Local `.vcxproj.user` files and
 `build_config_overrides/` can change build settings and therefore remain inputs.
 Keep them if needed and accept isolation; move unused files outside the checkout.
-Resource-editor `.aps` files and obsolete `ogsr_engine/LuaJIT/bin` output also
-trigger isolation; archive them outside source directories when no longer needed.
+Resource-editor `.aps` files and Explorer metadata are non-inputs. Obsolete
+`ogsr_engine/LuaJIT/bin` output triggers isolation; archive it outside source
+directories when no longer needed.
 Put custom build outputs in `target/` or `tools/tests/<suite>/build/`.
 
 The snapshot borrows the dependency directories provisioned by
