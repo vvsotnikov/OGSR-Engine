@@ -199,19 +199,30 @@ fn validate(configuration: Option<&str>, tests_only: bool, acquire_lock: bool) -
     ]))?;
     if !tests_only {
         let build = msbuild()?;
+        let native_tracy = xtask::has_solution_configuration(
+            &fs::read_to_string("Engine.sln")
+                .map_err(|error| format!("Cannot read Engine.sln configurations: {error}"))?,
+            "ReleaseTracyProfiler",
+        );
         let configurations = configuration
             .map(|c| vec![c])
             .unwrap_or_else(|| vec!["Release", "ReleaseTracyProfiler"]);
         for variant in configurations {
             let log = format!("target/validation/{variant}.log");
-            run(Command::new(&build).env("CONFIGURATION_GA", variant).args([
+            let mut command = Command::new(&build);
+            command.env_remove("CONFIGURATION_GA");
+            if !native_tracy {
+                command.env("CONFIGURATION_GA", variant);
+            }
+            let build_configuration = if variant == "ReleaseTracyProfiler" && !native_tracy {
+                "Release"
+            } else {
+                variant
+            };
+            run(command.args([
                 "Engine.sln",
                 &format!("/m:{jobs}"),
-                if variant == "Debug" {
-                    "/p:Configuration=Debug"
-                } else {
-                    "/p:Configuration=Release"
-                },
+                &format!("/p:Configuration={build_configuration}"),
                 "/p:Platform=x64",
                 "/verbosity:minimal",
                 "/nologo",

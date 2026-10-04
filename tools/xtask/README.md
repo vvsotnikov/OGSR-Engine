@@ -16,6 +16,10 @@ Both pre-commit and pre-merge-commit run formatting, Rust tests, all immediate
 CMake test suites, and both x64 engine variants. `cargo xtask validate --tests-only`
 omits engine builds; `--configuration Release`, `ReleaseTracyProfiler`, or `Debug`
 selects one build. These options do not weaken the hooks.
+The validator reads the solution configuration table: when a real Tracy
+configuration exists, it selects it and clears inherited `CONFIGURATION_GA`.
+Older layouts receive the legacy switch and version metadata. This prevents a
+Tracy check from silently becoming a second ordinary Release build.
 Set `OGSR_BUILD_JOBS` to a positive integer to override the default four workers.
 CTest cases have a two-minute timeout. Rust hook integration tests require
 Windows/MSVC and test failures against real disposable Git repositories.
@@ -31,7 +35,7 @@ files such as root-level notes and logs do not force isolation. An index change
 during validation fails the commit rather than approving a different tree.
 
 The staged worktree borrows existing ignored third-party dependency checkouts
-and copies provisioned LuaJIT binaries; these remain local inputs, so this is not
+and copies provisioned LuaJIT binaries for older build layouts; these remain local inputs, so this is not
 a hermetic build. It refuses staged files overlapping a borrowed dependency.
 Do not edit build inputs or run another build in the checkout being validated.
 An OS-backed per-worktree lock prevents overlapping validators and is released on

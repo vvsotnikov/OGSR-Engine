@@ -282,7 +282,7 @@ fn engine_failure_blocks_commit() {
 #[test]
 fn tracy_failure_blocks_commit_after_release_passes() {
     let fixture = Fixture::new("int main() {}\n", "true");
-    fs::write(fixture.0.join("Fixture.vcxproj"), r#"<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="Build"><Error Condition="'$(CONFIGURATION_GA)'=='ReleaseTracyProfiler'" Text="TRACY_FIXTURE_FAILURE" /></Target></Project>"#).unwrap();
+    fs::write(fixture.0.join("Fixture.vcxproj"), r#"<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="Build"><Error Condition="'$(CONFIGURATION_GA)'==''" Text="LEGACY_METADATA_MISSING" /><Error Condition="'$(CONFIGURATION_GA)'=='ReleaseTracyProfiler'" Text="TRACY_FIXTURE_FAILURE" /></Target></Project>"#).unwrap();
     ok(&fixture.0, "git", &["add", "Fixture.vcxproj"]);
     Fixture::reject_at(&fixture.0, "TRACY_FIXTURE_FAILURE");
 }
@@ -316,4 +316,34 @@ fn dispatcher_uses_current_hook_and_enforces_linked_worktrees() {
     Fixture::reject_at(&linked, "LINKED_HOOK");
     fs::remove_file(linked.join(".githooks/pre-commit")).unwrap();
     Fixture::reject_at(&linked, "Bring the validation infrastructure");
+}
+
+#[test]
+fn native_tracy_selection_clears_inherited_legacy_switch() {
+    let fixture = Fixture::new("int main() {}\n", "true");
+    let path = fixture.0.join("Engine.sln");
+    let solution = fs::read_to_string(&path).unwrap()
+        .replace(" Release|x64 = Release|x64", " Release|x64 = Release|x64\n ReleaseTracyProfiler|x64 = ReleaseTracyProfiler|x64")
+        .replace(" {11111111-1111-1111-1111-111111111111}.Release|x64.Build.0 = Release|x64", " {11111111-1111-1111-1111-111111111111}.Release|x64.Build.0 = Release|x64\n {11111111-1111-1111-1111-111111111111}.ReleaseTracyProfiler|x64.ActiveCfg = ReleaseTracyProfiler|x64\n {11111111-1111-1111-1111-111111111111}.ReleaseTracyProfiler|x64.Build.0 = ReleaseTracyProfiler|x64");
+    fs::write(path, solution).unwrap();
+    fs::write(fixture.0.join("Fixture.vcxproj"), r#"<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="Build"><Error Condition="'$(CONFIGURATION_GA)'!=''" Text="UNEXPECTED_LEGACY_SWITCH" /><Error Condition="'$(Configuration)'=='ReleaseTracyProfiler'" Text="NATIVE_TRACY_FAILURE" /></Target></Project>"#).unwrap();
+    ok(&fixture.0, "git", &["add", "Engine.sln", "Fixture.vcxproj"]);
+    let before = ok(&fixture.0, "git", &["rev-parse", "HEAD"]).stdout;
+    let mut command = Command::new("git");
+    command
+        .current_dir(&fixture.0)
+        .args(["commit", "-m", "test: native Tracy must fail"])
+        .env("CONFIGURATION_GA", "ReleaseTracyProfiler")
+        .env("CARGO_TARGET_DIR", fixture.0.join("target"));
+    for (key, _) in std::env::vars().filter(|(key, _)| key.starts_with("GIT_")) {
+        command.env_remove(key);
+    }
+    let output = command.output().unwrap();
+    let log = output_text(&output);
+    assert!(
+        !output.status.success() && log.contains("NATIVE_TRACY_FAILURE"),
+        "{log}"
+    );
+    assert!(!log.contains("UNEXPECTED_LEGACY_SWITCH"), "{log}");
+    assert_eq!(before, ok(&fixture.0, "git", &["rev-parse", "HEAD"]).stdout);
 }
