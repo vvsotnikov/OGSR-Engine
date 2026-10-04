@@ -22,10 +22,19 @@ int main(int argc, char** argv)
         trace_export::TsvFiles output(argv[2]);
         for (const auto* plot : worker.GetPlots())
         {
-            const std::string name = worker.GetString(plot->name);
+            const char* type;
+            std::string name;
+            switch (plot->type)
+            {
+            case tracy::PlotType::User: type = "user"; name = worker.GetString(plot->name); break;
+            case tracy::PlotType::Memory: type = "memory"; name = plot->name ? worker.GetString(plot->name) : "Memory usage"; break;
+            case tracy::PlotType::SysTime: type = "cpu"; name = "CPU usage"; break;
+            case tracy::PlotType::Power: type = "power"; name = worker.GetString(plot->name); break;
+            default: throw std::runtime_error("Unsupported Tracy plot type");
+            }
             for (const auto& point : plot->data)
             {
-                output.plot(name, point.time.Val(), point.val);
+                output.plot(type, name, point.time.Val(), point.val);
             }
         }
         const auto* base = worker.GetFramesBase();

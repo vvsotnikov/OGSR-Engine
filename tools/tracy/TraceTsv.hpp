@@ -36,7 +36,7 @@ public:
             throw std::runtime_error("Cannot open output files for prefix: " + prefix);
         frames << "index\tstart_ns\tduration_ns\n";
         zones << "name\tstart_ns\tduration_ns\tthread_id\tthread_name\tsource_id\tfile\tline\n";
-        plots << "name\ttime_ns\tvalue\n" << std::setprecision(std::numeric_limits<double>::max_digits10);
+        plots << "type\tname\ttime_ns\tvalue\n" << std::setprecision(std::numeric_limits<double>::max_digits10);
     }
 
     void frame(uint64_t index, int64_t start, int64_t duration)
@@ -56,8 +56,10 @@ public:
         zones << '\t' << line << '\n';
     }
 
-    void plot(const std::string& name, int64_t time, double value)
+    void plot(const std::string& type, const std::string& name, int64_t time, double value)
     {
+        write_name(plots, type);
+        plots << '\t';
         write_name(plots, name);
         plots << '\t' << time << '\t' << value << '\n';
     }

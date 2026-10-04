@@ -38,12 +38,33 @@ class Reports(unittest.TestCase):
                                    capture_output=True, text=True, encoding='utf-8', check=True)
             frame = next(x for x in json.loads(peaks.stdout) if x['frame'] == 2)
             self.assertEqual(frame['inclusiveScopes'][0]['name'], name)
-            self.assertEqual(frame['plotSamples'][name], [12345678.125])
+            self.assertEqual(next(p['values'] for p in frame['plotSamples'] if p['name'] == name), [12345678.125])
+            self.assertEqual(len([p for p in frame['plotSamples'] if p['name'] == 'CPU usage']), 2)
+            crossing = next(z for z in frame['inclusiveScopes'] if z['name'] == 'crossing')
+            self.assertEqual(crossing['overlapMs'], .5)
+            self.assertEqual(crossing['file'].encode('utf-8', errors='surrogateescape'), b'path-\xff.cpp')
+            self.assertNotIn('crossing', [z['name'] for z in result['zonesInclusive']])
+            self.assertEqual(len([z for z in frame['inclusiveScopes'] if z['sourceId'] == 1]), 2)
             self.assertEqual(frame['inclusiveScopes'][0]['threadId'], 12345)
             self.assertEqual(frame['inclusiveScopes'][0]['threadName'], 'worker\t\"one\"\n')
             self.assertEqual(result['zonesInclusive'][0]['threads'][0]['id'], 12345)
             with self.assertRaisesRegex(ValueError, 'No complete frames'):
                 summary.summarize(prefix, 4, 5)
+
+    @unittest.skipUnless(WRITER, "Run through CTest")
+    def test_invalid_tsv(self):
+        with tempfile.TemporaryDirectory() as directory:
+            prefix = str(Path(directory) / 'trace')
+            for suffix in ['frames', 'zones', 'plots']:
+                for content in [b'', b'wrong\theader\n']:
+                    subprocess.run([WRITER, prefix], check=True)
+                    Path(prefix + '-' + suffix + '.tsv').write_bytes(content)
+                    scripts = ['trace_peaks.py'] if suffix == 'plots' else ['summarize_trace.py', 'trace_peaks.py']
+                    for script in scripts:
+                        result = subprocess.run([sys.executable, '-B', str(TOOLS / script), prefix, '2', '3'], capture_output=True, text=True)
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertIn('schema', result.stderr)
+                        self.assertNotIn('Traceback', result.stderr)
 
     def test_invalid_windows_fail_before_reading(self):
         for start, end in [(0, math.inf), (math.nan, 1), (2, 1), (-1, 2)]:

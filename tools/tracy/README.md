@@ -13,7 +13,7 @@ Only one collector may connect. Regular Release builds cannot emit traces.
 
 `ogsr-trace-export.exe <trace> <prefix>` loads the trace through Tracy's reader
 and exports complete CPU zones with static source names, base-frame boundaries,
-and plots. Source IDs, files and lines keep same-named scopes distinct; IDs are
+and typed plots (user, CPU usage, memory and power). Source IDs, files and lines keep same-named scopes distinct; IDs are
 local to one capture. GPU timelines, dynamic zone names/text and messages remain available
 in the original trace but are not exported. Thread IDs are OS IDs accompanied by
 Tracy thread names; they are not stable identities across runs. Plot export also
@@ -30,8 +30,9 @@ so their sum is not elapsed wall time or CPU utilization. Recursive zones with
 the same name can sum to more than the frame duration. Capture frame indices do
 not identify engine frame numbers after late collector connections or loading.
 
-TSV fields use CSV quoting and preserve embedded newlines; readers require UTF-8
-and report invalid input rather than silently replacing names. Exports can be
+TSV fields use CSV quoting and preserve embedded newlines; readers decode UTF-8 with surrogate escapes for undecodable bytes, such as
+legacy Windows source paths. JSON escapes preserve those bytes without guessing
+a code page. Plot type/name pairs distinguish built-in and same-named user plots. Exports can be
 large, and aggregation retains selected durations in memory. Keep the original
 trace for GPU analysis and other data not represented by these reports.
 
@@ -47,3 +48,6 @@ ctest --test-dir <build-dir> -C Release --output-on-failure
 
 The tools are compiled for the local machine's instruction set; rebuild them
 when moving to a machine with different CPU capabilities.
+
+`tools.json` records the pinned tool-source revision and compatibility headers
+for identifying a copied binary package.

@@ -1,6 +1,6 @@
 """Summarize CPU trace TSV output; retain durations in the selected window."""
 import argparse
-import csv
+from trace_tsv import rows
 from array import array
 from collections import defaultdict
 import json
@@ -24,27 +24,20 @@ def summarize(prefix, start, end):
         raise ValueError("Invalid window")
     lower, upper = start * 1e9, end * 1e9
     frames = array('d')
-    with open(prefix + '-frames.tsv', encoding='utf-8') as stream:
-        if next(stream).strip() != 'index\tstart_ns\tduration_ns':
-            raise ValueError('Unexpected frame schema')
-        for line in stream:
-            index, timestamp, duration = map(int, line.split('\t'))
-            if duration > 0 and timestamp >= lower and timestamp + duration <= upper:
-                frames.append(duration / 1e6)
+    for index, timestamp, duration in rows(prefix, 'frames'):
+        timestamp, duration = int(timestamp), int(duration)
+        if duration > 0 and timestamp >= lower and timestamp + duration <= upper:
+            frames.append(duration / 1e6)
     if not frames:
         raise ValueError('No complete frames in selected window')
     zones = defaultdict(lambda: array('d'))
     threads = defaultdict(set)
-    with open(prefix + '-zones.tsv', encoding='utf-8', newline='') as stream:
-        reader = csv.reader(stream, delimiter='\t')
-        if next(reader) != ['name', 'start_ns', 'duration_ns', 'thread_id', 'thread_name', 'source_id', 'file', 'line']:
-            raise ValueError('Unexpected zone schema')
-        for name, timestamp, duration, thread, thread_name, source_id, file, line in reader:
-            timestamp, duration = int(timestamp), int(duration)
-            if duration >= 0 and timestamp >= lower and timestamp + duration <= upper:
-                key = (int(source_id), name, file, int(line))
-                zones[key].append(duration / 1e6)
-                threads[key].add((int(thread), thread_name))
+    for name, timestamp, duration, thread, thread_name, source_id, file, line in rows(prefix, 'zones'):
+        timestamp, duration = int(timestamp), int(duration)
+        if duration >= 0 and timestamp >= lower and timestamp + duration <= upper:
+            key = (int(source_id), name, file, int(line))
+            zones[key].append(duration / 1e6)
+            threads[key].add((int(thread), thread_name))
     return dict(startSeconds=start, endSeconds=end,
                 selection='Complete events in window; boundary-crossing zones excluded. Inclusive and parallel zone times are not additive.',
                 percentileMethod='nearest rank', frames=statistics(frames),
