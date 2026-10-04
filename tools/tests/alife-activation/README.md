@@ -1,15 +1,26 @@
-This opt-in experiment separates eligible activation requests from registry
-visits. The default engine path remains synchronous. Queue length is bounded by
-the u16 ID space; cancel/re-enqueue does not accumulate stale slots. ID reuse
-inherits a slot but never a pointer: consumption rechecks the current object.
+This opt-in experiment tests whether deferring expensive online switches lets
+registry checks reach other objects sooner, at the cost of activation latency.
+It does not establish that sweep stalls are a measured gameplay problem.
 
-The queue belongs to the switch manager and is not saved. First traversal,
-loading, actor, story and forced-online objects stay synchronous. Direct calls
-to switch_online always execute immediately. Deferred consumption shares the
-remaining switch budget, with one-attempt progress and a 32-attempt cap; a single
-activation is indivisible. Callbacks must not reset or recursively drain the queue.
+The default path remains synchronous. First traversal, loading, actor, story and
+forced-online objects retain immediate semantics. Direct switch_online calls
+always execute immediately. The queue is transient switch-manager state and is
+not saved; the first traversal of a new level clears it.
 
-No measured gameplay benefit is established. The existing switch iterator already
-has a budget; this draft is an experiment, not a proposed default or a replacement
-for fixing its units. Use Tracy's ALife/activation_queue scope to compare actual
-activation bursts before deciding whether to retain the experiment.
+At most one FIFO slot exists per u16 ID. Cancellation/re-enqueue cannot accumulate
+stale slots. A reused ID inherits its position but never a pointer: consumption
+resolves the current object and repeats normal eligibility and location checks.
+That re-evaluation adds work. Leaving the level registry does not itself make
+saved client data invalid, so a skipped request does not erase it.
+
+Drain uses the iterator's own expiry predicate and clock, not a second allowance.
+It attempts at least one queued slot and at most 32; one activation is indivisible.
+On main's inflated allowance, the cap normally dominates. With corrected short
+budgets, a traversal that exhausts the allowance leaves only the progress attempt.
+Measurements across those base versions are not directly comparable. The queued
+request plot may include released IDs until they are consumed; it is not a count
+of live NPCs. Consumers must not reset the world or recursively drain the queue.
+
+No gameplay benefit is established. Before adopting the experiment, compare
+registry revisit latency, updates-to-online, and frame cost under the same engine
+budget, including the cost of rechecking deferred objects.

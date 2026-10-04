@@ -24,14 +24,13 @@ public:
     void clear() { m_requests.clear(); m_queued.reset(); m_wanted.reset(); }
     // Consumption does not reset the world or recursively drain this queue.
     // One attempt guarantees progress; a single activation remains indivisible.
-    template <typename Clock, typename Consume>
-    unsigned drain(Clock clock, Consume consume, double budget_ms, unsigned limit)
+    template <typename Expired, typename Consume>
+    unsigned drain(Expired expired, Consume consume, unsigned limit)
     {
-        const auto start = clock();
         unsigned attempts = 0;
         while (!m_requests.empty() && attempts < limit)
         {
-            if (attempts && clock() - start >= budget_ms) break;
+            if (attempts && expired()) break;
             const auto id = m_requests.front(); m_requests.pop_front();
             m_queued.reset(id); ++attempts;
             if (!m_wanted[id]) continue;

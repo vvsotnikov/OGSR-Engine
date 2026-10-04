@@ -28,9 +28,6 @@ private:
     ALifeActivationQueue m_activation_queue;
     bool m_activation_queue_enabled = false;
     bool m_collect_activations = false;
-    u32 m_activation_level = u32(-1);
-    CTimer m_activation_timer;
-    double m_activation_budget_ms = 0;
     OBJECT_VECTOR m_saved_chidren;
 
 protected:

@@ -253,7 +253,7 @@ void CALifeSwitchManager::switch_object(CSE_ALifeDynamicObject* I)
 
 void CALifeSwitchManager::request_switch_online(CSE_ALifeDynamicObject* object)
 {
-    // Actor, story objects and forced-online objects retain synchronous semantics.
+    // Conservatively preserve immediate semantics for actor, story and forced-online objects.
     if (m_collect_activations && object != graph().actor() && object->can_switch_offline() && object->m_story_id == INVALID_STORY_ID)
     {
         m_activation_queue.enqueue(object->ID);
@@ -266,12 +266,8 @@ void CALifeSwitchManager::request_switch_online(CSE_ALifeDynamicObject* object)
 void CALifeSwitchManager::begin_activation_collection()
 {
     if (!m_activation_queue_enabled) return;
-    const u32 level = u32(graph().level().level_id());
-    if (level != m_activation_level) { m_activation_queue.clear(); m_activation_level = level; }
     m_collect_activations = !graph().level().first_update() && Device.dwPrecacheFrame == 0 && graph().actor()->m_bOnline;
     if (!m_collect_activations) { m_activation_queue.clear(); return; }
-    m_activation_budget_ms = graph().level().time_limit_ms();
-    m_activation_timer.Start();
 }
 
 void CALifeSwitchManager::finish_activation_collection()
@@ -280,14 +276,14 @@ void CALifeSwitchManager::finish_activation_collection()
     m_collect_activations = false;
     if (!collected) return;
     ZoneScopedN("ALife/activation_queue");
-    const double elapsed = m_activation_timer.GetElapsed_sec() * 1000.0;
-    const double remaining = m_activation_budget_ms < 0 ? 1e9 : std::max(0.0, m_activation_budget_ms - elapsed);
-    m_activation_queue.drain([this]() { return m_activation_timer.GetElapsed_sec() * 1000.0; }, [this](std::uint16_t id) {
+    m_activation_queue.drain([this]() { return graph().level().time_limit_reached(); }, [this](std::uint16_t id) {
         auto* object = objects().object(id, true);
+        // Leaving this registry does not invalidate saved client data; the object
+        // keeps it for its destination level instead of clearing it here.
         if (!object || object->m_bOnline || !graph().level().object(id, true)) return;
         // IDs can be reused: the normal path rechecks current location, attachment,
         // virtual eligibility and distance. switch_online itself always stays immediate.
         switch_object(object);
-    }, remaining, activation_attempt_limit);
-    TracyPlot("ALife/pending activation", int64_t(m_activation_queue.size()));
+    }, activation_attempt_limit);
+    TracyPlot("ALife/queued activation requests", int64_t(m_activation_queue.size()));
 }
