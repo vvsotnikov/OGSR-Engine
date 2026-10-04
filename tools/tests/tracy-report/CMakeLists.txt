@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.19)
+project(tracy-report-tests NONE)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+enable_testing()
+add_test(NAME tracy-report-formats COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/ReportTest.py")
