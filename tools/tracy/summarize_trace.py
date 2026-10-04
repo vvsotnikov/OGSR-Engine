@@ -37,18 +37,19 @@ def summarize(prefix, start, end):
     threads = defaultdict(set)
     with open(prefix + '-zones.tsv', encoding='utf-8', newline='') as stream:
         reader = csv.reader(stream, delimiter='\t')
-        if next(reader) != ['name', 'start_ns', 'duration_ns', 'thread_id', 'thread_name']:
+        if next(reader) != ['name', 'start_ns', 'duration_ns', 'thread_id', 'thread_name', 'source_id', 'file', 'line']:
             raise ValueError('Unexpected zone schema')
-        for name, timestamp, duration, thread, thread_name in reader:
+        for name, timestamp, duration, thread, thread_name, source_id, file, line in reader:
             timestamp, duration = int(timestamp), int(duration)
             if duration >= 0 and timestamp >= lower and timestamp + duration <= upper:
-                zones[name].append(duration / 1e6)
-                threads[name].add((int(thread), thread_name))
+                key = (int(source_id), name, file, int(line))
+                zones[key].append(duration / 1e6)
+                threads[key].add((int(thread), thread_name))
     return dict(startSeconds=start, endSeconds=end,
-                selection='Complete events in window. Inclusive and parallel zone times are not additive.',
+                selection='Complete events in window; boundary-crossing zones excluded. Inclusive and parallel zone times are not additive.',
                 percentileMethod='nearest rank', frames=statistics(frames),
-                zonesInclusive=[dict(name=name, timing=statistics(values), threads=[dict(id=tid, name=tname) for tid, tname in sorted(threads[name])])
-                                for name, values in sorted(zones.items(), key=lambda item: math.fsum(item[1]), reverse=True)])
+                zonesInclusive=[dict(sourceId=key[0], name=key[1], file=key[2], line=key[3], timing=statistics(values), threads=[dict(id=tid, name=tname) for tid, tname in sorted(threads[key])])
+                                for key, values in sorted(zones.items(), key=lambda item: math.fsum(item[1]), reverse=True)])
 
 
 if __name__ == '__main__':

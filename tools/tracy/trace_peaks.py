@@ -23,6 +23,8 @@ def peaks(prefix, start_seconds, end_seconds):
         ), key=lambda row: row['duration_ns'])
     if not selected:
         raise ValueError('No complete frames in interval')
+    first_start = min(frame['start_ns'] for frame in selected)
+    last_end = max(frame['start_ns'] + frame['duration_ns'] for frame in selected)
     scopes = [defaultdict(lambda: [0, 0]) for _ in selected]
     plots = [defaultdict(list) for _ in selected]
     with open(prefix + '-plots.tsv', newline='', encoding='utf-8') as source:
@@ -34,10 +36,12 @@ def peaks(prefix, start_seconds, end_seconds):
     with open(prefix + '-zones.tsv', newline='', encoding='utf-8') as source:
         for row in csv.DictReader(source, delimiter='\t'):
             start, duration = int(row['start_ns']), int(row['duration_ns'])
+            if start + duration <= first_start or start >= last_end:
+                continue
             for frame, result in zip(selected, scopes):
                 overlap = min(start + duration, frame['start_ns'] + frame['duration_ns']) - max(start, frame['start_ns'])
                 if overlap > 0:
-                    value = result[(row['name'], row['thread_id'], row['thread_name'])]
+                    value = result[(row['name'], row['thread_id'], row['thread_name'], row['source_id'], row['file'], row['line'])]
                     value[0] += overlap
                     value[1] = max(value[1], duration)
     output = []
@@ -45,8 +49,8 @@ def peaks(prefix, start_seconds, end_seconds):
         output.append(dict(frame=frame['index'], startSeconds=frame['start_ns']/1e9,
                            frameMs=frame['duration_ns']/1e6,
                            plotSamples=dict(samples),
-                           inclusiveScopes=[dict(name=name, threadId=int(thread), threadName=thread_name, overlapMs=values[0]/1e6, longestZoneMs=values[1]/1e6)
-                                            for (name, thread, thread_name), values in sorted(result.items(), key=lambda entry: entry[1][0], reverse=True)[:12]]))
+                           inclusiveScopes=[dict(name=name, sourceId=int(source_id), file=file, line=int(line), threadId=int(thread), threadName=thread_name, overlapMs=values[0]/1e6, longestZoneMs=values[1]/1e6)
+                                            for (name, thread, thread_name, source_id, file, line), values in sorted(result.items(), key=lambda entry: entry[1][0], reverse=True)[:12]]))
     return output
 
 

@@ -9,7 +9,8 @@ int main(int argc, char** argv)
     output.frame(1, 1000000, 2000000);
     output.frame(2, 2000000000, 2000000);
     output.frame(3, 2002000000, 5000000);
-    output.zone(name, 2000000000, 2000000, 12345, "worker\t\"one\"\n");
+    output.zone(name, 2000000000, 2000000, 12345, "worker\t\"one\"\n", 1, "first.cpp", 10);
+    output.zone(name, 2000000000, 500000, 12345, "worker\t\"one\"\n", 2, "first.cpp", 10);
     output.plot(name, 2001000000, 12345678.125);
     output.finish();
 }

@@ -35,7 +35,7 @@ public:
         if (!frames || !zones || !plots)
             throw std::runtime_error("Cannot open output files for prefix: " + prefix);
         frames << "index\tstart_ns\tduration_ns\n";
-        zones << "name\tstart_ns\tduration_ns\tthread_id\tthread_name\n";
+        zones << "name\tstart_ns\tduration_ns\tthread_id\tthread_name\tsource_id\tfile\tline\n";
         plots << "name\ttime_ns\tvalue\n" << std::setprecision(std::numeric_limits<double>::max_digits10);
     }
 
@@ -45,12 +45,15 @@ public:
     }
 
     void zone(const std::string& name, int64_t start, int64_t duration,
-              uint64_t thread_id, const std::string& thread_name)
+              uint64_t thread_id, const std::string& thread_name,
+              int64_t source_id, const std::string& file, unsigned line)
     {
         write_name(zones, name);
         zones << '\t' << start << '\t' << duration << '\t' << thread_id << '\t';
         write_name(zones, thread_name);
-        zones << '\n';
+        zones << '\t' << source_id << '\t';
+        write_name(zones, file);
+        zones << '\t' << line << '\n';
     }
 
     void plot(const std::string& name, int64_t time, double value)

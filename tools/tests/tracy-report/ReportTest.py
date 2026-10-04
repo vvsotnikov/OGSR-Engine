@@ -1,6 +1,7 @@
 """The export readers must preserve quoted names and reject empty/invalid windows."""
 import json
 import math
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -12,10 +13,11 @@ sys.path.insert(0, str(TOOLS))
 import summarize_trace as summary
 import trace_peaks
 
-WRITER = sys.argv.pop(1)
+WRITER = os.environ.get('OGSR_TSV_WRITER')
 
 
 class Reports(unittest.TestCase):
+    @unittest.skipUnless(WRITER, "Set OGSR_TSV_WRITER or run this suite through CTest")
     def test_quoted_names_and_complete_frames(self):
         with tempfile.TemporaryDirectory() as directory:
             prefix = str(Path(directory) / 'trace')
@@ -29,6 +31,9 @@ class Reports(unittest.TestCase):
             self.assertEqual(result['frames']['count'], 2)
             self.assertEqual(result['frames']['meanMs'], 3.5)
             self.assertEqual(result['zonesInclusive'][0]['name'], name)
+            self.assertEqual(len(result['zonesInclusive']), 2)
+            self.assertEqual([x['file'] for x in result['zonesInclusive']], ['first.cpp', 'first.cpp'])
+            self.assertEqual([x['sourceId'] for x in result['zonesInclusive']], [1, 2])
             peaks = subprocess.run([sys.executable, '-B', str(TOOLS / 'trace_peaks.py'), prefix, '2', '3'],
                                    capture_output=True, text=True, encoding='utf-8', check=True)
             frame = next(x for x in json.loads(peaks.stdout) if x['frame'] == 2)

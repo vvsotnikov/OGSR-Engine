@@ -41,12 +41,13 @@ int main(int argc, char** argv)
                 if (zone->End() < zone->Start()) continue;
                 const auto thread_id = worker.DecompressThread(event.Thread());
                 output.zone(name, zone->Start(), zone->End() - zone->Start(),
-                            thread_id, worker.GetThreadName(thread_id));
+                            thread_id, worker.GetThreadName(thread_id), entry.first,
+                            worker.GetString(location.file), location.line);
             }
         }
+        output.finish();
         std::cout << "capture_unix=" << worker.GetCaptureTime() << " last_ns=" << worker.GetLastTime()
                   << " frame_offset=" << worker.GetFrameOffset() << '\n';
-        output.finish();
         return 0;
     }
     catch (const std::exception& e) { std::cerr << "Trace export failed: " << e.what() << '\n'; return 5; }
