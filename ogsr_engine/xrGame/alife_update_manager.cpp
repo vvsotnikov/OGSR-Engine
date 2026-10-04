@@ -161,6 +161,7 @@ void CALifeUpdateManager::report_metrics()
         "online_switches=%llu offline_switches=%llu updates=%u switch_ms=%.3f scheduled_ms=%.3f",
         Device.dwTimeGlobal, u32(graph().level().level_id()), online, offline, living_online, living_offline,
         m_online_switches, m_offline_switches, m_metrics_updates, m_metrics_switch_ms, m_metrics_scheduled_ms);
+    TracyPlot("ALife/engine frame", int64_t(Device.dwFrame));
     TracyPlot("ALife/online objects", int64_t(online));
     TracyPlot("ALife/living online", int64_t(living_online));
     TracyPlot("ALife/living offline", int64_t(living_offline));

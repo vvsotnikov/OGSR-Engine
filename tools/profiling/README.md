@@ -45,3 +45,7 @@ Build the engine's `ReleaseTracyProfiler|x64` configuration for trace captures; 
 Tracy builds include `ALife/client spawn` and `ALife/client spawn batch` zones
 to distinguish client construction from server reconciliation and ongoing AI work.
 These compile out of ordinary Release builds.
+
+The `ALife/engine frame` plot anchors log/driver frame numbers to trace time.
+Use it when joining runtime evidence to Tracy; do not assume capture indices equal
+engine frame numbers, especially around loading and late collector connections.
