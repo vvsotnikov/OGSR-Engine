@@ -283,7 +283,7 @@ void CALifeSwitchManager::switch_object(CSE_ALifeDynamicObject* I)
 
 void CALifeSwitchManager::begin_reconciliation()
 {
-    m_reconcile_sample = m_reconcile_metrics && (++m_reconcile_slices % 64 == 0);
+    m_reconcile_sample = m_reconcile_metrics && (++m_reconcile_updates % reconcile_stage_cadence == 0);
     if (m_reconcile_sample)
     {
         for (auto& value : m_reconcile_stage_ms) value = 0;
@@ -292,17 +292,22 @@ void CALifeSwitchManager::begin_reconciliation()
 
 void CALifeSwitchManager::finish_reconciliation(double elapsed_ms, double budget_ms, u32 visited)
 {
-    // Emit outside the measured slice, then stop per-object sampling so
-    // subsequent work cannot leak into this slice's stage counters.
-    const bool spike = elapsed_ms >= 10.0;
-    const bool report_spike = spike && Device.dwTimeGlobal - m_last_reconcile_spike_log >= 1000;
+    // Emit outside the measured update, then stop per-object sampling so
+    // subsequent work cannot leak into this update's stage counters.
+    if (!m_reconcile_metrics) { m_reconcile_sample = false; return; }
+    const bool spike = elapsed_ms >= reconcile_spike_ms;
+    const bool report_spike = spike && Device.dwTimeGlobal - m_last_reconcile_spike_log >= reconcile_spike_log_interval_ms;
     if (m_reconcile_metrics && (m_reconcile_sample || report_spike))
     {
         if (report_spike) m_last_reconcile_spike_log = Device.dwTimeGlobal;
-        Msg("[ALife reconcile] frame=%u slice=%u sampled=%u spike=%u objects=%u budget_ms=%.6f total_ms=%.6f before_ms=%.6f try_offline_ms=%.6f try_online_ms=%.6f after_ms=%.6f",
-            Device.dwFrame, m_reconcile_slices, u32(m_reconcile_sample), u32(spike), visited, budget_ms,
+        Msg("[ALife reconcile] frame=%u update=%u sampled=%u spike=%u suppressed=%u objects=%u budget_ms=%.6f total_ms=%.6f before_ms=%.6f try_offline_ms=%.6f try_online_ms=%.6f after_ms=%.6f",
+            Device.dwFrame, m_reconcile_updates, u32(m_reconcile_sample), u32(spike), m_suppressed_spikes, visited, budget_ms,
             elapsed_ms, m_reconcile_sample ? m_reconcile_stage_ms[0] : 0.0, m_reconcile_sample ? m_reconcile_stage_ms[1] : 0.0,
             m_reconcile_sample ? m_reconcile_stage_ms[2] : 0.0, m_reconcile_sample ? m_reconcile_stage_ms[3] : 0.0);
+        TracyPlot("ALife/engine frame", int64_t(Device.dwFrame));
+        m_suppressed_spikes = 0;
     }
+    else if (spike)
+        ++m_suppressed_spikes;
     m_reconcile_sample = false;
 }

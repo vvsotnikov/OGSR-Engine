@@ -107,7 +107,7 @@ extern Flags32 psAI_Flags;
 
 void CLevel::g_sv_Spawn(CSE_Abstract* E)
 {
-    ZoneScopedN("ALife/client spawn");
+    ZoneScopedN("Level/client spawn");
     //-----------------------------------------------------------------
     //	CTimer		T(false);
 
@@ -210,7 +210,7 @@ CSE_Abstract* CLevel::spawn_item(LPCSTR section, const Fvector& position, u32 le
 
 void CLevel::ProcessGameSpawns()
 {
-    ZoneScopedN("ALife/client spawn batch");
+    ZoneScopedN("Level/client spawn batch");
     CSE_Abstract* trader = nullptr;
     while (!game_spawn_queue.empty())
     {

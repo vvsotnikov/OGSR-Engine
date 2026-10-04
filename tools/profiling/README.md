@@ -10,15 +10,15 @@ Metrics describe work accumulated during a reporting interval, not a CPU utiliza
 percentage. Each record covers one cursor update; `objects` counts visits, not
 necessarily the population. `budget_ms` is the limit actually compared by the
 iterator, expressed in milliseconds; -1 denotes an unlimited first update.
-The base engine's conversion bug can make this limit hundreds of seconds, so
-updates normally visit the full registry. The separate switch-budget correction
-restores short slices; diagnostics report either behavior without changing it.
+The effective limit may differ from the configured duration; diagnostics report
+the value actually used by the iterator. Sampling consumes that same allowance
+and can reduce the number of objects visited when the budget applies.
 One slow object can exceed the budget. Stage timers add observer overhead.
 `try_offline_ms` times dispatch for objects online after location synchronization,
 including virtual maintenance; `try_online_ms` starts from offline objects.
 Unsampled spike records are limited to one per second; sampled updates are still
-reported every 64 updates. Logged spikes are not an exhaustive hitch count.
-
+reported every 64 updates. Each emitted record counts spikes suppressed since the previous record. A final
+unreported interval can still contain suppressed spikes.
 
 Frame/time reads and counter updates rely on the engine's frame phases: FrameMove
 and its gameplay callbacks precede seqParallel, which is joined before the next
@@ -37,10 +37,12 @@ reads the emitted log directly. Frame limits are inclusive and optional. It reje
 old or malformed metric formats rather than silently treating missing data as zero.
 Build a tracing engine with `MSBuild Engine.sln /p:Configuration=ReleaseTracyProfiler
 /p:Platform=x64` (one command); ordinary Release omits tracing overhead.
-Tracy builds include `ALife/client spawn` and `ALife/client spawn batch` zones
+Tracy builds include `Level/client spawn` and `Level/client spawn batch` zones
 to distinguish client construction from server reconciliation and ongoing AI work.
+The batch includes the nested per-object scopes, so their times are not additive.
 These compile out of ordinary Release builds.
 
-The `ALife/engine frame` plot anchors log/driver frame numbers to trace time.
+The `ALife/engine frame` plot records a frame anchor for every emitted
+reconciliation record, and once per population-report interval with `-alife_metrics`.
 Use it when joining runtime evidence to Tracy; do not assume capture indices equal
 engine frame numbers, especially around loading and late collector connections.

@@ -21,7 +21,11 @@ protected:
     bool m_alife_diagnostics = false;
     bool m_reconcile_metrics = false;
     bool m_reconcile_sample = false;
-    u32 m_reconcile_slices = 0;
+    static constexpr u32 reconcile_stage_cadence = 64;
+    static constexpr double reconcile_spike_ms = 10.0;
+    static constexpr u32 reconcile_spike_log_interval_ms = 1000;
+    u32 m_reconcile_updates = 0;
+    u32 m_suppressed_spikes = 0;
     double m_reconcile_stage_ms[4] = {};
     u32 m_last_reconcile_spike_log = 0;
     u64 m_online_switches = 0;

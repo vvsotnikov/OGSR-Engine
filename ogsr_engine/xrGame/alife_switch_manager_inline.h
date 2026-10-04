@@ -14,7 +14,7 @@ IC CALifeSwitchManager::CALifeSwitchManager(xrServer* server, LPCSTR section) : 
     m_alife_diagnostics = strstr(Core.Params, "-alife_diagnostics") != nullptr;
     m_reconcile_metrics = strstr(Core.Params, "-alife_reconcile_metrics") != nullptr;
     if (m_reconcile_metrics)
-        Msg("* ALife reconciliation timing: update totals; stage sampling every 64 updates");
+        Msg("* ALife reconciliation timing: update totals; stage sampling every %u updates", reconcile_stage_cadence);
 
     if (m_alife_diagnostics && !m_alife_metrics)
         Msg("! -alife_diagnostics requires -alife_metrics");
