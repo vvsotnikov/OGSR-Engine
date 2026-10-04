@@ -7,7 +7,7 @@
   </ItemGroup>
   <Target Name="CollectLuaJITInputs" DependsOnTargets="PrepareForNMakeBuild">
     <WriteLinesToFile File="$(IntDir)luajit-inputs.txt"
-      Lines="@(LuaJITSource);@(LuaJITDynasm);$(VCToolsInstallDir);$(Configuration);$(Platform)"
+      Lines="@(LuaJITSource);@(LuaJITDynasm);$(VCToolsInstallDir);$(WindowsSdkDir);$(WindowsTargetPlatformVersion);$(UniversalCRTSdkDir);$(UCRTVersion);$(Configuration);$(Platform)"
       Overwrite="true" WriteOnlyWhenDifferent="true" />
   </Target>
   <!-- The batch compiler generates files in its working directory. Never run it
@@ -22,10 +22,16 @@
     <Exec WorkingDirectory="$(LuaJITStage)src" Command="call msvcbuild.bat $(PlatformShortName) static $(Configuration)" />
     <Copy SourceFiles="$(LuaJITStage)bin\$(PlatformShortName)\LuaJIT.lib" DestinationFiles="$(NMakeOutput)" />
   </Target>
-  <Target Name="Build" DependsOnTargets="CompileLuaJIT" />
-  <Target Name="Clean">
+  <!-- Keep the Makefile project's reference resolution, target-path reporting,
+       and Clean pipeline. Rebuild runs _SetRebuildReferences before this hook. -->
+  <PropertyGroup>
+    <PreNMakeBuildTarget>$(PreNMakeBuildTarget);CompileLuaJIT</PreNMakeBuildTarget>
+    <NMakeBuildCommandLine>rem LuaJIT is compiled by CompileLuaJIT.</NMakeBuildCommandLine>
+    <NMakeReBuildCommandLine>rem LuaJIT is rebuilt by CompileLuaJIT.</NMakeReBuildCommandLine>
+    <NMakeCleanCommandLine>rem LuaJIT outputs are removed by CleanLuaJIT.</NMakeCleanCommandLine>
+  </PropertyGroup>
+  <Target Name="CleanLuaJIT" BeforeTargets="CoreClean;_SetRebuildReferences">
     <Delete Files="$(NMakeOutput);$(IntDir)luajit-inputs.txt" />
     <RemoveDir Directories="$(LuaJITStage)" />
   </Target>
-  <Target Name="Rebuild" DependsOnTargets="Clean;Build" />
 </Project>
