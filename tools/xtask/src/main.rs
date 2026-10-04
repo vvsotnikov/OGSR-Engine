@@ -52,7 +52,7 @@ fn validate_index() -> Result {
     let _lock = lock()?;
     let before = git(&["write-tree"])?;
     let unstaged = tracked_edits()?;
-    let extra = xtask::snapshot::extra_inputs(&env::current_dir()?)?;
+    let extra = xtask::snapshot::extra_inputs(&env::current_dir()?, xtask::snapshot::Index::Hook)?;
     let hidden = git(&["ls-files", "-v", "-z"])?.split('\0').any(|entry| {
         entry
             .as_bytes()
@@ -83,16 +83,20 @@ fn validate_index() -> Result {
         }
         command.env("CARGO_TARGET_DIR", snapshot.join("target"));
         run(&mut command)?;
-        xtask::snapshot::git_at(&snapshot, &["diff", "--quiet", &before])
+        xtask::snapshot::git_isolated(&snapshot, &["diff", "--quiet", &before])
             .map_err(|e| format!("Snapshot source changed during validation: {e}"))?;
-        if xtask::snapshot::git_at(&snapshot, &["write-tree"])? != before
-            || !xtask::snapshot::extra_inputs(&snapshot)?.is_empty()
+        if xtask::snapshot::git_isolated(&snapshot, &["write-tree"])? != before
+            || !xtask::snapshot::extra_inputs(&snapshot, xtask::snapshot::Index::Worktree)?
+                .is_empty()
         {
             return Err("Snapshot inputs changed during validation; retry the commit.".into());
         }
     } else {
         validate(None, false, false)?;
-        if tracked_edits()? || !xtask::snapshot::extra_inputs(&env::current_dir()?)?.is_empty() {
+        if tracked_edits()?
+            || !xtask::snapshot::extra_inputs(&env::current_dir()?, xtask::snapshot::Index::Hook)?
+                .is_empty()
+        {
             return Err("Build inputs changed during validation; retry the commit.".into());
         }
     }

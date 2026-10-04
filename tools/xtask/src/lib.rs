@@ -50,4 +50,28 @@ mod tests {
             "3rd_party/Src/DirectXMath/DirectXMath-extra/source.h"
         ));
     }
+    #[test]
+    fn provisioned_dependency_roots_match_updater() {
+        let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let script = std::fs::read_to_string(source.join("Update_Components.cmd")).unwrap();
+        let destinations: Vec<_> = script
+            .lines()
+            .filter(|l| l.starts_with("git clone "))
+            .map(|l| l.split_whitespace().last().unwrap().replace('\\', "/"))
+            .collect();
+        for path in &destinations {
+            assert!(
+                super::snapshot::DEPENDENCIES
+                    .iter()
+                    .any(|root| path == root || path.starts_with(&format!("{root}/"))),
+                "Missing dependency: {path}"
+            );
+        }
+        for root in super::snapshot::DEPENDENCIES {
+            assert!(
+                destinations.iter().any(|path| path == root),
+                "Stale dependency: {root}"
+            );
+        }
+    }
 }

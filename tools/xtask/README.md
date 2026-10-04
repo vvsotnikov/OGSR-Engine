@@ -2,8 +2,7 @@
 
 Install Visual Studio C++ Build Tools, CMake, Git and rustup. The repository's
 `rust-toolchain.toml` selects Rust and rustfmt for both local and GitHub runs.
-Provision engine
-dependencies separately; validation never runs `Update_Components.cmd`.
+Provision engine dependencies separately; validation never runs `Update_Components.cmd`.
 
 ```powershell
 cargo xtask install-hooks
@@ -23,8 +22,7 @@ retained at the path printed in the failure output.
 the hooks. GitHub workflow enablement is independent and remains disabled.
 
 A partial commit, hidden index flags, or extra source/tooling input uses a
-persistent detached worktree
-of the index. Only its named build caches survive reuse; tracked edits and stale
+persistent detached worktree of the index. Only its named build caches survive reuse; tracked edits and stale
 untracked inputs are discarded there, including ignored files. This snapshot is
 owned by the validator, not a place to edit source. Developer working files and
 index contents are never stashed or cleaned. Root scratch notes/logs do not force
@@ -50,8 +48,8 @@ cargo xtask reset-snapshot
 
 Reset removes only this worktree's registered validation snapshot and its metadata,
 never dependency targets. Use that command instead of recursively deleting the
-snapshot by hand. Other registered worktrees are not pruned. After moving a repository, repair Git's
-absolute worktree paths with `git worktree repair <snapshot-path>` before retrying.
+snapshot by hand. Other registered worktrees are not pruned. After moving a
+repository, repair Git's absolute worktree paths with `git worktree repair <snapshot-path>` before retrying.
 The refusal message gives the snapshot path. Do not repair a path redirected by a
 junction; the ownership check intentionally rejects it.
 

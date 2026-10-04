@@ -68,7 +68,12 @@ pub fn is_build_input(path: &str) -> bool {
                 )
                 || lower == "cmakelists.txt"))
 }
-pub fn extra_inputs(root: &Path) -> Result<Vec<String>> {
+pub enum Index {
+    Hook,
+    Worktree,
+}
+
+pub fn extra_inputs(root: &Path, index: Index) -> Result<Vec<String>> {
     let exclusions: Vec<_> = DEPENDENCIES
         .iter()
         .chain(CACHES)
@@ -87,6 +92,8 @@ pub fn extra_inputs(root: &Path) -> Result<Vec<String>> {
         ":(top,icase,glob)Cargo.*",
         ":(top,icase)rust-toolchain.toml",
         ":(top,icase)CMakeLists.txt",
+        ":(top,icase,exclude,glob)tools/tests/*/build/**",
+        ":(top,icase,exclude,glob)**/__pycache__/**",
     ];
     let roots: Vec<_> = [
         "sln", "props", "targets", "cmake", "cmd", "bat", "ps1", "py",
@@ -96,18 +103,25 @@ pub fn extra_inputs(root: &Path) -> Result<Vec<String>> {
     .collect();
     args.extend(roots.iter().map(String::as_str));
     args.extend(exclusions.iter().map(String::as_str));
-    Ok(git_at(root, &args)?
+    Ok(git_with_index(root, &args, index)?
         .split('\0')
         .filter(|p| is_build_input(p))
         .map(str::to_owned)
         .collect())
 }
 
-pub fn git_at(root: &Path, args: &[&str]) -> Result<String> {
+// Snapshot operations must not inherit the developer hook's index or Git directory.
+pub fn git_isolated(root: &Path, args: &[&str]) -> Result<String> {
+    git_with_index(root, args, Index::Worktree)
+}
+
+fn git_with_index(root: &Path, args: &[&str], index: Index) -> Result<String> {
     let mut cmd = Command::new("git");
     cmd.current_dir(root).args(args);
-    for (key, _) in env::vars().filter(|(key, _)| key.starts_with("GIT_")) {
-        cmd.env_remove(key);
+    if matches!(index, Index::Worktree) {
+        for (key, _) in env::vars().filter(|(key, _)| key.starts_with("GIT_")) {
+            cmd.env_remove(key);
+        }
     }
     let out = cmd.output()?;
     if !out.status.success() {
@@ -120,7 +134,7 @@ pub fn git_at(root: &Path, args: &[&str]) -> Result<String> {
 
 fn snapshot_path(root: &Path) -> Result<PathBuf> {
     // A short path avoids MSVC's path-length limit in generated dependency headers.
-    Ok(PathBuf::from(git_at(
+    Ok(PathBuf::from(git_isolated(
         root,
         &["rev-parse", "--path-format=absolute", "--git-path", "v"],
     )?))
@@ -190,9 +204,11 @@ fn remove_owned_tree(path: &Path) -> Result {
 }
 fn registered(root: &Path, path: &Path) -> Result<bool> {
     let expected = format!("worktree {}", path.to_string_lossy().replace('\\', "/"));
-    Ok(git_at(root, &["worktree", "list", "--porcelain", "-z"])?
-        .split('\0')
-        .any(|line| line.eq_ignore_ascii_case(&expected)))
+    Ok(
+        git_isolated(root, &["worktree", "list", "--porcelain", "-z"])?
+            .split('\0')
+            .any(|line| line.eq_ignore_ascii_case(&expected)),
+    )
 }
 fn check_owned(root: &Path, path: &Path) -> Result {
     if let Ok(metadata) = fs::symlink_metadata(path) {
@@ -214,7 +230,7 @@ pub fn reset(root: &Path) -> Result {
         remove_owned_tree(&path)?;
     }
     if registered(root, &path)? {
-        git_at(
+        git_isolated(
             root,
             &[
                 "worktree",
@@ -231,7 +247,7 @@ pub fn reset(root: &Path) -> Result {
 pub fn prepare(root: &Path, tree: &str) -> Result<PathBuf> {
     let path = snapshot_path(root)?;
     check_owned(root, &path)?;
-    let tracked = git_at(root, &["ls-tree", "-r", "--name-only", "-z", tree])?;
+    let tracked = git_isolated(root, &["ls-tree", "-r", "--name-only", "-z", tree])?;
     for item in tracked.split('\0').filter(|p| !p.is_empty()) {
         if DEPENDENCIES
             .iter()
@@ -244,7 +260,7 @@ pub fn prepare(root: &Path, tree: &str) -> Result<PathBuf> {
             .into());
         }
     }
-    let commit = git_at(
+    let commit = git_isolated(
         root,
         &[
             "-c",
@@ -261,7 +277,7 @@ pub fn prepare(root: &Path, tree: &str) -> Result<PathBuf> {
         if registered(root, &path)? {
             reset(root)?;
         }
-        git_at(
+        git_isolated(
             root,
             &[
                 "worktree",
@@ -273,10 +289,10 @@ pub fn prepare(root: &Path, tree: &str) -> Result<PathBuf> {
         )?;
     } else {
         detach_links(&path, &path)?;
-        git_at(&path, &["checkout", "--force", "--detach", &commit])?;
+        git_isolated(&path, &["checkout", "--force", "--detach", &commit])?;
     }
-    // Explicitly materialize index contents even if sparse/hidden flags were set.
-    git_at(
+    // Explicitly materialize index contents even if repository sparse-checkout settings were inherited.
+    git_isolated(
         &path,
         &[
             "read-tree",
@@ -292,7 +308,7 @@ pub fn prepare(root: &Path, tree: &str) -> Result<PathBuf> {
     for exclusion in &exclusions {
         clean.extend(["-e", exclusion.as_str()]);
     }
-    git_at(&path, &clean)?;
+    git_isolated(&path, &clean)?;
     for item in DEPENDENCIES {
         let source = root.join(item);
         let target = path.join(item);

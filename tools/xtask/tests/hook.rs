@@ -40,6 +40,7 @@ impl Fixture {
         fs::create_dir_all(&root).unwrap();
         for file in [
             "Cargo.toml",
+            "Update_Components.cmd",
             "Cargo.lock",
             "rust-toolchain.toml",
             ".gitattributes",
@@ -501,31 +502,6 @@ fn clean_validation_rejects_changed_source_and_index() {
     }
 }
 #[test]
-fn provisioned_dependency_roots_match_updater() {
-    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let script = fs::read_to_string(source.join("Update_Components.cmd")).unwrap();
-    let destinations: Vec<_> = script
-        .lines()
-        .filter(|l| l.starts_with("git clone "))
-        .map(|l| l.split_whitespace().last().unwrap().replace('\\', "/"))
-        .collect();
-    for path in &destinations {
-        assert!(
-            xtask::snapshot::DEPENDENCIES
-                .iter()
-                .any(|root| path == root || path.starts_with(&format!("{root}/"))),
-            "Missing dependency: {path}"
-        );
-    }
-    for root in xtask::snapshot::DEPENDENCIES {
-        assert!(
-            destinations.iter().any(|path| path == root),
-            "Stale dependency: {root}"
-        );
-    }
-}
-
-#[test]
 fn hidden_working_edits_validate_index_bytes() {
     for flag in ["--assume-unchanged", "--skip-worktree"] {
         let fixture = Fixture::new("int main() {}\n", "true");
@@ -550,4 +526,42 @@ fn hidden_working_edits_validate_index_bytes() {
             "hidden broken source"
         );
     }
+}
+
+#[test]
+fn path_only_commit_excludes_files_staged_in_the_real_index() {
+    let fixture = Fixture::new("int main() {}\n", "true");
+    fs::write(fixture.0.join("tools/tests/new_api.h"), "#define VALUE 0\n").unwrap();
+    ok(&fixture.0, "git", &["add", "tools/tests/new_api.h"]);
+    fs::write(
+        fixture.0.join("tools/tests/fixture.cpp"),
+        "#include \"new_api.h\"\nint main() { return VALUE; }\n",
+    )
+    .unwrap();
+    let tree = ok(&fixture.0, "git", &["write-tree"]).stdout;
+    let head = ok(&fixture.0, "git", &["rev-parse", "HEAD"]).stdout;
+    let result = execute(
+        &fixture.0,
+        "git",
+        &[
+            "commit",
+            "-m",
+            "test: missing header",
+            "--",
+            "tools/tests/fixture.cpp",
+        ],
+    );
+    let log = output_text(&result);
+    assert!(!result.status.success(), "{log}");
+    assert!(
+        log.contains("Isolating: untracked build input tools/tests/new_api.h"),
+        "{log}"
+    );
+    assert!(
+        log.contains("new_api.h") && log.contains("command failed"),
+        "{log}"
+    );
+    assert_eq!(tree, ok(&fixture.0, "git", &["write-tree"]).stdout);
+    assert_eq!(head, ok(&fixture.0, "git", &["rev-parse", "HEAD"]).stdout);
+    assert!(fixture.0.join("tools/tests/new_api.h").exists());
 }
