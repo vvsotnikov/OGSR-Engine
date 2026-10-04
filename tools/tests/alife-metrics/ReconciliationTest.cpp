@@ -3,7 +3,7 @@
 #include <string>
 #include <iostream>
 using Log = std::vector<std::string>;
-void check(bool ok) { if (!ok) throw std::runtime_error("lifecycle ordering mismatch"); }
+void check(bool ok) { if (!ok) throw std::runtime_error("switch_object invariant mismatch"); }
 struct CTimer { unsigned ticks = 0; void Start() { ticks = 0; } float GetElapsed_sec() { return ++ticks * 0.000001f; } };
 struct CSE_ALifeDynamicObject
 {

@@ -27,15 +27,15 @@ int main(int argc, char** argv)
 {
     if (argc != 2 || !std::freopen(argv[1], "w", stdout)) return 1;
     Candidate manager;
-    auto update = [&](u32 time, double elapsed) {
+    auto update = [&](u32 time, double elapsed, double budget = 300000.0) {
         Device.dwTimeGlobal = time; ++Device.dwFrame;
         manager.begin_reconciliation();
-        manager.finish_reconciliation(elapsed, 300000.0, 400);
+        manager.finish_reconciliation(elapsed, budget, 400);
     };
     update(0, 20);
     if (records || manager.m_reconcile_updates || manager.m_suppressed_spikes) return 2;
     manager.m_reconcile_metrics = true;
-    update(0, 20);
+    update(0, 20, -1.0); // Unlimited first-update budget must survive the reader round trip.
     if (records != 1 || manager.m_suppressed_spikes) return 3;
     update(1000, 12);
     if (records != 2 || manager.m_suppressed_spikes) return 4;
