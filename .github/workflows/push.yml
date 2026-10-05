@@ -27,6 +27,14 @@ jobs:
 
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v3
+    - name: Setup Rust
+      if: matrix.Configuration == 'Release'
+      shell: pwsh
+      run: rustup toolchain install
+    - name: Validate source tests
+      if: matrix.Configuration == 'Release'
+      shell: pwsh
+      run: cargo xtask validate --tests-only
     - name: MSBuild
       shell: cmd
       run: |
