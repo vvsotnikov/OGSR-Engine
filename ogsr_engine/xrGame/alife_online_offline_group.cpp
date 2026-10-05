@@ -67,29 +67,29 @@ void CSE_ALifeOnlineOfflineGroup::register_member(ALife::_OBJECT_ID member_id)
 
 void CSE_ALifeOnlineOfflineGroup::unregister_member(ALife::_OBJECT_ID member_id)
 {
-    CALifeGraphRegistry& graph = alife().graph();
-    CALifeLevelRegistry& level = graph.level();
-
     MEMBERS::iterator I = m_members.find(member_id);
     VERIFY(I != m_members.end());
     VERIFY((*I).second->m_group_id == ID);
     (*I).second->m_group_id = 0xffff;
 
-    graph.update((*I).second);
-    alife().scheduled().add((*I).second);
+    const bool unloading = alife().is_unloading();
+    // Unload only detaches membership; the simulation registries are discarded.
+    if (!unloading)
+    {
+        alife().graph().update((*I).second);
+        alife().scheduled().add((*I).second);
+    }
 
     m_members.erase(I);
 
     if (m_members.empty())
     {
-        if (!m_bOnline)
+        if (!unloading)
         {
-            graph.remove(this, m_tGraphID);
-        }
-        else
-        {
-            if (ID_Parent == 0xffff)
-                level.remove(this);
+            if (!m_bOnline)
+                alife().graph().remove(this, m_tGraphID);
+            else if (ID_Parent == 0xffff)
+                alife().graph().level().remove(this);
         }
 
         m_flags.set(flUsedAI_Locations, FALSE);
