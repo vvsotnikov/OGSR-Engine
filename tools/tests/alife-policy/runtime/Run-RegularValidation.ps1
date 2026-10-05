@@ -25,7 +25,7 @@ $session = & "$PSScriptRoot/Prepare-Session.ps1" -InstallRoot $InstallRoot `
 $path = Join-Path $session 'session.json'
 $meta = Get-Content -Raw $path | ConvertFrom-Json
 $meta.engineSha256 = (Get-FileHash $engine).Hash
-$meta.build = $build
+$meta | Add-Member -NotePropertyName build -NotePropertyValue $build
 $meta.package = $Package
 $meta | Add-Member distanceControl ([bool]$DistanceControl)
 $meta | Add-Member eligibilityRequested ([bool]$Eligibility)
