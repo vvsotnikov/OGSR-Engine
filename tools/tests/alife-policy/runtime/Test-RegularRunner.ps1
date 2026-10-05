@@ -5,7 +5,7 @@ $root = (Resolve-Path -LiteralPath $root).Path
 # Only process discovery/creation is replaced. Session preparation, package
 # validation, copying and serialization execute their actual implementations.
 function Get-Process { param($Name, $ErrorAction) }
-function Start-Process { throw 'PrepareOnly attempted to launch a process' }
+function Start-Process { throw 'Fixture prevented process launch' }
 try {
     $package = Join-Path $root 'bin_fixture'
     $seed = Join-Path $root 'seed'
@@ -47,6 +47,20 @@ try {
             throw 'Session does not use private appdata'
         }
     }
+    $existing = @(Get-ChildItem "$root/captures" -Directory | ForEach-Object FullName)
+    $rejected = $false
+    try {
+        & "$PSScriptRoot/Run-RegularValidation.ps1" -InstallRoot $root -Package bin_fixture -SeedAppData seed
+    } catch {
+        if ($_.Exception.Message -ne 'Fixture prevented process launch') { throw }
+        $rejected = $true
+    }
+    if (!$rejected) { throw 'Launch failure did not propagate' }
+    $failed = @(Get-ChildItem "$root/captures" -Directory | Where-Object { $_.FullName -notin $existing })
+    if ($failed.Count -ne 1) { throw 'Expected one failed launch session' }
+    $meta = Get-Content -Raw "$($failed[0].FullName)/session.json" | ConvertFrom-Json
+    if ($meta.status -ne 'regular-failed' -or $meta.failure -ne 'Fixture prevented process launch' -or
+        $meta.PSObject.Properties['gamePid']) { throw 'Launch failure was not recorded accurately' }
     if ((Get-FileHash "$seed/user_ogsr.ltx").Hash -ne $settingsHash -or
         (Get-FileHash "$root/fsgame.ltx").Hash -ne $fsHash -or
         (Get-FileHash "$seed/savedgames/bar_center.sav").Hash -ne $seedHash) {

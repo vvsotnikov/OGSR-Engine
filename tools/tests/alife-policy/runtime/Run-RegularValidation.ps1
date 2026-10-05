@@ -59,12 +59,12 @@ if ($PrepareOnly) {
     Write-Output $session
     return
 }
-$meta.status = 'regular-running'
-$game = Start-Process $engine -ArgumentList $meta.arguments -WorkingDirectory $InstallRoot -PassThru
-$meta | Add-Member gamePid $game.Id
-$meta | ConvertTo-Json -Depth 8 | Set-Content $path -Encoding utf8
-Write-Output "START count=$Count budget=$BudgetMs session=$session pid=$($game.Id)"
 try {
+    $game = Start-Process $engine -ArgumentList $meta.arguments -WorkingDirectory $InstallRoot -PassThru
+    $meta.status = 'regular-running'
+    $meta | Add-Member gamePid $game.Id
+    $meta | ConvertTo-Json -Depth 8 | Set-Content $path -Encoding utf8
+    Write-Output "START count=$Count budget=$BudgetMs session=$session pid=$($game.Id)"
     $deadline = (Get-Date).AddSeconds(240)
     while (!$game.WaitForExit(2000)) {
         if ((Get-Date) -gt $deadline) {
