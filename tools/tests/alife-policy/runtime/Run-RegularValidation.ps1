@@ -3,6 +3,7 @@ param(
     [ValidateRange(0,400)][int]$Count = 0,
     [ValidateRange(0,10)][int]$BudgetMs = 0,
     [switch]$SaveSnapshot,
+    [switch]$PrepareOnly,
     [ValidatePattern('^bin_[a-zA-Z0-9_]+$')][string]$Package = 'bin_whole_lifecycle',
     [switch]$Transitions,
     [string]$VerifySession = '',
@@ -24,7 +25,7 @@ $session = & "$PSScriptRoot/Prepare-Session.ps1" -InstallRoot $InstallRoot `
     -Package $Package -Mode $Mode -SeedAppData $SeedAppData -SaveName $SaveName
 $path = Join-Path $session 'session.json'
 $meta = Get-Content -Raw $path | ConvertFrom-Json
-$meta.engineSha256 = (Get-FileHash $engine).Hash
+$meta.engineSha256 = $build.sha256
 $meta | Add-Member -NotePropertyName build -NotePropertyValue $build
 $meta.package = $Package
 $meta | Add-Member distanceControl ([bool]$DistanceControl)
@@ -34,7 +35,7 @@ $meta | Add-Member regularRequested $true
 $meta | Add-Member extraRequested $Count
 $meta | Add-Member spawnBudgetMs $BudgetMs
 $meta | Add-Member saveRequested ([bool]$SaveSnapshot)
-$meta.status = 'regular-running'
+$meta.status = 'regular-prepared'
 foreach ($name in @('SpawnQueue.lua','RegularDriver.lua','BarStressPositions.lua','Test-Eligibility.lua','TransitionDriver.lua','PolicyProbe.lua')) {
     Copy-Item "$PSScriptRoot/$name" "$session/appdata/$name"
 }
@@ -53,6 +54,12 @@ $meta | Add-Member verifyIds $verifyIds
 $controlValue = if ($DistanceControl) { 'true' } else { 'false' }
 $config = "return {mode='$Mode', distance_control=$controlValue, count=$Count, budget_ms=$BudgetMs, save=$save, transitions=$transitionValue, eligibility=$eligibilityValue, verify_ids={$($verifyIds -join ',')}, positions=dofile(getFS():update_path(`"`$app_data_root`$`", `"BarStressPositions.lua`"))}"
 [IO.File]::WriteAllText("$session/appdata/regular-config.lua", $config, [Text.Encoding]::ASCII)
+$meta | ConvertTo-Json -Depth 8 | Set-Content $path -Encoding utf8
+if ($PrepareOnly) {
+    Write-Output $session
+    return
+}
+$meta.status = 'regular-running'
 $game = Start-Process $engine -ArgumentList $meta.arguments -WorkingDirectory $InstallRoot -PassThru
 $meta | Add-Member gamePid $game.Id
 $meta | ConvertTo-Json -Depth 8 | Set-Content $path -Encoding utf8

@@ -37,3 +37,4 @@ add_test(NAME policy-lua-harness COMMAND policy-lua-runner "${CMAKE_CURRENT_SOUR
 add_test(NAME policy-evidence-reader COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/runtime/Test-Regular.py")
 
 add_test(NAME policy-package-manifest COMMAND "${POWERSHELL}" -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/runtime/Test-ValidationPackage.ps1")
+add_test(NAME policy-session-preparation COMMAND "${POWERSHELL}" -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/runtime/Test-RegularRunner.ps1")

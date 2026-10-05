@@ -45,6 +45,9 @@ and client state after settling. These controls test policy. `BudgetMs` limits t
 engine activation. Session manifests record the executable and save hashes.
 These tests establish functional behavior, not broad campaign compatibility.
 
+`-PrepareOnly` validates the package and writes the private session inputs without
+starting the engine. Its `regular-prepared` status is not gameplay evidence.
+
 The independent registry-teardown fix is intentionally absent from this branch.
 Native populated-group shutdown coverage belongs to that fix; this policy must
 not be described as fixing the pre-existing teardown bug.
