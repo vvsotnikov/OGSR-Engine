@@ -10,6 +10,6 @@ Outside unload, removing a member must restore its independent graph/scheduler
 registration before removing the empty group from the appropriate registry.
 
 `cargo xtask validate` includes these fixtures and both native build configurations.
-Configure this directory with CMake, build, then run CTest. The fixture compiles
-the production destructor and member-unregister method; it needs CMake and a C++17
+For a standalone run, configure this directory with CMake, build, then run CTest.
+The fixtures compile the production destructor and member-unregister method; they need CMake and a C++17
 compiler, not game assets. The fixtures do not exercise the full simulator unload.
