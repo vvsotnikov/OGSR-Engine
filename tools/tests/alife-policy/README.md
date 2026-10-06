@@ -48,6 +48,6 @@ These tests establish functional behavior, not broad campaign compatibility.
 `-PrepareOnly` validates the package and writes the private session inputs without
 starting the engine. Its `regular-prepared` status is not gameplay evidence.
 
-The independent registry-teardown fix is intentionally absent from this branch.
-Native populated-group shutdown coverage belongs to that fix; this policy must
-not be described as fixing the pre-existing teardown bug.
+Registry teardown and switching-budget fixes are inherited from main. Their
+tests remain separate from this policy's fixtures; the whole-map flag does not
+itself fix lifecycle or budget defects.
