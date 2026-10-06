@@ -1,6 +1,7 @@
 # Whole-map policy validation
 
-`-alife_whole_map` bypasses native distance gates on the loaded map. Script
+`-alife_whole_map` is experimental; campaign compatibility and performance
+acceptance are not established. It bypasses native distance gates on the loaded map. Script
 eligibility, ownership, valid-location checks and group traversal still apply.
 The launch policy stays in effect even if a script changes `switch_distance`;
 distance setters store values for normal mode but do not control switching while
