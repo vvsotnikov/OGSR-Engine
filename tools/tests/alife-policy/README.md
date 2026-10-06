@@ -65,7 +65,8 @@ Unavailable Git metadata is `null`, including dirty state; it must never be
 interpreted as a clean checkout. A valid detached snapshot revision is retained.
 
 `runtime/Run-GroupValidation.ps1` tests a saved `ON_OFF_G` with one living member
-in both modes. It verifies membership, near/far transitions, group permission
+in both modes. It verifies membership, near-to-far transitions (online to offline in distance mode, retained online in
+whole-map mode), both group permission
 changes, client presence and member removal on death. It requires a seed using
 the `validation_online_group` section and known group/member IDs; it creates
 that section only in a private copy of the loose game configuration. The seed
