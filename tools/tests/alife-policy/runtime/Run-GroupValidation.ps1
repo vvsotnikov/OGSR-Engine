@@ -52,7 +52,6 @@ try {
     Write-Output "START group mode=$Mode session=$session"
     $deadline = (Get-Date).AddSeconds(240)
     while (!$game.WaitForExit(2000)) { if ((Get-Date) -gt $deadline) { throw 'Group validation timed out' } }
-    $meta | Add-Member gameExitCode $game.ExitCode
     $logs = @(Get-ChildItem "$session/appdata/logs" -Filter '*.log')
     if ($logs.Count -ne 1) { throw 'Expected one log' }
     $log = [IO.File]::ReadAllText($logs[0].FullName)
@@ -60,7 +59,7 @@ try {
     Assert-PolicyMessages $log $Mode 1 $true
     $phases = @([regex]::Matches($log, '\[group policy\] phase=(\d)') | ForEach-Object { $_.Groups[1].Value })
     if ($game.ExitCode -ne 0 -or ($phases -join ',') -ne '1,2,3,4,5,6,7,8' -or $log -match '\[group policy\] FAILED' -or
-        $log -notmatch '\[group policy\] complete member_dead=true group_empty=true') { throw 'Group policy evidence incomplete' }
+        $log -notmatch '\[group policy\] complete member_dead=true (group_empty|group_removed)=true') { throw 'Group policy evidence incomplete' }
     $meta.status = 'group-completed'
     Write-Output "COMPLETE group mode=$Mode session=$session"
 } catch {

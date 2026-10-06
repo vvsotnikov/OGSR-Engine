@@ -37,7 +37,7 @@ return function(cfg)
                     packet:r_seek(packet:w_tell() - 4)
                     assert(packet:r_u32() == 0, "Dead member remains registered")
                 end
-                log1("[group policy] complete member_dead=true group_empty=true")
+                log1("[group policy] complete member_dead=true " .. (group and "group_empty=true" or "group_removed=true"))
                 done = true
                 get_console():execute("quit")
                 return
@@ -48,7 +48,7 @@ return function(cfg)
             assert(packet:r_u32() == 1 and packet:r_u16() == cfg.member, "Saved group membership changed")
             assert(now < deadline, "Group policy phase timed out: " .. phase)
             local expected = phase == 2 or phase == 5 or phase == 7 or phase == 8 or (cfg.mode == "whole-map" and phase ~= 4 and phase ~= 6)
-            if phase == 1 or phase == 3 then
+            if phase == 1 or phase == 3 or phase == 7 then
                 local limit = 1 + system_ini():r_float("alife", "switch_factor")
                 assert(member.position:distance_to(db.actor:position()) > limit, "Distant group control inconclusive")
             end

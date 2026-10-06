@@ -33,13 +33,18 @@ try {
     $meta = Get-Content "$($failed[0].FullName)/session.json" -Raw | ConvertFrom-Json
     if ($failed.Count -ne 1 -or $meta.status -ne 'group-failed' -or $meta.failure -ne 'Fixture prevented process launch') { throw 'Lost launch failure' }
     function Start-Process {
+        param($FilePath, $ArgumentList, $WorkingDirectory, [switch]$PassThru)
+        $logs = Join-Path (Split-Path $WorkingDirectory -Parent) 'appdata/logs'
+        New-Item -ItemType Directory $logs | Out-Null
+        @((1..8 | ForEach-Object { "[group policy] phase=$_" }), '[group policy] complete member_dead=true group_empty=true') |
+            ForEach-Object { $_ } | Set-Content "$logs/fixture.log"
         $process = [pscustomobject]@{Id=123; ExitCode=7; HasExited=$true}
         $process | Add-Member ScriptMethod WaitForExit { param($Timeout) return $true }
         return $process
     }
     $before = @(Get-ChildItem "$root/captures" -Directory | ForEach-Object FullName)
     try { & "$PSScriptRoot/Run-GroupValidation.ps1" @common | Out-Null; throw 'Missing evidence accepted' }
-    catch { if ($_.Exception.Message -eq 'Missing evidence accepted') { throw } }
+    catch { if ($_.Exception.Message -ne 'Group policy evidence incomplete') { throw } }
     $failed = @(Get-ChildItem "$root/captures" -Directory | Where-Object FullName -NotIn $before)
     $meta = Get-Content "$($failed[0].FullName)/session.json" -Raw | ConvertFrom-Json
     if ($failed.Count -ne 1 -or $meta.status -ne 'group-failed' -or $meta.gameExitCode -ne 7) { throw 'Lost failed process exit code' }

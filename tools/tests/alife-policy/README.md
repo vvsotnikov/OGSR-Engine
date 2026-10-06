@@ -65,13 +65,18 @@ Unavailable Git metadata is `null`, including dirty state; it must never be
 interpreted as a clean checkout. A valid detached snapshot revision is retained.
 
 `runtime/Run-GroupValidation.ps1` tests a saved `ON_OFF_G` with one living member
-in both modes. It verifies membership, near-to-far transitions (online to offline in distance mode, retained online in
+in both modes. It verifies membership and near-to-far transitions (online to
+offline in distance mode, retained online in
 whole-map mode), both group permission
 changes, client presence and member removal on death. It requires a seed using
 the `validation_online_group` section and known group/member IDs; it creates
 that section only in a private copy of the loose game configuration. The seed
 used for local evidence was created by the archived native group fixture in
 `archive/alife-experiments-2026-10-04:tools/profiling/GroupCleanupValidation.inl`.
+The forced-online phase requires a distant member; only distance mode distinguishes
+that permission override from normal whole-map activation. Each run copies the
+entire loose `gamedata` tree into its private session, consuming the same disk
+space as that tree; game archives are hard-linked.
 This scenario does not exercise the separate legacy `flesh_group` adapter (#18).
 
 ```powershell
@@ -80,7 +85,7 @@ This scenario does not exercise the separate legacy `flesh_group` adapter (#18).
 ```
 
 `-PrepareOnly` validates the package and writes the private session inputs without
-starting the engine. Its `regular-prepared` status is not gameplay evidence.
+starting the engine. The `regular-prepared` or `group-prepared` status is not gameplay evidence.
 
 Registry teardown and switching-budget fixes are inherited from main. Their
 tests remain separate from this policy's fixtures; the whole-map flag does not
