@@ -28,7 +28,6 @@ protected:
     IC void update_next();
     IC _iterator& next();
     IC void start_timer();
-    IC bool time_over();
 
 public:
     IC CSafeMapIterator();
@@ -38,6 +37,8 @@ public:
     template <typename _update_predicate>
     IC u32 update(const _update_predicate& predicate);
     IC void set_process_time(const float& process_time);
+    IC bool first_update() const;
+    IC bool time_over();
     IC const _REGISTRY& objects() const;
     IC void clear();
     IC bool empty() const;

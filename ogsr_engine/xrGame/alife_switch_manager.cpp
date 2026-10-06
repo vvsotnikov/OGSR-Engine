@@ -173,6 +173,7 @@ void CALifeSwitchManager::try_switch_online(CSE_ALifeDynamicObject* I)
     // checking if the object is not attached
     if (0xffff != I->ID_Parent)
     {
+        m_activation_queue.cancel(I->ID);
         // so, object is attached
         // checking if parent is offline too
 #ifdef DEBUG
@@ -193,9 +194,10 @@ void CALifeSwitchManager::try_switch_online(CSE_ALifeDynamicObject* I)
     VERIFY2((ai().game_graph().vertex(I->m_tGraphID)->level_id() != ai().level_graph().level_id()) || !Level().Objects.net_Find(I->ID) || Level().Objects.dump_all_objects(),
             make_string("frame [%d] time [%d] object [%s] with id [%d] is offline, but is on the level", Device.dwFrame, Device.dwTimeGlobal, I->name_replace(), I->ID));
 
+    m_activation_queue.cancel(I->ID);
     I->try_switch_online();
 
-    if (!I->m_bOnline && !I->keep_saved_data_anyway())
+    if (!I->m_bOnline && !I->keep_saved_data_anyway() && !m_activation_queue.contains(I->ID))
         I->client_data.clear();
 
     STOP_PROFILE
@@ -247,4 +249,41 @@ void CALifeSwitchManager::switch_object(CSE_ALifeDynamicObject* I)
 
     if (I->redundant())
         release(I);
+}
+
+void CALifeSwitchManager::request_switch_online(CSE_ALifeDynamicObject* object)
+{
+    // Conservatively preserve immediate semantics for actor and story objects. Forced-online callers bypass this method.
+    if (m_collect_activations && object != graph().actor() && object->m_story_id == INVALID_STORY_ID)
+    {
+        m_activation_queue.enqueue(object->ID);
+        return;
+    }
+    m_activation_queue.cancel(object->ID);
+    switch_online(object);
+}
+
+void CALifeSwitchManager::begin_activation_collection()
+{
+    if (!m_activation_queue_enabled) return;
+    m_collect_activations = !graph().level().first_update() && Device.dwPrecacheFrame == 0 && graph().actor()->m_bOnline;
+    if (!m_collect_activations) m_activation_queue.clear();
+}
+
+void CALifeSwitchManager::finish_activation_collection()
+{
+    const bool collected = m_collect_activations;
+    m_collect_activations = false;
+    if (!collected) return;
+    ZoneScopedN("ALife/activation_queue");
+    m_activation_queue.drain([this]() { return graph().level().time_over(); }, [this](std::uint16_t id) {
+        auto* object = objects().object(id, true);
+        // Leaving this registry does not invalidate saved client data; the object
+        // keeps it for its destination level instead of clearing it here.
+        if (!object || object->m_bOnline || !graph().level().object(id, true)) return;
+        // IDs can be reused: the normal path rechecks current location, attachment,
+        // virtual eligibility and distance. switch_online itself always stays immediate.
+        switch_object(object);
+    }, activation_attempt_limit);
+    TracyPlot("ALife/queued activation requests", int64_t(m_activation_queue.size()));
 }
