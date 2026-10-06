@@ -64,7 +64,7 @@ def summarize(log_path, first_frame=0, last_frame=None, skip_malformed=False):
         caveat=(
             'Records cover update_switch invocations, not necessarily full traversals. '
             'The budget is the effective iterator limit; -1 means unlimited. '
-            'Budget-exhausting slices tend toward that limit plus overshoot; compare '
+            'Budget-exhausting updates tend toward that limit plus overshoot; compare '
             'visits and stage shares alongside elapsed totals, not totals alone. '
             'Stage timers consume the budget and can reduce sampled visits; '
             'objectsPerSample is not normal unsampled throughput. '

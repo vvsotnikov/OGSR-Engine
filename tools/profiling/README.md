@@ -20,11 +20,11 @@ objects leave that schedule registry: client AI, planners, visibility and
 stalker Tracy scopes for those costs. Moving more NPCs online can reduce these
 server-side timings while increasing total frame time.
 
-When a positive budget ends a slice before traversal completes, `total_ms` tends
+When a positive budget ends an update before traversal completes, `total_ms` tends
 toward `budget_ms` plus overshoot. Interval `switch_ms` also includes surrounding
-work and can approach the sum of slice allowances. Totals measure elapsed time
+work and can approach the sum of update allowances. Totals measure elapsed time
 consumed, not the cost of a complete traversal. Compare visits per update and
-stage shares alongside totals; equal slice times need not mean equal throughput.
+stage shares alongside totals; equal update times need not mean equal throughput.
 Neither visit counts divided by population nor the iterator's `cycle_count`
 measure individual revisit or activation latency; that counter advances per update.
 
@@ -32,8 +32,9 @@ Stage timers consume part of the same budget and can reduce visits per sampled
 update. `objectsPerSample` is instrumented throughput, not an estimate of normal
 unsampled throughput. Unsampled records are emitted only for reported spikes,
 so this log cannot quantify the sampling overhead or an unsampled mean.
-Population scans and log
-output cost time outside the switching-stage totals. Timings are accumulated
+
+Population scans and log output cost time outside the switching-stage totals.
+Timings are accumulated
 work over a reporting interval, not CPU-utilization percentages.
 `try_offline_ms` times virtual dispatch for objects online after location sync;
 `try_online_ms` starts from offline objects. Switch counters include calls where
