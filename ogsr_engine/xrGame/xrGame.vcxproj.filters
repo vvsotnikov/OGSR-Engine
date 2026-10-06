@@ -2838,6 +2838,9 @@
     <ClInclude Include="alife_diagnostics.h">
       <Filter>AI\ALife\update_manager\switch_manager</Filter>
     </ClInclude>
+    <ClInclude Include="alife_switch_policy.h">
+      <Filter>AI\ALife\update_manager\switch_manager</Filter>
+    </ClInclude>
     <ClInclude Include="alife_switch_manager.h">
       <Filter>AI\ALife\update_manager\switch_manager</Filter>
     </ClInclude>

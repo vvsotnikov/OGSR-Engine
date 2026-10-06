@@ -47,6 +47,46 @@ try {
             throw 'Session does not use private appdata'
         }
     }
+    function Assert-Rejected([scriptblock]$Action, [string]$Expected) {
+        try { & $Action | Out-Null } catch {
+            if ($_.Exception.Message -ne $Expected) { throw }
+            return
+        }
+        throw "Accepted invalid scenario: $Expected"
+    }
+    $runner = "$PSScriptRoot/Run-RegularValidation.ps1"
+    $common = @{ InstallRoot=$root; Package='bin_fixture'; SeedAppData='seed'; PrepareOnly=$true }
+    foreach ($extra in @(@{Count=1}, @{Eligibility=$true}, @{SaveSnapshot=$true}, @{VerifySession='unused'})) {
+        Assert-Rejected { & $runner @common -Transitions @extra } 'Transition fixture must run by itself'
+    }
+    Assert-Rejected { & $runner @common -Mode distance -Eligibility } 'Eligibility fixture requires whole-map mode'
+
+    $source = "$root/saved-evidence"
+    New-Item -ItemType Directory "$source/appdata/logs" | Out-Null
+    $sourceMeta = @{status='regular-completed'; extraRequested=3}
+    $sourceMeta | ConvertTo-Json | Set-Content "$source/session.json"
+    $sourceLines = '[regular spawn] index=1 id=101', '[regular spawn] index=2 id=205', '[regular spawn] index=3 id=309'
+    $sourceLines | Set-Content "$source/appdata/logs/source.log"
+    $session = & $runner @common -VerifySession $source
+    $meta = Get-Content -Raw "$session/session.json" | ConvertFrom-Json
+    $config = Get-Content -Raw "$session/appdata/regular-config.lua"
+    if (($meta.verifyIds -join ',') -ne '101,205,309' -or !$config.Contains('verify_ids={101,205,309}') -or
+        $meta.extraRequested -ne 0 -or $meta.status -ne 'regular-prepared') {
+        throw 'Saved IDs did not reach both metadata and Lua configuration'
+    }
+    $sourceMeta.status='regular-failed'
+    $sourceMeta | ConvertTo-Json | Set-Content "$source/session.json"
+    Assert-Rejected { & $runner @common -VerifySession $source } 'Verify source session is incomplete'
+    $sourceMeta.status='regular-completed'
+    $sourceMeta | ConvertTo-Json | Set-Content "$source/session.json"
+    foreach ($badLog in @('', ($sourceLines[0..1] -join "`n"), ($sourceLines[0],$sourceLines[1],$sourceLines[1] -join "`n"))) {
+        Set-Content "$source/appdata/logs/source.log" $badLog -NoNewline
+        Assert-Rejected { & $runner @common -VerifySession $source } 'Invalid saved population evidence'
+    }
+    $sourceLines | Set-Content "$source/appdata/logs/source.log"
+    $sourceLines | Set-Content "$source/appdata/logs/second.log"
+    Assert-Rejected { & $runner @common -VerifySession $source } 'Expected one source session log'
+
     $existing = @(Get-ChildItem "$root/captures" -Directory | ForEach-Object FullName)
     $rejected = $false
     try {

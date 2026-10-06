@@ -16,6 +16,7 @@ param(
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/ValidationLog.ps1"
 . "$PSScriptRoot/ValidationPackage.ps1"
+. "$PSScriptRoot/PolicyMessages.ps1"
 $engine = Join-Path $InstallRoot "$Package/xrEngine.exe"
 if (!(Test-Path $engine) -or !(Test-Path "$InstallRoot/$Package/build.json")) { throw "Missing package or manifest: $engine" }
 $build = Read-ValidationPackage $engine
@@ -46,7 +47,9 @@ $verifyIds = @()
 if ($VerifySession) {
     $sourceMeta = Get-Content -Raw "$VerifySession/session.json" | ConvertFrom-Json
     if ($sourceMeta.status -ne 'regular-completed') { throw 'Verify source session is incomplete' }
-    $sourceLog = Get-Content -Raw (Get-ChildItem "$VerifySession/appdata/logs" -Filter '*.log' | Select-Object -First 1).FullName
+    $sourceLogs = @(Get-ChildItem "$VerifySession/appdata/logs" -Filter '*.log')
+    if ($sourceLogs.Count -ne 1) { throw 'Expected one source session log' }
+    $sourceLog = [IO.File]::ReadAllText($sourceLogs[0].FullName)
     $verifyIds = @([regex]::Matches($sourceLog,'\[regular spawn\] index=\d+ id=(\d+)') | ForEach-Object { [int]$_.Groups[1].Value })
     if ($verifyIds.Count -eq 0 -or $verifyIds.Count -ne $sourceMeta.extraRequested -or @($verifyIds | Select-Object -Unique).Count -ne $verifyIds.Count) { throw 'Invalid saved population evidence' }
 }
@@ -77,6 +80,8 @@ try {
     if ($logs.Count -ne 1) { throw 'Expected one engine log' }
     $log = [IO.File]::ReadAllText($logs[0].FullName)
     Assert-ValidationLogHealthy $log
+    $loads = if ($Transitions) { 3 } else { 1 }
+    Assert-PolicyMessages $log $Mode $loads ([bool]($DistanceControl -or $Transitions))
     if ($Transitions) {
         $arrivals = @([regex]::Matches($log, '\[transition\] arrived phase=\d map=\w+') | ForEach-Object Value)
         $expected = '[transition] arrived phase=1 map=l05_bar|[transition] arrived phase=2 map=l02_garbage|[transition] arrived phase=3 map=l05_bar'

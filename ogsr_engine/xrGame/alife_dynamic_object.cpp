@@ -7,6 +7,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
+#include "alife_switch_policy.h"
 #include "xrServer_Objects_ALife.h"
 #include "alife_simulator.h"
 #include "alife_schedule_registry.h"
@@ -115,67 +116,52 @@ bool CSE_ALifeDynamicObject::synchronize_location()
     return (true);
 }
 
+namespace
+{
+struct DynamicSwitchOperations
+{
+    CSE_ALifeDynamicObject& object;
+    CSE_ALifeSchedulable* schedule_object = nullptr;
+    bool schedulable()
+    {
+        schedule_object = smart_cast<CSE_ALifeSchedulable*>(&object);
+        return schedule_object != nullptr;
+    }
+    bool needs_update() { return schedule_object->need_update(&object); }
+    bool scheduled() const { return object.alife().scheduled().object(object.ID, true) != nullptr; }
+    void schedule() { object.alife().scheduled().add(&object); }
+    void unschedule() { object.alife().scheduled().remove(&object); }
+    bool can_online() const { return object.can_switch_online(); }
+    bool can_offline() const { return object.can_switch_offline(); }
+    bool distance_mode() const { return object.alife().uses_distance_switching(); }
+    float actor_distance() const { return object.alife().graph().actor()->o_Position.distance_to(object.o_Position); }
+    float online_limit() const { return object.alife().online_distance(); }
+    float offline_limit() const { return object.alife().offline_distance(); }
+    bool keep_data() const { return object.keep_saved_data_anyway(); }
+    void clear_data() { object.client_data.clear(); }
+    void report_rejection(bool distance) const
+    {
+#ifdef DEBUG
+        if (!object.client_data.empty())
+            Msg(distance ? "CSE_ALifeDynamicObject::try_switch_online2: client_data is cleared for [%d][%s]" :
+                           "CSE_ALifeDynamicObject::try_switch_online: client_data is cleared for [%d][%s]", object.ID, object.name_replace());
+#endif
+    }
+    void switch_online() { object.alife().switch_online(&object); }
+    void switch_offline() { object.alife().switch_offline(&object); }
+};
+}
+
 void CSE_ALifeDynamicObject::try_switch_online()
 {
-    CSE_ALifeSchedulable* schedulable = smart_cast<CSE_ALifeSchedulable*>(this);
-    // checking if the abstract monster has just died
-    if (schedulable)
-    {
-        if (!schedulable->need_update(this))
-        {
-            if (alife().scheduled().object(ID, true))
-                alife().scheduled().remove(this);
-        }
-        else if (!alife().scheduled().object(ID, true))
-            alife().scheduled().add(this);
-    }
-
-    if (!can_switch_online())
-    {
-#ifdef DEBUG
-        if (!client_data.empty())
-            Msg("CSE_ALifeDynamicObject::try_switch_online: client_data is cleared for [%d][%s]", ID, name_replace());
-#endif // DEBUG
-        if (!keep_saved_data_anyway())
-            client_data.clear();
-        return;
-    }
-
-    if (!can_switch_offline())
-    {
-        alife().switch_online(this);
-        return;
-    }
-
-    if (alife().uses_distance_switching() && alife().graph().actor()->o_Position.distance_to(o_Position) > alife().online_distance())
-    {
-#ifdef DEBUG
-        if (!client_data.empty())
-            Msg("CSE_ALifeDynamicObject::try_switch_online2: client_data is cleared for [%d][%s]", ID, name_replace());
-#endif // DEBUG
-        if (!keep_saved_data_anyway())
-            client_data.clear();
-        return;
-    }
-
-    alife().switch_online(this);
+    DynamicSwitchOperations operations{*this};
+    alife_switch_policy::dynamic_online(operations);
 }
 
 void CSE_ALifeDynamicObject::try_switch_offline()
 {
-    if (!can_switch_offline())
-        return;
-
-    if (!can_switch_online())
-    {
-        alife().switch_offline(this);
-        return;
-    }
-
-    if (!alife().uses_distance_switching() || alife().graph().actor()->o_Position.distance_to(o_Position) <= alife().offline_distance())
-        return;
-
-    alife().switch_offline(this);
+    DynamicSwitchOperations operations{*this};
+    alife_switch_policy::dynamic_offline(operations);
 }
 
 bool CSE_ALifeDynamicObject::redundant() const { return (false); }

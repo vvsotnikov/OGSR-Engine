@@ -564,6 +564,7 @@
     <ClInclude Include="alife_surge_manager.h" />
     <ClInclude Include="alife_surge_manager_inline.h" />
     <ClInclude Include="alife_diagnostics.h" />
+    <ClInclude Include="alife_switch_policy.h" />
     <ClInclude Include="alife_switch_manager.h" />
     <ClInclude Include="alife_switch_manager_inline.h" />
     <ClInclude Include="saved_game_wrapper.h" />

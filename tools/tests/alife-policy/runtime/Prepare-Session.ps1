@@ -8,6 +8,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $InstallRoot = (Resolve-Path $InstallRoot).Path
 $repo = (Resolve-Path "$PSScriptRoot/../../../..").Path
+. "$PSScriptRoot/CheckoutMetadata.ps1"
+$checkout = Read-CheckoutMetadata $repo
 $engine = Join-Path $InstallRoot "$Package/xrEngine.exe"
 $seed = Join-Path $InstallRoot $SeedAppData
 foreach ($required in @($engine, "$seed/savedgames/$SaveName.sav", "$InstallRoot/fsgame.ltx")) {
@@ -42,8 +44,8 @@ $metadata = [ordered]@{
     seedSave = "$seed/savedgames/$SaveName.sav"
     seedSha256 = (Get-FileHash "$seed/savedgames/$SaveName.sav").Hash
     engineSha256 = (Get-FileHash $engine).Hash
-    sourceCommitAtLaunch = (& git -C $repo rev-parse HEAD)
-    sourceDirtyAtLaunch = [bool](& git -C $repo status --porcelain)
+    sourceCommitAtLaunch = $checkout.sourceCommitAtLaunch
+    sourceDirtyAtLaunch = $checkout.sourceDirtyAtLaunch
     arguments = $argsText; status = 'prepared'
 }
 $metadata | ConvertTo-Json -Depth 6 | Set-Content "$($session.FullName)/session.json" -Encoding utf8

@@ -13,8 +13,11 @@ cleanup of later corpses, while the group's own permission may still allow the
 final offline switch. The policy must not reorder those effects.
 
 Configure this directory with CMake, build and run CTest (Python 3, PowerShell, and C/C++17 compilers).
-The fixtures extract production methods and assert policy outcomes in both modes,
-including distance boundaries, eligibility, cleanup and group member order.
+The engine and tests compile `alife_switch_policy.h` directly. Operations bind
+real engine objects and registries in the engine and controlled state in tests.
+No method text or engine class declarations are copied into the fixtures.
+The tests cover distance boundaries, eligibility, cleanup and group member order;
+real registry effects and client construction require the native scenarios below.
 
 For game validation, package a Release build as `<install>/bin_whole_lifecycle`
 with its DLLs and a `build.json` containing `baseCommit`, executable `sha256`,
@@ -45,6 +48,14 @@ The transition probe creates a distant NPC on each arrival and checks its server
 and client state after settling. These controls test policy. `BudgetMs` limits the Lua driver's spawn batches, not
 engine activation. Session manifests record the executable and save hashes.
 These tests establish functional behavior, not broad campaign compatibility.
+Whole-map runs require the experimental startup message for every loaded map.
+Scenarios that change switching distance also require exactly one override
+message per map; normal-mode runs must contain neither message.
+
+Package metadata identifies the built engine. The separate checkout-at-launch
+fields identify the runner checkout, which may differ from the package source.
+Unavailable Git metadata is `null`, including dirty state; it must never be
+interpreted as a clean checkout. A valid detached snapshot revision is retained.
 
 `-PrepareOnly` validates the package and writes the private session inputs without
 starting the engine. Its `regular-prepared` status is not gameplay evidence.

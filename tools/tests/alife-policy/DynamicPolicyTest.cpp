@@ -1,102 +1,65 @@
+#include "alife_switch_policy.h"
 #include <iostream>
 #include <limits>
 #include <stdexcept>
-struct State
-{
-    bool schedulable, needUpdate, scheduled, canOnline, canOffline, distanceMode, keepData, flipDuringMaintenance;
-    bool online = false;
-    float distance;
-};
-State* active;
-void Msg(const char*, int, const char*) {}
-struct Data
-{
-    bool present;
-    bool empty() const { return !present; }
-    void clear() { present = false; }
-};
-struct Position
-{
-    float distance_to(const Position&) { return active->distance; }
-};
-struct Actor { Position o_Position; };
-struct Graph { Actor actorValue; Actor* actor() { return &actorValue; } };
-struct Schedule
-{
-    bool object(int, bool) { return active->scheduled; }
-    template<class T> void add(T*) { active->scheduled = true; }
-    template<class T> void remove(T*) { active->scheduled = false; }
-};
-struct Simulator
-{
-    Schedule schedule; Graph graphValue;
-    Schedule& scheduled() { return schedule; }
-    Graph& graph() { return graphValue; }
-    bool uses_distance_switching() { return active->distanceMode; }
-    float online_distance() { return 150.f; }
-    float offline_distance() { return 200.f; }
-    template<class T> void switch_online(T*)
-    {
-        active->online = true;
-    }
-    template<class T> void switch_offline(T*) { active->online = false; }
-};
-struct CSE_ALifeSchedulable
-{
-    template<class T> bool need_update(T*)
-    {
+#include <string>
 
-        if (active->flipDuringMaintenance) active->canOnline = !active->canOnline;
-        return active->needUpdate;
-    }
-};
-CSE_ALifeSchedulable schedulable;
-template<class T, class U> T smart_cast(U*)
-{
-    return active->schedulable ? &schedulable : nullptr;
-}
 struct Operations
 {
-    int ID = 1;
-    Data client_data;
-    Position o_Position;
-    Simulator simulator;
-    Simulator& alife() { return simulator; }
-    bool can_switch_online() { return active->canOnline; }
-    bool can_switch_offline() { return active->canOffline; }
-    bool keep_saved_data_anyway() { return active->keepData; }
-    const char* name_replace() { return "fixture"; }
+    bool has_schedule = false, need_update = false, is_scheduled = false;
+    bool allow_online = true, allow_offline = true, distance = true, keep = false, flip = false;
+    bool online = false, data = true;
+    float separation = 0;
+    unsigned distance_reads = 0;
+    bool schedulable() const { return has_schedule; }
+    bool needs_update() { if (flip) allow_online = !allow_online; return need_update; }
+    bool scheduled() const { return is_scheduled; }
+    void schedule() { is_scheduled = true; }
+    void unschedule() { is_scheduled = false; }
+    bool can_online() const { return allow_online; }
+    bool can_offline() const { return allow_offline; }
+    bool distance_mode() const { return distance; }
+    void read_distance() { if (!distance) throw std::runtime_error("Whole-map mode evaluated distance"); ++distance_reads; }
+    float actor_distance() { read_distance(); return separation; }
+    float online_limit() const { return 150; }
+    float offline_limit() const { return 200; }
+    bool keep_data() const { return keep; }
+    void clear_data() { data = false; }
+    void report_rejection(bool) {}
+    void switch_online() { online = true; }
+    void switch_offline() { online = false; }
 };
-struct Candidate : Operations
-{
-    void try_switch_online(); void try_switch_offline();
-};
-#include "methods.inc"
-void check(bool ok) { if (!ok) throw std::runtime_error("dynamic policy state mismatch"); }
+void require(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
 int main()
 {
-    unsigned comparisons = 0;
-    for (unsigned mask = 0; mask < 512; ++mask)
-        for (float distance : {0.f, 149.f, 150.f, 151.f, 199.f, 200.f, 201.f,
-                std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN()})
-            for (bool online : {false, true})
-            {
-                State current{bool(mask&1), bool(mask&2), bool(mask&4), bool(mask&8), bool(mask&16),
-                    bool(mask&32), bool(mask&64), bool(mask&128)};
-                current.distance = distance; current.online = online;
-                const bool allowed = current.canOnline ^ (!online && current.schedulable && current.flipDuringMaintenance);
-                const bool expectedOnline = online
-                    ? !(current.canOffline && (!allowed || (current.distanceMode && !(distance <= 200.f))))
-                    : allowed && (!current.canOffline || !current.distanceMode || !(distance > 150.f));
-                const bool expectedScheduled = !online && current.schedulable ? current.needUpdate : current.scheduled;
-                const bool expectedData = bool(mask&256) && (online || expectedOnline || current.keepData);
-                Candidate object;
-                object.client_data.present = bool(mask&256);
-                active = &current;
-                if (online) object.try_switch_offline(); else object.try_switch_online();
-                check(current.online == expectedOnline && current.scheduled == expectedScheduled && current.canOnline == allowed);
-                check(object.client_data.present == expectedData);
-                ++comparisons;
-            }
-    std::cout << comparisons << " policy state cases passed\n";
+    unsigned cases = 0;
+    try
+    {
+        for (unsigned mask = 0; mask < 512; ++mask)
+            for (float separation : {0.f, 149.f, 150.f, 151.f, 199.f, 200.f, 201.f,
+                    std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN()})
+                for (bool online : {false, true})
+                {
+                    Operations op;
+                    op.has_schedule = mask & 1; op.need_update = mask & 2; op.is_scheduled = mask & 4;
+                    op.allow_online = mask & 8; op.allow_offline = mask & 16; op.distance = mask & 32;
+                    op.keep = mask & 64; op.flip = mask & 128; op.data = mask & 256;
+                    op.separation = separation; op.online = online;
+                    const bool allowed = op.allow_online ^ (!online && op.has_schedule && op.flip);
+                    const bool expected_online = online
+                        ? !(op.allow_offline && (!allowed || (op.distance && !(separation <= 200))))
+                        : allowed && (!op.allow_offline || !op.distance || !(separation > 150));
+                    const bool expected_schedule = !online && op.has_schedule ? op.need_update : op.is_scheduled;
+                    const bool expected_data = op.data && (online || expected_online || op.keep);
+                    if (online) alife_switch_policy::dynamic_offline(op);
+                    else alife_switch_policy::dynamic_online(op);
+                    require(op.online == expected_online, "Incorrect online state");
+                    require(op.is_scheduled == expected_schedule, "Incorrect scheduler membership");
+                    require(op.allow_online == allowed, "Permission not refreshed after maintenance");
+                    require(op.data == expected_data, "Incorrect saved client data retention");
+                    ++cases;
+                }
+    }
+    catch (const std::exception& error) { std::cerr << "Dynamic policy case " << cases << ": " << error.what() << '\n'; return 1; }
+    std::cout << cases << " production dynamic policy cases passed\n";
 }

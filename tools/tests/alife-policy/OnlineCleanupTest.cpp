@@ -1,39 +1,33 @@
+#include "alife_switch_policy.h"
+#include <iostream>
 #include <stdexcept>
 #include <vector>
-#include <iostream>
-#define START_PROFILE(...)
-#define STOP_PROFILE
-#define VERIFY2(...)
-struct CSE_ALifeDynamicObject
+#include <string>
+struct Operations
 {
-    unsigned ID_Parent = 0xffff;
-    bool m_bOnline = false, allowed = true, keep = false, becomes_online = false;
-    unsigned attempts = 0;
-    std::vector<unsigned char> client_data{1, 2, 3};
-    bool can_switch_online() const { return allowed; }
-    bool keep_saved_data_anyway() const { return keep; }
-    // Models virtual dispatch returning without activation, including empty/far groups.
-    void try_switch_online() { ++attempts; m_bOnline = becomes_online; }
+    bool attached_value, activates, keep, is_online = false, data = true;
+    std::vector<std::string> calls;
+    bool attached() const { return attached_value; }
+    void verify_parent() { calls.push_back("parent"); }
+    void verify_offline() { calls.push_back("offline"); }
+    void try_online() { calls.push_back("try"); is_online = activates; }
+    bool online() const { return is_online; }
+    bool keep_data() const { return keep; }
+    void clear_data() { calls.push_back("clear"); data = false; }
 };
-struct Manager { void try_switch_online(CSE_ALifeDynamicObject*); };
-#include "online-method.inc"
 int main()
 {
     for (bool attached : {false, true})
-        for (bool allowed : {false, true})
+        for (bool activates : {false, true})
             for (bool keep : {false, true})
-                for (bool activates : {false, true})
-                {
-                    CSE_ALifeDynamicObject object;
-                    object.ID_Parent = attached ? 1 : 0xffff;
-                    object.allowed = allowed; object.keep = keep; object.becomes_online = activates;
-                    Manager{}.try_switch_online(&object);
-                    const bool clear = !attached && !activates && !keep;
-                    if (object.client_data.empty() != clear || object.attempts != (attached ? 0u : 1u))
-                    {
-                        std::cerr << "client-data mismatch: attached=" << attached << " allowed=" << allowed << " keep=" << keep << " activates=" << activates << "\n";
-                        return 1;
-                    }
-                }
-    std::cout << "16 manager cleanup cases passed\n";
+            {
+                Operations op{attached, activates, keep};
+                alife_switch_policy::manager_online(op);
+                std::vector<std::string> expected = attached ? std::vector<std::string>{"parent"} : std::vector<std::string>{"offline", "try"};
+                const bool clear = !attached && !activates && !keep;
+                if (clear) expected.push_back("clear");
+                if (op.calls != expected || op.data == clear)
+                { std::cerr << "Manager dispatch/cleanup failed: attached=" << attached << " activates=" << activates << " keep=" << keep << '\n'; return 1; }
+            }
+    std::cout << "Production manager dispatch and saved-data cleanup passed\n";
 }
