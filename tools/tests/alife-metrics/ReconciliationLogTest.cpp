@@ -1,53 +1,59 @@
-#include <cstdint>
-#include <cstdarg>
+#include "alife_diagnostics.h"
 #include <cstdio>
+#include <iostream>
 #include <limits>
-using u32 = std::uint32_t;
-using int64_t = std::int64_t;
-struct { u32 dwTimeGlobal = 0, dwFrame = 0; } Device;
-unsigned records = 0, anchors = 0;
-void Msg(const char* format, ...)
-{
-    ++records;
-    va_list args; va_start(args, format); std::vprintf(format, args); va_end(args);
-    std::putchar('\n');
-}
-void TracyPlot(const char*, int64_t frame) { if (frame == Device.dwFrame) ++anchors; }
-struct Candidate
-{
-#include "log-constants.inc"
-    bool m_reconcile_metrics = false, m_reconcile_sample = false;
-    u32 m_reconcile_updates = 0, m_suppressed_spikes = 0;
-    double m_reconcile_stage_ms[4] = {};
-    void begin_reconciliation();
-    void finish_reconciliation(double, double, u32);
-};
-#include "log-methods.inc"
+#include <stdexcept>
+
+void require(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
 int main(int argc, char** argv)
 {
-    if (argc != 2 || !std::freopen(argv[1], "w", stdout)) return 1;
-    Candidate manager;
-    auto update = [&](u32 time, double elapsed, double budget = 300000.0) {
-        Device.dwTimeGlobal = time; ++Device.dwFrame;
-        manager.begin_reconciliation();
-        manager.finish_reconciliation(elapsed, budget, 400);
-    };
-    update(0, 20);
-    if (records || manager.m_reconcile_updates || manager.m_suppressed_spikes) return 2;
-    manager.m_reconcile_metrics = true;
-    update(0, 20, -1.0); // Unlimited first-update budget must survive the reader round trip.
-    if (records != 1 || manager.m_suppressed_spikes) return 3;
-    update(1000, 12);
-    if (records != 2 || manager.m_suppressed_spikes) return 4;
-    update(1100, 11);
-    if (records != 2 || manager.m_suppressed_spikes != 1) return 5;
-    manager.m_reconcile_updates = Candidate::reconcile_stage_cadence - 1;
-    update(1200, 2);
-    if (records != 3 || manager.m_suppressed_spikes || manager.m_reconcile_sample) return 6;
-    update(std::numeric_limits<u32>::max() - 200, 20);
-    update(500, 20);
-    if (records != 4 || manager.m_suppressed_spikes != 1) return 7;
-    update(800, 20);
-    if (records != 5 || manager.m_suppressed_spikes || anchors != records) return 8;
-    return std::fflush(stdout) == 0 ? 0 : 9;
+    if (argc != 2 || !std::freopen(argv[1], "w", stdout))
+    {
+        std::cerr << "Cannot open production log fixture output\n";
+        return 1;
+    }
+    try
+    {
+        alife_diagnostics::Reconciliation state;
+        unsigned records = 0, anchors = 0;
+        std::uint32_t frame = 0;
+        bool enabled = false;
+        auto update = [&](std::uint32_t time, double elapsed, double budget = .81) {
+            ++frame;
+            state.begin(enabled);
+            if (state.sampled)
+            {
+                for (unsigned i = 0; i != 4; ++i)
+                {
+                    require(state.stages[i] == 0, "Stage totals carried into a new sample");
+                    state.stages[i] = (i + 1) * .1;
+                }
+            }
+            state.finish(enabled, time, frame, elapsed, budget, 400,
+                [&](const char* format, auto... values) { ++records; std::printf(format, values...); std::putchar('\n'); },
+                [&](std::uint32_t anchor) { require(anchor == frame, "Anchor does not identify emitted frame"); ++anchors; });
+        };
+        update(0, 20);
+        require(!records && !state.updates && !state.suppressed, "Disabled diagnostics changed counters or emitted output");
+        enabled = true;
+        update(0, 20, -1.0);
+        require(records == 1 && !state.suppressed, "First spike was not emitted immediately");
+        update(1000, 12);
+        require(records == 2 && !state.suppressed, "Spike interval boundary suppressed a report");
+        update(1100, 11);
+        require(records == 2 && state.suppressed == 1, "Spike rate limit failed");
+        for (unsigned i = 4; i < 64; ++i)
+            update(1200, 2);
+        require(records == 2, "Sampling occurred before update 64");
+        for (auto& value : state.stages) value = 99;
+        update(1200, 2);
+        require(records == 3 && !state.suppressed && !state.sampled, "Sample did not emit/reset suppression or stop sampling");
+        update(std::numeric_limits<std::uint32_t>::max() - 200, 20);
+        update(500, 20);
+        require(records == 4 && state.suppressed == 1, "Clock wrap broke spike suppression");
+        update(800, 20);
+        require(records == 5 && !state.suppressed && anchors == records, "Spike/anchor count incorrect after clock wrap");
+        require(std::fflush(stdout) == 0, "Cannot flush production log fixture");
+    }
+    catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

@@ -1,84 +1,84 @@
-#include <stdexcept>
-#include <vector>
-#include <string>
+#include "alife_diagnostics.h"
 #include <iostream>
-using Log = std::vector<std::string>;
-void check(bool ok) { if (!ok) throw std::runtime_error("switch_object invariant mismatch"); }
-struct CTimer { unsigned ticks = 0; void Start() { ticks = 0; } float GetElapsed_sec() { return ++ticks * 0.000001f; } };
-struct CSE_ALifeDynamicObject
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+void require(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
+struct TestTimer
 {
-    bool m_bOnline, pre_redundant, post_redundant, sync_ok, flip_sync, flip_transition, become_redundant;
-    bool evaluated = false, released = false;
-    Log log;
-    bool redundant()
-    {
-        check(!released); log.push_back("redundant");
-        return evaluated ? post_redundant : pre_redundant;
-    }
+    static unsigned constructions;
+    unsigned reads = 0;
+    TestTimer() { ++constructions; }
+    void Start() { reads = 0; }
+    double GetElapsed_sec() { const double times[] = {.002, .005, .009}; return times[reads++]; }
 };
+unsigned TestTimer::constructions = 0;
+
+// Implements the operations interface; no engine class declarations are copied.
 struct Operations
 {
-    void release(CSE_ALifeDynamicObject* p) { check(!p->released); p->log.push_back("release"); p->released = true; }
-    bool synchronize_location(CSE_ALifeDynamicObject* p)
-    {
-        check(!p->released); p->log.push_back("sync");
-        p->m_bOnline ^= p->flip_sync;
-        return p->sync_ok;
-    }
-    void dispatch(CSE_ALifeDynamicObject* p, const char* name)
-    {
-        check(!p->released); p->log.push_back(name); p->evaluated = true;
-        p->m_bOnline ^= p->flip_transition;
-        p->post_redundant |= p->become_redundant;
-    }
-    void try_switch_online(CSE_ALifeDynamicObject* p) { dispatch(p, "online"); }
-    void try_switch_offline(CSE_ALifeDynamicObject* p) { dispatch(p, "offline"); }
+    bool initial_redundant = false, synchronized = true, is_online = false;
+    bool flip_on_sync = false, flip_on_switch = false, redundant_after_switch = false;
+    bool evaluated = false, released = false;
+    std::vector<std::string> calls;
+    void alive() const { require(!released, "Object accessed after release"); }
+    bool redundant() { alive(); calls.push_back("redundant"); return evaluated ? redundant_after_switch : initial_redundant; }
+    void release() { alive(); calls.push_back("release"); released = true; }
+    bool synchronize_location() { alive(); calls.push_back("sync"); is_online ^= flip_on_sync; return synchronized; }
+    bool online() const { alive(); return is_online; }
+    void dispatch(const char* name) { alive(); calls.push_back(name); evaluated = true; is_online ^= flip_on_switch; }
+    void try_switch_online() { dispatch("online"); }
+    void try_switch_offline() { dispatch("offline"); }
 };
-struct Candidate : Operations
+
+void scenario(const char* name, Operations operations, const std::vector<std::string>& expected,
+              int phase, bool release_expected, bool sampled)
 {
-    bool m_reconcile_sample = false;
-    double m_reconcile_stage_ms[4] = {};
-    bool maintain_before_switch(CSE_ALifeDynamicObject*);
-    void evaluate_switch(CSE_ALifeDynamicObject*);
-    void maintain_after_switch(CSE_ALifeDynamicObject*);
-    void switch_object(CSE_ALifeDynamicObject*);
-};
-#include "methods.inc"
+    try
+    {
+        double stages[4] = {};
+        const unsigned timers = TestTimer::constructions;
+        alife_diagnostics::reconcile_object<TestTimer>(sampled, stages, operations);
+        require(operations.calls == expected, "Lifecycle operation order differs");
+        require(operations.released == release_expected, "Incorrect release outcome");
+        require(TestTimer::constructions - timers == unsigned(sampled), "Unsampled path constructed a timer");
+        require(stages[0] == (sampled ? 2.0 : 0.0), "Incorrect pre-switch duration");
+        require(stages[1] == (sampled && phase == 1 ? 3.0 : 0.0), "Incorrect offline-attempt attribution");
+        require(stages[2] == (sampled && phase == 2 ? 3.0 : 0.0), "Incorrect online-attempt attribution");
+        require(stages[3] == (sampled && phase != 0 ? 4.0 : 0.0), "Incorrect post-switch duration");
+    }
+    catch (const std::exception& error)
+    {
+        throw std::runtime_error(std::string(name) + (sampled ? " (sampled): " : " (unsampled): ") + error.what());
+    }
+}
+
 int main()
 {
-    for (unsigned mask = 0; mask < 128; ++mask)
+    try
+    {
         for (bool sampled : {false, true})
         {
-            CSE_ALifeDynamicObject original{bool(mask&1), bool(mask&2), bool(mask&4), bool(mask&8), bool(mask&16), bool(mask&32), bool(mask&64)};
-            const bool online_after_sync = original.m_bOnline ^ original.flip_sync;
-            auto candidate = original;
-            Log expected{"redundant"};
-            bool released = original.pre_redundant;
-            bool evaluated = false;
-            bool online = original.m_bOnline;
-            if (released) expected.push_back("release");
-            else
-            {
-                expected.push_back("sync");
-                online ^= original.flip_sync;
-                if (original.sync_ok)
-                {
-                    evaluated = true;
-                    expected.push_back(online ? "offline" : "online");
-                    online ^= original.flip_transition;
-                    expected.push_back("redundant");
-                    released = original.post_redundant || original.become_redundant;
-                    if (released) expected.push_back("release");
-                }
-            }
-            Candidate manager; manager.m_reconcile_sample = sampled;
-            manager.switch_object(&candidate);
-            check(expected == candidate.log);
-            check((manager.m_reconcile_stage_ms[0] > 0) == sampled);
-            check((manager.m_reconcile_stage_ms[1] > 0) == (sampled && evaluated && online_after_sync));
-            check((manager.m_reconcile_stage_ms[2] > 0) == (sampled && evaluated && !online_after_sync));
-            check((manager.m_reconcile_stage_ms[3] > 0) == (sampled && evaluated));
-            check(online == candidate.m_bOnline && released == candidate.released && evaluated == candidate.evaluated);
+            Operations op;
+            op.initial_redundant = true;
+            scenario("early release", op, {"redundant", "release"}, 0, true, sampled);
+            op = {}; op.synchronized = false;
+            scenario("failed synchronization", op, {"redundant", "sync"}, 0, false, sampled);
+            op = {};
+            scenario("offline object", op, {"redundant", "sync", "online", "redundant"}, 2, false, sampled);
+            op = {}; op.is_online = true;
+            scenario("online object", op, {"redundant", "sync", "offline", "redundant"}, 1, false, sampled);
+            op = {}; op.flip_on_sync = true;
+            scenario("synchronization brings online", op, {"redundant", "sync", "offline", "redundant"}, 1, false, sampled);
+            op = {}; op.is_online = true; op.flip_on_sync = true;
+            scenario("synchronization takes offline", op, {"redundant", "sync", "online", "redundant"}, 2, false, sampled);
+            op = {}; op.flip_on_switch = true;
+            scenario("switch changes state", op, {"redundant", "sync", "online", "redundant"}, 2, false, sampled);
+            op = {}; op.redundant_after_switch = true;
+            scenario("post-switch release", op, {"redundant", "sync", "online", "redundant", "release"}, 2, true, sampled);
         }
-    std::cout << "256 real-method lifecycle invariant cases passed (sampled and unsampled)\n";
+    }
+    catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
+    std::cout << "Production reconciliation ordering and timing cases passed\n";
 }

@@ -231,83 +231,33 @@ void CALifeSwitchManager::try_switch_offline(CSE_ALifeDynamicObject* I)
     STOP_PROFILE
 }
 
-bool CALifeSwitchManager::maintain_before_switch(CSE_ALifeDynamicObject* I)
+struct CALifeSwitchManager::ReconciliationOperations
 {
-    if (I->redundant())
-    {
-        release(I);
-        return false;
-    }
-
-    return synchronize_location(I);
-}
-
-void CALifeSwitchManager::evaluate_switch(CSE_ALifeDynamicObject* I)
-{
-    // Virtual dispatch is deliberately retained: legacy groups interleave
-    // member cleanup with policy evaluation. This is not a pure predicate.
-    if (I->m_bOnline)
-        try_switch_offline(I);
-    else
-        try_switch_online(I);
-}
-
-void CALifeSwitchManager::maintain_after_switch(CSE_ALifeDynamicObject* I)
-{
-    if (I->redundant())
-        release(I);
-}
+    CALifeSwitchManager& manager;
+    CSE_ALifeDynamicObject* object;
+    bool redundant() const { return object->redundant(); }
+    void release() { manager.release(object); }
+    bool synchronize_location() { return manager.synchronize_location(object); }
+    bool online() const { return object->m_bOnline; }
+    // Preserve manager checks and virtual group/object switching behavior.
+    void try_switch_online() { manager.try_switch_online(object); }
+    void try_switch_offline() { manager.try_switch_offline(object); }
+};
 
 void CALifeSwitchManager::switch_object(CSE_ALifeDynamicObject* I)
 {
-    if (!m_reconcile_sample)
-    {
-        if (!maintain_before_switch(I)) return;
-        evaluate_switch(I);
-        maintain_after_switch(I);
-        return;
-    }
-    CTimer timer;
-    timer.Start();
-    const bool ready = maintain_before_switch(I);
-    const double before_end = timer.GetElapsed_sec() * 1000.0;
-    m_reconcile_stage_ms[0] += before_end;
-    if (!ready) return;
-    const unsigned phase = I->m_bOnline ? 1 : 2;
-    evaluate_switch(I);
-    const double dispatch_end = timer.GetElapsed_sec() * 1000.0;
-    m_reconcile_stage_ms[phase] += dispatch_end - before_end;
-    maintain_after_switch(I);
-    m_reconcile_stage_ms[3] += timer.GetElapsed_sec() * 1000.0 - dispatch_end;
+    ReconciliationOperations operations{*this, I};
+    alife_diagnostics::reconcile_object<CTimer>(m_reconciliation.sampled, m_reconciliation.stages, operations);
 }
 
 void CALifeSwitchManager::begin_reconciliation()
 {
-    m_reconcile_sample = m_reconcile_metrics && (++m_reconcile_updates % reconcile_stage_cadence == 0);
-    if (m_reconcile_sample)
-    {
-        for (auto& value : m_reconcile_stage_ms) value = 0;
-    }
+    m_reconciliation.begin(m_reconcile_metrics);
 }
 
 void CALifeSwitchManager::finish_reconciliation(double elapsed_ms, double budget_ms, u32 visited)
 {
-    // Emit outside the measured update, then stop per-object sampling so
-    // subsequent work cannot leak into this update's stage counters.
-    if (!m_reconcile_metrics) { m_reconcile_sample = false; return; }
-    const bool spike = elapsed_ms >= reconcile_spike_ms;
-    const bool report_spike = spike && Device.dwTimeGlobal - m_last_reconcile_spike_log >= reconcile_spike_log_interval_ms;
-    if (m_reconcile_sample || report_spike)
-    {
-        if (report_spike) m_last_reconcile_spike_log = Device.dwTimeGlobal;
-        Msg("[ALife reconcile] frame=%u update=%u sampled=%u spike=%u suppressed=%u objects=%u budget_ms=%.6f total_ms=%.6f before_ms=%.6f try_offline_ms=%.6f try_online_ms=%.6f after_ms=%.6f",
-            Device.dwFrame, m_reconcile_updates, u32(m_reconcile_sample), u32(spike), m_suppressed_spikes, visited, budget_ms,
-            elapsed_ms, m_reconcile_sample ? m_reconcile_stage_ms[0] : 0.0, m_reconcile_sample ? m_reconcile_stage_ms[1] : 0.0,
-            m_reconcile_sample ? m_reconcile_stage_ms[2] : 0.0, m_reconcile_sample ? m_reconcile_stage_ms[3] : 0.0);
-        TracyPlot("ALife/engine frame", int64_t(Device.dwFrame));
-        m_suppressed_spikes = 0;
-    }
-    else if (spike)
-        ++m_suppressed_spikes;
-    m_reconcile_sample = false;
+    m_reconciliation.finish(m_reconcile_metrics, Device.dwTimeGlobal, Device.dwFrame, elapsed_ms, budget_ms, visited,
+        [](const char* format, auto... values) { Msg(format, values...); },
+        [](std::uint32_t frame) { TracyPlot("ALife/engine frame", int64_t(frame)); });
 }

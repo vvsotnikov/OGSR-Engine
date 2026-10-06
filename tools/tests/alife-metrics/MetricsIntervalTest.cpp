@@ -1,62 +1,52 @@
-#include <cstdint>
+#include "alife_diagnostics.h"
 #include <iostream>
 #include <stdexcept>
 #include <vector>
-struct { std::uint32_t dwTimeGlobal; } Device;
+
 unsigned timers = 0;
-struct CTimer
+struct TestTimer
 {
-    CTimer() { ++timers; }
+    TestTimer() { ++timers; }
     void Start() {}
-    double GetElapsed_sec() const { return 0.001; }
+    double GetElapsed_sec() const { return .001; }
 };
-struct CALifeUpdateManager
-{
-    bool m_alife_metrics = false;
-    std::uint32_t m_metrics_time = 0, m_metrics_updates = 0, m_metrics_samples = 0;
-    double m_metrics_switch_ms = 0, m_metrics_offline_scheduled_ms = 0;
-    unsigned switches = 0, scheduled = 0;
-    std::vector<unsigned> reported_updates;
-    void update_switch() { ++switches; }
-    void update_scheduled(bool) { ++scheduled; }
-    void report_metrics()
-    {
-        reported_updates.push_back(m_metrics_updates);
-        ++m_metrics_samples;
-        m_metrics_time = Device.dwTimeGlobal;
-        m_metrics_updates = 0;
-        m_metrics_switch_ms = m_metrics_offline_scheduled_ms = 0;
-    }
-    void update();
-};
-#include "metrics-update.inc"
-void require(bool condition) { if (!condition) throw std::runtime_error("Invalid metrics interval"); }
+void require(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
 int main()
 {
-    try {
-        for (std::uint32_t start : {0u, 11872u, UINT32_MAX - 500u}) {
-            CALifeUpdateManager manager;
-            Device.dwTimeGlobal = start;
-            auto before = timers;
-            manager.update();
-            require(timers == before && manager.switches == 1 && manager.scheduled == 1 && manager.reported_updates.empty());
-            manager.m_alife_metrics = true;
-            manager.update();
-            require(manager.reported_updates.empty());
-            Device.dwTimeGlobal = start + 999u;
-            manager.update();
-            require(manager.reported_updates.empty());
-            Device.dwTimeGlobal = start + 1000u;
-            manager.update();
-            require(manager.reported_updates == std::vector<unsigned>{3});
-            Device.dwTimeGlobal = start + 1001u;
-            manager.update();
-            require(manager.reported_updates.size() == 1);
-            Device.dwTimeGlobal = start + 2000u;
-            manager.update();
-            require(manager.reported_updates == std::vector<unsigned>({3, 2}));
-            require(manager.switches == 6 && manager.scheduled == 6);
+    try
+    {
+        for (std::uint32_t start : {0u, 11872u, UINT32_MAX - 500u})
+        {
+            alife_diagnostics::MetricsInterval metrics;
+            std::uint32_t now = start;
+            std::vector<unsigned> reports;
+            std::vector<char> operations;
+            auto update = [&](bool enabled) {
+                metrics.update<TestTimer>(enabled, [&] { return now; },
+                    [&] { operations.push_back('s'); }, [&] { operations.push_back('o'); }, [&] {
+                        require(metrics.switch_ms == metrics.updates, "Switch interval total incorrect");
+                        require(metrics.offline_scheduled_ms == metrics.updates, "Offline interval total incorrect");
+                        require(metrics.samples == reports.size() + 1, "Sample count not advanced before report");
+                        reports.push_back(metrics.updates);
+                    });
+            };
+            const auto before = timers;
+            update(false);
+            require(timers == before && reports.empty(), "Disabled metrics used timers or emitted a report");
+            update(true);
+            require(reports.empty(), "First interval includes loading time");
+            now = start + 999u; update(true);
+            require(reports.empty(), "Reported before the interval elapsed");
+            now = start + 1000u; update(true);
+            require(reports == std::vector<unsigned>{3}, "First interval has incorrect update count");
+            require(!metrics.updates && !metrics.switch_ms && !metrics.offline_scheduled_ms, "Interval totals not reset");
+            now = start + 1001u; update(true);
+            require(reports.size() == 1, "Repeated report without a full interval");
+            now = start + 2000u; update(true);
+            require(reports == std::vector<unsigned>({3, 2}), "Second interval includes previous work");
+            require(operations == std::vector<char>({'s','o','s','o','s','o','s','o','s','o','s','o'}), "Switch/offline work reordered or omitted");
         }
-    } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
-    std::cout << "Metrics intervals pass at startup, after loading and across clock wrap\n";
+    }
+    catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
+    std::cout << "Production metrics intervals passed, including loading and clock wrap\n";
 }

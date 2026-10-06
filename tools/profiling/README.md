@@ -34,9 +34,9 @@ unsampled throughput. Unsampled records are emitted only for reported spikes,
 so this log cannot quantify the sampling overhead or an unsampled mean.
 
 Population scans and log output cost time outside the switching-stage totals.
-Timings are accumulated
-work over a reporting interval, not CPU-utilization percentages.
-`try_offline_ms` times virtual dispatch for objects online after location sync;
+Timings are accumulated work over a reporting interval, not CPU-utilization
+percentages. `try_offline_ms` includes the manager checks and virtual object
+switching call for objects online after location sync;
 `try_online_ms` starts from offline objects. Switch counters include calls where
 registry updates are disabled, so they need not equal registry-size changes.
 
@@ -73,3 +73,7 @@ engine frame numbers, especially during loading or late collector connections.
 
 Configure `tools/tests/alife-metrics` with CMake, build and run CTest (Python 3
 and C++17 required). The production log emitter is also passed through the reader.
+The engine and C++ tests include `alife_diagnostics.h` directly. Tests supply
+controlled lifecycle operations and clocks to check ordering, timing attribution,
+report intervals and emission. Real object/group activation and client construction
+remain native integration responsibilities; these tests do not simulate them.

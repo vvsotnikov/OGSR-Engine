@@ -106,27 +106,8 @@ void CALifeUpdateManager::update_scheduled(bool init_ef)
 
 void CALifeUpdateManager::update()
 {
-    if (!m_alife_metrics)
-    {
-        update_switch();
-        update_scheduled(false);
-        return;
-    }
-
-    // Device time may already include loading; start the first interval here.
-    if (!m_metrics_samples && !m_metrics_updates)
-        m_metrics_time = Device.dwTimeGlobal;
-
-    CTimer timer;
-    timer.Start();
-    update_switch();
-    m_metrics_switch_ms += timer.GetElapsed_sec() * 1000.0;
-    timer.Start();
-    update_scheduled(false);
-    m_metrics_offline_scheduled_ms += timer.GetElapsed_sec() * 1000.0;
-    ++m_metrics_updates;
-    if (Device.dwTimeGlobal - m_metrics_time >= 1000)
-        report_metrics();
+    m_metrics.update<CTimer>(m_alife_metrics, [] { return Device.dwTimeGlobal; },
+        [this] { update_switch(); }, [this] { update_scheduled(false); }, [this] { report_metrics(); });
 }
 
 void CALifeUpdateManager::report_metrics()
@@ -134,7 +115,7 @@ void CALifeUpdateManager::report_metrics()
     ZoneScopedN("ALife/metrics");
     // Opt-in inventory after warmup, then every 30 samples. Keep verbose
     // diagnostics out of performance comparisons.
-    const bool inventory = (++m_metrics_samples % 30 == 10) && m_alife_diagnostics;
+    const bool inventory = (m_metrics.samples % 30 == 10) && m_alife_diagnostics;
     u32 online = 0, offline = 0, living_online = 0, living_offline = 0;
     for (const auto& entry : graph().level().objects())
     {
@@ -160,17 +141,13 @@ void CALifeUpdateManager::report_metrics()
     Msg("[ALife metrics] game_ms=%u level=%u online=%u offline=%u living_online=%u living_offline=%u "
         "online_switches=%llu offline_switches=%llu updates=%u switch_ms=%.3f offline_scheduled_ms=%.3f",
         Device.dwTimeGlobal, u32(graph().level().level_id()), online, offline, living_online, living_offline,
-        m_online_switches, m_offline_switches, m_metrics_updates, m_metrics_switch_ms, m_metrics_offline_scheduled_ms);
+        m_online_switches, m_offline_switches, m_metrics.updates, m_metrics.switch_ms, m_metrics.offline_scheduled_ms);
     TracyPlot("ALife/engine frame", int64_t(Device.dwFrame));
     TracyPlot("ALife/online objects", int64_t(online));
     TracyPlot("ALife/living online", int64_t(living_online));
     TracyPlot("ALife/living offline", int64_t(living_offline));
-    TracyPlot("ALife/switch ms per sample", m_metrics_switch_ms);
-    TracyPlot("ALife/offline scheduled ms per sample", m_metrics_offline_scheduled_ms);
-    m_metrics_time = Device.dwTimeGlobal;
-    m_metrics_updates = 0;
-    m_metrics_switch_ms = 0;
-    m_metrics_offline_scheduled_ms = 0;
+    TracyPlot("ALife/switch ms per sample", m_metrics.switch_ms);
+    TracyPlot("ALife/offline scheduled ms per sample", m_metrics.offline_scheduled_ms);
 }
 
 void CALifeUpdateManager::shedule_Update(u32 dt)

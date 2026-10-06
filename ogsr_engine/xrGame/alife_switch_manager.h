@@ -9,6 +9,7 @@
 #pragma once
 
 #include "alife_simulator_base.h"
+#include "alife_diagnostics.h"
 
 class CALifeSwitchManager : public virtual CALifeSimulatorBase
 {
@@ -20,14 +21,7 @@ protected:
     bool m_alife_metrics = false;
     bool m_alife_diagnostics = false;
     bool m_reconcile_metrics = false;
-    bool m_reconcile_sample = false;
-    static constexpr u32 reconcile_stage_cadence = 64;
-    static constexpr double reconcile_spike_ms = 10.0;
-    static constexpr u32 reconcile_spike_log_interval_ms = 1000;
-    u32 m_reconcile_updates = 0;
-    u32 m_suppressed_spikes = 0;
-    double m_reconcile_stage_ms[4] = {};
-    u32 m_last_reconcile_spike_log = u32(0) - reconcile_spike_log_interval_ms;
+    alife_diagnostics::Reconciliation m_reconciliation;
     u64 m_online_switches = 0;
     u64 m_offline_switches = 0;
 
@@ -43,9 +37,7 @@ protected:
     bool synchronize_location(CSE_ALifeDynamicObject* object);
     void begin_reconciliation();
     void finish_reconciliation(double elapsed_ms, double budget_ms, u32 visited);
-    bool maintain_before_switch(CSE_ALifeDynamicObject* object);
-    void evaluate_switch(CSE_ALifeDynamicObject* object);
-    void maintain_after_switch(CSE_ALifeDynamicObject* object);
+    struct ReconciliationOperations;
 
 public:
     void try_switch_online(CSE_ALifeDynamicObject* object);
