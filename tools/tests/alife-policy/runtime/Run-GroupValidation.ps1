@@ -59,7 +59,7 @@ try {
     Assert-ValidationLogHealthy $log
     Assert-PolicyMessages $log $Mode 1 $true
     $phases = @([regex]::Matches($log, '\[group policy\] phase=(\d)') | ForEach-Object { $_.Groups[1].Value })
-    if ($game.ExitCode -ne 0 -or ($phases -join ',') -ne '1,2,3,4,5,6,7' -or $log -match '\[group policy\] FAILED' -or
+    if ($game.ExitCode -ne 0 -or ($phases -join ',') -ne '1,2,3,4,5,6,7,8' -or $log -match '\[group policy\] FAILED' -or
         $log -notmatch '\[group policy\] complete member_dead=true group_empty=true') { throw 'Group policy evidence incomplete' }
     $meta.status = 'group-completed'
     Write-Output "COMPLETE group mode=$Mode session=$session"
@@ -72,4 +72,3 @@ try {
     if ($game) { $meta | Add-Member gameExitCode $game.ExitCode -Force }
     $meta | ConvertTo-Json -Depth 8 | Set-Content "$session/session.json"
 }
-

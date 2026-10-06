@@ -13,7 +13,7 @@ return function(cfg)
         stable, deadline = nil, now + 30000
         alife():set_switch_online(cfg.group, phase ~= 4 and phase ~= 6)
         alife():set_switch_offline(cfg.group, phase ~= 7)
-        alife():set_switch_distance((phase == 2 or phase == 4 or phase == 5) and 10000 or 1)
+        alife():set_switch_distance((phase == 2 or phase == 4 or phase == 5 or phase == 8) and 10000 or 1)
     end
     level.add_call(function()
         if done or not db.actor or not app_ready() or device().precache_frame ~= 0 then return false end
@@ -47,7 +47,7 @@ return function(cfg)
             packet:r_seek(packet:w_tell() - 6)
             assert(packet:r_u32() == 1 and packet:r_u16() == cfg.member, "Saved group membership changed")
             assert(now < deadline, "Group policy phase timed out: " .. phase)
-            local expected = phase == 2 or phase == 5 or phase == 7 or (cfg.mode == "whole-map" and phase ~= 4 and phase ~= 6)
+            local expected = phase == 2 or phase == 5 or phase == 7 or phase == 8 or (cfg.mode == "whole-map" and phase ~= 4 and phase ~= 6)
             if phase == 1 or phase == 3 then
                 local limit = 1 + system_ini():r_float("alife", "switch_factor")
                 assert(member.position:distance_to(db.actor:position()) > limit, "Distant group control inconclusive")
@@ -56,7 +56,7 @@ return function(cfg)
             if matches then stable = stable or now else stable = nil end
             if not stable or now - stable < 4000 then return end
             log1(string.format("[group policy] phase=%d mode=%s group=%d member=%d online=%s client=%s", phase, cfg.mode, cfg.group, cfg.member, tostring(group.online), tostring(client ~= nil)))
-            if phase == 7 then
+            if phase == 8 then
                 assert(client and client:alive(), "Expected living group member")
                 client:kill(db.actor)
                 killed, deadline = now, now + 30000
