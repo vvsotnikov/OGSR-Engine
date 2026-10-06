@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.24)
+project(tracy-report-tests LANGUAGES CXX)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_executable(trace-write-fixture WriteFixture.cpp)
+target_compile_features(trace-write-fixture PRIVATE cxx_std_17)
+target_include_directories(trace-write-fixture PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../../tracy")
+enable_testing()
+add_test(NAME tracy-report-formats COMMAND "${CMAKE_COMMAND}" -E env "OGSR_TSV_WRITER=$<TARGET_FILE:trace-write-fixture>" "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/ReportTest.py")
