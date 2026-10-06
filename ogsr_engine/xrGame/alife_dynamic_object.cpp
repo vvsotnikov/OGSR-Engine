@@ -143,8 +143,12 @@ struct DynamicSwitchOperations
     {
 #ifdef DEBUG
         if (!object.client_data.empty())
-            Msg(distance ? "CSE_ALifeDynamicObject::try_switch_online2: client_data is cleared for [%d][%s]" :
-                           "CSE_ALifeDynamicObject::try_switch_online: client_data is cleared for [%d][%s]", object.ID, object.name_replace());
+        {
+            if (distance)
+                Msg("CSE_ALifeDynamicObject::try_switch_online2: client_data is cleared for [%d][%s]", object.ID, object.name_replace());
+            else
+                Msg("CSE_ALifeDynamicObject::try_switch_online: client_data is cleared for [%d][%s]", object.ID, object.name_replace());
+        }
 #endif
     }
     void switch_online() { object.alife().switch_online(&object); }

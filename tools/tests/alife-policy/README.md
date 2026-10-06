@@ -11,13 +11,20 @@ Without the flag, distance behavior is unchanged.
 Group traversal has a non-obvious legacy rule: a blocking live member stops
 cleanup of later corpses, while the group's own permission may still allow the
 final offline switch. The policy must not reorder those effects.
+That final rule can switch an eligible legacy `flesh_group` offline in whole-map
+mode. It is an inherited retention defect tracked in #18, not the intended
+contract of #1. These regression tests preserve the old behavior pending that fix.
 
 Configure this directory with CMake, build and run CTest (Python 3, PowerShell, and C/C++17 compilers).
 The engine and tests compile `alife_switch_policy.h` directly. Operations bind
 real engine objects and registries in the engine and controlled state in tests.
 No method text or engine class declarations are copied into the fixtures.
 The tests cover distance boundaries, eligibility, cleanup and group member order;
-real registry effects and client construction require the native scenarios below.
+real registry effects and client construction require native scenarios. The
+controlled-operation tests do not compile the engine adapters. Release and Tracy
+builds compile those adapters; native scenarios exercise their effects only for
+the object types used by each scenario. Full `DEBUG` assertion paths remain
+unverified pending the separate build repairs in #16.
 
 For game validation, package a Release build as `<install>/bin_whole_lifecycle`
 with its DLLs and a `build.json` containing `baseCommit`, executable `sha256`,
@@ -56,6 +63,20 @@ Package metadata identifies the built engine. The separate checkout-at-launch
 fields identify the runner checkout, which may differ from the package source.
 Unavailable Git metadata is `null`, including dirty state; it must never be
 interpreted as a clean checkout. A valid detached snapshot revision is retained.
+
+`runtime/Run-GroupValidation.ps1` tests a saved `ON_OFF_G` with one living member
+in both modes. It verifies membership, near/far transitions, group permission
+changes, client presence and member removal on death. It requires a seed using
+the `validation_online_group` section and known group/member IDs; it creates
+that section only in a private copy of the loose game configuration. The seed
+used for local evidence was created by the archived native group fixture in
+`archive/alife-experiments-2026-10-04:tools/profiling/GroupCleanupValidation.inl`.
+This scenario does not exercise the separate legacy `flesh_group` adapter (#18).
+
+```powershell
+./Run-GroupValidation.ps1 -InstallRoot $install -Package $package -SeedAppData $groupSeed -Mode distance -GroupId 22016 -MemberId 22017
+./Run-GroupValidation.ps1 -InstallRoot $install -Package $package -SeedAppData $groupSeed -Mode whole-map -GroupId 22016 -MemberId 22017
+```
 
 `-PrepareOnly` validates the package and writes the private session inputs without
 starting the engine. Its `regular-prepared` status is not gameplay evidence.

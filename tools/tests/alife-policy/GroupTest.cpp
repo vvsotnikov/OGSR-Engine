@@ -16,7 +16,7 @@ struct Operations
     bool distance = true, group_online_permission = false, group_offline_permission = true, switched = false;
     unsigned count = 0;
     unsigned size() const { return unsigned(order.size()); }
-    void verify_group() {}
+    void bind_group() {}
     Member* monster(unsigned i) { auto& member = storage.at(order.at(i)); return member.monster ? &member : nullptr; }
     bool alive(Member* member) const { return member->alive; }
     bool can_online(Member* member) const { return member->allow_online; }

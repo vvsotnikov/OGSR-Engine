@@ -67,7 +67,7 @@ template <class Operations>
 void legacy_group_offline(Operations& op)
 {
     if (!op.size()) return;
-    op.verify_group();
+    op.bind_group();
     unsigned i = 0;
     unsigned count = op.size();
     for (; i < count;)
@@ -96,6 +96,8 @@ void legacy_group_offline(Operations& op)
         // cleanup of subsequent corpses, even if group permission forces offline.
     }
     if (!op.size() || !op.can_offline()) return;
+    // Inherited behavior, not the desired whole-map contract: #18 tracks the
+    // legacy flesh-group retention defect separately from this refactor.
     if (op.can_online() || i == count) op.switch_offline();
 }
 

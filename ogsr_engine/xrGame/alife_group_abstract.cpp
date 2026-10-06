@@ -131,7 +131,7 @@ void CSE_ALifeGroupAbstract::try_switch_offline()
         CSE_ALifeGroupAbstract& group;
         CSE_ALifeDynamicObject* object = nullptr;
         unsigned size() const { return unsigned(group.m_tpMembers.size()); }
-        void verify_group() { object = smart_cast<CSE_ALifeDynamicObject*>(group.base()); VERIFY(object); }
+        void bind_group() { object = smart_cast<CSE_ALifeDynamicObject*>(group.base()); VERIFY(object); }
         CSE_ALifeMonsterAbstract* monster(unsigned i) const { return smart_cast<CSE_ALifeMonsterAbstract*>(ai().alife().objects().object(group.m_tpMembers[i])); }
         bool alive(CSE_ALifeMonsterAbstract* member) const { return member->g_Alive(); }
         bool can_online(CSE_ALifeMonsterAbstract* member) const { return member->can_switch_online(); }
