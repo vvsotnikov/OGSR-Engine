@@ -10,6 +10,14 @@
 
 IC CALifeSwitchManager::CALifeSwitchManager(xrServer* server, LPCSTR section) : inherited(server, section)
 {
+    m_alife_metrics = strstr(Core.Params, "-alife_metrics") != nullptr;
+    m_alife_diagnostics = strstr(Core.Params, "-alife_diagnostics") != nullptr;
+    m_reconcile_metrics = strstr(Core.Params, "-alife_reconcile_metrics") != nullptr;
+    if (m_reconcile_metrics)
+        Msg("* ALife reconciliation timing: update totals; stage sampling every %u updates", alife_diagnostics::Reconciliation::stage_cadence);
+
+    if (m_alife_diagnostics && !m_alife_metrics)
+        Msg("! -alife_diagnostics requires -alife_metrics");
     m_switch_distance = pSettings->r_float(section, "switch_distance");
     m_switch_factor = pSettings->r_float(section, "switch_factor");
     set_switch_distance(m_switch_distance);

@@ -75,6 +75,7 @@ void CALifeSwitchManager::add_online(CSE_ALifeDynamicObject* object, bool update
 #endif
 
     object->add_online(update_registries);
+    if (m_alife_metrics) ++m_online_switches;
     STOP_PROFILE
 }
 
@@ -105,6 +106,7 @@ void CALifeSwitchManager::remove_online(CSE_ALifeDynamicObject* object, bool upd
 #endif
 
     object->add_offline(m_saved_chidren, update_registries);
+    if (m_alife_metrics) ++m_offline_switches;
     STOP_PROFILE
 }
 
@@ -229,22 +231,33 @@ void CALifeSwitchManager::try_switch_offline(CSE_ALifeDynamicObject* I)
     STOP_PROFILE
 }
 
+struct CALifeSwitchManager::ReconciliationOperations
+{
+    CALifeSwitchManager& manager;
+    CSE_ALifeDynamicObject* object;
+    bool redundant() const { return object->redundant(); }
+    void release() { manager.release(object); }
+    bool synchronize_location() { return manager.synchronize_location(object); }
+    bool online() const { return object->m_bOnline; }
+    // Preserve manager checks and virtual group/object switching behavior.
+    void try_switch_online() { manager.try_switch_online(object); }
+    void try_switch_offline() { manager.try_switch_offline(object); }
+};
+
 void CALifeSwitchManager::switch_object(CSE_ALifeDynamicObject* I)
 {
-    if (I->redundant())
-    {
-        release(I);
-        return;
-    }
+    ReconciliationOperations operations{*this, I};
+    alife_diagnostics::reconcile_object<CTimer>(m_reconciliation.sampled, m_reconciliation.stages, operations);
+}
 
-    if (!synchronize_location(I))
-        return;
+void CALifeSwitchManager::begin_reconciliation()
+{
+    m_reconciliation.begin();
+}
 
-    if (I->m_bOnline)
-        try_switch_offline(I);
-    else
-        try_switch_online(I);
-
-    if (I->redundant())
-        release(I);
+void CALifeSwitchManager::finish_reconciliation(double elapsed_ms, double budget_ms, u32 visited)
+{
+    m_reconciliation.finish(Device.dwTimeGlobal, Device.dwFrame, elapsed_ms, budget_ms, visited,
+        [](const char* format, auto... values) { Msg(format, values...); },
+        [](std::uint32_t frame) { TracyPlot("ALife/engine frame", int64_t(frame)); });
 }

@@ -40,10 +40,9 @@ IC void CALifeLevelRegistry::remove(CSE_ALifeDynamicObject* object, bool no_asse
 }
 
 template <typename _update_predicate>
-IC void CALifeLevelRegistry::update(const _update_predicate& predicate)
+IC u32 CALifeLevelRegistry::update(const _update_predicate& predicate)
 {
-    //	u32					object_count =
-    inherited::update(predicate);
+    const u32 object_count = inherited::update(predicate);
 #ifdef FULL_LEVEL_UPDATE
     m_first_update = true;
 #endif
@@ -53,6 +52,7 @@ IC void CALifeLevelRegistry::update(const _update_predicate& predicate)
         //		Msg				("[LSS][OOS][%d : %d]",object_count, objects().size());
     }
 #endif
+    return object_count;
 }
 
 IC CSE_ALifeDynamicObject* CALifeLevelRegistry::object(const ALife::_OBJECT_ID& id, bool no_assert) const

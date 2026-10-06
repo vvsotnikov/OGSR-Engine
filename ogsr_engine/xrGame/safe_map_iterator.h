@@ -38,6 +38,8 @@ public:
     template <typename _update_predicate>
     IC u32 update(const _update_predicate& predicate);
     IC void set_process_time(const float& process_time);
+    // Negative means this update has no time limit (including the first update).
+    float time_limit_ms() const { return use_time_limit && !m_first_update ? m_max_process_time * 1000.f : -1.f; }
     IC const _REGISTRY& objects() const;
     IC void clear();
     IC bool empty() const;

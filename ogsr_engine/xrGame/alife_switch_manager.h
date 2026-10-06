@@ -9,6 +9,7 @@
 #pragma once
 
 #include "alife_simulator_base.h"
+#include "alife_diagnostics.h"
 
 class CALifeSwitchManager : public virtual CALifeSimulatorBase
 {
@@ -17,6 +18,13 @@ protected:
     typedef ALife::OBJECT_VECTOR OBJECT_VECTOR;
 
 protected:
+    bool m_alife_metrics = false;
+    bool m_alife_diagnostics = false;
+    bool m_reconcile_metrics = false;
+    alife_diagnostics::Reconciliation m_reconciliation;
+    u64 m_online_switches = 0;
+    u64 m_offline_switches = 0;
+
     float m_switch_distance;
     float m_switch_factor;
     float m_online_distance;
@@ -27,6 +35,9 @@ private:
 
 protected:
     bool synchronize_location(CSE_ALifeDynamicObject* object);
+    void begin_reconciliation();
+    void finish_reconciliation(double elapsed_ms, double budget_ms, u32 visited);
+    struct ReconciliationOperations;
 
 public:
     void try_switch_online(CSE_ALifeDynamicObject* object);

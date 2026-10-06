@@ -21,6 +21,8 @@ class CALifeUpdateManager : public CALifeSwitchManager, public CALifeSurgeManage
 {
 private:
     bool m_first_time;
+    alife_diagnostics::MetricsInterval m_metrics;
+    void report_metrics();
 
 protected:
     u64 m_max_process_time;
