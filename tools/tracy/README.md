@@ -21,6 +21,8 @@ in the original trace but are not exported. Thread IDs are OS IDs accompanied by
 Tracy thread names; they are not stable identities across runs. Plot export also
 supports existing captures with instrumentation absent from the current engine;
 the report does not require the current engine to produce plots.
+Unsupported plot types fail the export explicitly; skipping them would produce
+an apparently complete export with missing data. The pinned types are all handled.
 
 Run `python summarize_trace.py <prefix> <start-seconds> <end-seconds>` to write
 `<prefix>-summary.json`, or `python trace_peaks.py <prefix> <start> <end>` to print

@@ -66,6 +66,7 @@ class Reports(unittest.TestCase):
                         result = subprocess.run([sys.executable, '-B', str(TOOLS / script), prefix, '2', '3'], capture_output=True, text=True)
                         self.assertNotEqual(result.returncode, 0)
                         self.assertIn('schema', result.stderr)
+                        self.assertIn(prefix + '-' + suffix + '.tsv', result.stderr)
                         self.assertNotIn('Traceback', result.stderr)
 
     def test_invalid_windows_fail_before_reading(self):

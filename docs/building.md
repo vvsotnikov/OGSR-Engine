@@ -3,6 +3,10 @@
 Build `Engine.sln` with Visual Studio 2022 C++ tools and the provisioned third-party
 dependencies. Use a short checkout path such as `D:\src\OGSR-Engine`: generated
 FidelityFX header names can exceed MSVC's path limit in nested checkouts.
+Local validation and the commit/merge hooks also require Python 3, alongside
+Rust/Cargo, CMake and PowerShell. CMake must be able to find the interpreter for
+the required trace-report tests, including for engine-only commits. Missing
+Python fails validation; the suite is not silently skipped.
 These MSBuild commands select the two x64 release variants:
 
 ```powershell

@@ -22,10 +22,10 @@ def rows(prefix, kind):
         reader = csv.reader(source, delimiter='\t', strict=True)
         try:
             if next(reader, None) != expected:
-                raise ValueError(f'Unexpected {kind} schema (or empty file)')
+                raise ValueError(f'{path}: unexpected {kind} schema (or empty file)')
             for row in reader:
                 if len(row) != len(expected):
-                    raise ValueError(f'Invalid {kind} row at line {reader.line_num}')
+                    raise ValueError(f'{path}: invalid {kind} row at line {reader.line_num}')
                 converted = []
                 for column, value, convert in zip(expected, row, CONVERTERS[kind]):
                     try:
@@ -37,4 +37,4 @@ def rows(prefix, kind):
                     converted.append(value)
                 yield converted
         except csv.Error as error:
-            raise ValueError(f'Invalid {kind} TSV at line {reader.line_num}: {error}') from error
+            raise ValueError(f'{path}: invalid {kind} TSV at line {reader.line_num}: {error}') from error

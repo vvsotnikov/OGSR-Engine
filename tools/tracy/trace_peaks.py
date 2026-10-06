@@ -26,6 +26,8 @@ def peaks(prefix, start_seconds, end_seconds):
     scopes = [defaultdict(lambda: [0, 0]) for _ in selected]
     plots = [defaultdict(list) for _ in selected]
     for plot_type, name, timestamp, value in rows(prefix, 'plots'):
+        if timestamp < first_start or timestamp >= last_end:
+            continue
         for frame, result in zip(selected, plots):
             if frame['start_ns'] <= timestamp < frame['start_ns'] + frame['duration_ns']:
                 result[(plot_type, name)].append(value)
