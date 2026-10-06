@@ -25,7 +25,6 @@ def summarize(prefix, start, end):
     lower, upper = start * 1e9, end * 1e9
     frames = array('d')
     for index, timestamp, duration in rows(prefix, 'frames'):
-        timestamp, duration = int(timestamp), int(duration)
         if duration > 0 and timestamp >= lower and timestamp + duration <= upper:
             frames.append(duration / 1e6)
     if not frames:
@@ -33,11 +32,10 @@ def summarize(prefix, start, end):
     zones = defaultdict(lambda: array('d'))
     threads = defaultdict(set)
     for name, timestamp, duration, thread, thread_name, source_id, file, line in rows(prefix, 'zones'):
-        timestamp, duration = int(timestamp), int(duration)
         if duration >= 0 and timestamp >= lower and timestamp + duration <= upper:
-            key = (int(source_id), name, file, int(line))
+            key = (source_id, name, file, line)
             zones[key].append(duration / 1e6)
-            threads[key].add((int(thread), thread_name))
+            threads[key].add((thread, thread_name))
     return dict(startSeconds=start, endSeconds=end,
                 selection='Complete events in window; boundary-crossing zones excluded. Inclusive and parallel zone times are not additive.',
                 percentileMethod='nearest rank', frames=statistics(frames),

@@ -14,10 +14,10 @@ def peaks(prefix, start_seconds, end_seconds):
     if not (math.isfinite(start_seconds) and math.isfinite(end_seconds) and 0 <= start_seconds < end_seconds):
         raise ValueError('Invalid interval')
     selected = heapq.nlargest(8, (
-        dict(index=int(index), start_ns=int(start), duration_ns=int(duration))
+        dict(index=index, start_ns=start, duration_ns=duration)
         for index, start, duration in rows(prefix, 'frames')
-        if int(duration) > 0 and start_seconds * 1e9 <= int(start)
-        and int(start) + int(duration) <= end_seconds * 1e9
+        if duration > 0 and start_seconds * 1e9 <= start
+        and start + duration <= end_seconds * 1e9
     ), key=lambda row: row['duration_ns'])
     if not selected:
         raise ValueError('No complete frames in interval')
@@ -26,14 +26,10 @@ def peaks(prefix, start_seconds, end_seconds):
     scopes = [defaultdict(lambda: [0, 0]) for _ in selected]
     plots = [defaultdict(list) for _ in selected]
     for plot_type, name, timestamp, value in rows(prefix, 'plots'):
-        time, value = int(timestamp), float(value)
-        if not math.isfinite(value):
-            raise ValueError('Non-finite plot value')
         for frame, result in zip(selected, plots):
-            if frame['start_ns'] <= time < frame['start_ns'] + frame['duration_ns']:
+            if frame['start_ns'] <= timestamp < frame['start_ns'] + frame['duration_ns']:
                 result[(plot_type, name)].append(value)
     for name, start, duration, thread, thread_name, source_id, file, line in rows(prefix, 'zones'):
-        start, duration = int(start), int(duration)
         if start + duration <= first_start or start >= last_end:
             continue
         for frame, result in zip(selected, scopes):
@@ -47,7 +43,7 @@ def peaks(prefix, start_seconds, end_seconds):
         output.append(dict(frame=frame['index'], startSeconds=frame['start_ns']/1e9,
                            frameMs=frame['duration_ns']/1e6,
                            plotSamples=[dict(type=kind, name=name, values=values) for (kind, name), values in samples.items()],
-                           inclusiveScopes=[dict(name=name, sourceId=int(source_id), file=file, line=int(line), threadId=int(thread), threadName=thread_name, overlapMs=values[0]/1e6, longestZoneMs=values[1]/1e6)
+                           inclusiveScopes=[dict(name=name, sourceId=source_id, file=file, line=line, threadId=thread, threadName=thread_name, overlapMs=values[0]/1e6, longestZoneMs=values[1]/1e6)
                                             for (name, thread, thread_name, source_id, file, line), values in sorted(result.items(), key=lambda entry: entry[1][0], reverse=True)[:12]]))
     return output
 

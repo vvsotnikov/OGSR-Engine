@@ -1,5 +1,6 @@
 """The export readers must preserve quoted names and reject empty/invalid windows."""
 import json
+import csv
 import math
 import os
 from pathlib import Path
@@ -12,6 +13,7 @@ TOOLS = Path(__file__).resolve().parents[2] / 'tracy'
 sys.path.insert(0, str(TOOLS))
 import summarize_trace as summary
 import trace_peaks
+import trace_tsv
 
 WRITER = os.environ.get('OGSR_TSV_WRITER')
 
@@ -75,6 +77,37 @@ class Reports(unittest.TestCase):
             self.assertNotEqual(peaks.returncode, 0)
             self.assertIn('Invalid interval', peaks.stderr)
             self.assertNotIn('Traceback', peaks.stderr)
+
+    def test_numeric_errors_identify_file_column_and_line(self):
+        with tempfile.TemporaryDirectory() as directory:
+            prefix = str(Path(directory) / 'trace')
+            valid = {
+                'frames': ['1', '2000000000', '1000000'],
+                'zones': ['scope\nname', '2000000000', '1000000', '7', 'worker', '1', 'a.cpp', '12'],
+                'plots': ['user', 'load', '2000000000', '1.5'],
+            }
+            for kind, converters in trace_tsv.CONVERTERS.items():
+                for column, convert in enumerate(converters):
+                    if convert is str:
+                        continue
+                    for invalid in (['bad', 'nan', 'inf'] if convert is float else ['bad']):
+                        with self.subTest(kind=kind, column=column, invalid=invalid):
+                            for file_kind, values in valid.items():
+                                row = values.copy()
+                                if file_kind == kind:
+                                    row[column] = invalid
+                                with open(prefix + '-' + file_kind + '.tsv', 'w', newline='', encoding='utf-8') as stream:
+                                    writer = csv.writer(stream, delimiter='\t')
+                                    writer.writerow(trace_tsv.HEADERS[file_kind])
+                                    writer.writerow(row)
+                            scripts = ['trace_peaks.py'] if kind == 'plots' else ['summarize_trace.py', 'trace_peaks.py']
+                            for script in scripts:
+                                result = subprocess.run([sys.executable, '-B', str(TOOLS / script), prefix, '2', '3'], capture_output=True, text=True)
+                                self.assertNotEqual(result.returncode, 0)
+                                self.assertIn(prefix + '-' + kind + '.tsv', result.stderr)
+                                self.assertIn('invalid ' + trace_tsv.HEADERS[kind][column], result.stderr)
+                                self.assertIn('line 3' if kind == 'zones' else 'line 2', result.stderr)
+                                self.assertNotIn('Traceback', result.stderr)
 
 
 if __name__ == '__main__':

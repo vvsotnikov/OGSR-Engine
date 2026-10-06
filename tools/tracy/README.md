@@ -13,7 +13,8 @@ Only one collector may connect. Regular Release builds cannot emit traces.
 
 `ogsr-trace-export.exe <trace> <prefix>` loads the trace through Tracy's reader
 and exports complete CPU zones with static source names, base-frame boundaries,
-and typed plots (user, CPU usage and power). Source IDs, files and lines keep same-named scopes distinct; IDs are
+and typed plots (user and CPU usage for Windows captures; power is supported
+for captures from platforms with Tracy power collection). Source IDs, files and lines keep same-named scopes distinct; IDs are
 local to one capture. Memory-event reconstruction is disabled to bound loading cost; memory plots are
 therefore not loaded. GPU timelines, dynamic zone names/text and messages remain available
 in the original trace but are not exported. Thread IDs are OS IDs accompanied by
