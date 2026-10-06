@@ -7,10 +7,10 @@ spec = importlib.util.spec_from_file_location('probe', Path(__file__).with_name(
 probe = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(probe)
 SAMPLE = ('[ALife reconcile] frame=100 update=64 sampled=1 spike=0 suppressed=2 objects=10 '
-          'budget_ms=300000.000000 total_ms=1 before_ms=0.2 try_offline_ms=0.3 '
+          'budget_ms=0.810000 total_ms=1 before_ms=0.2 try_offline_ms=0.3 '
           'try_online_ms=0.2 after_ms=0.1\n')
 SPIKE = ('[ALife reconcile] frame=101 update=65 sampled=0 spike=1 suppressed=3 objects=12 '
-         'budget_ms=300000.000000 total_ms=12 before_ms=0 try_offline_ms=0 '
+         'budget_ms=0.810000 total_ms=12 before_ms=0 try_offline_ms=0 '
          'try_online_ms=0 after_ms=0\n')
 
 

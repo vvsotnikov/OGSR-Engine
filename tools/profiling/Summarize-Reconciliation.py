@@ -64,6 +64,12 @@ def summarize(log_path, first_frame=0, last_frame=None, skip_malformed=False):
         caveat=(
             'Records cover update_switch invocations, not necessarily full traversals. '
             'The budget is the effective iterator limit; -1 means unlimited. '
+            'Budget-exhausting slices tend toward that limit plus overshoot; compare '
+            'visits and stage shares alongside elapsed totals, not totals alone. '
+            'Stage timers consume the budget and can reduce sampled visits; '
+            'objectsPerSample is not normal unsampled throughput. '
+            'Neither visit/population ratios nor update counters measure per-object latency. '
+            'Spikes can include work, waits and preemption; they do not identify a slow object. '
             'Suppressed counts cover preceding reporting intervals, which may straddle '
             'frame limits; an unreported final interval is absent. Malformed lines are counted '
             'across the whole log. Logging and population '
