@@ -17,10 +17,9 @@ int main(int argc, char** argv)
         alife_diagnostics::Reconciliation state;
         unsigned records = 0, anchors = 0;
         std::uint32_t frame = 0;
-        bool enabled = false;
         auto update = [&](std::uint32_t time, double elapsed, double budget = .81) {
             ++frame;
-            state.begin(enabled);
+            state.begin();
             if (state.sampled)
             {
                 for (unsigned i = 0; i != 4; ++i)
@@ -29,13 +28,10 @@ int main(int argc, char** argv)
                     state.stages[i] = (i + 1) * .1;
                 }
             }
-            state.finish(enabled, time, frame, elapsed, budget, 400,
+            state.finish(time, frame, elapsed, budget, 400,
                 [&](const char* format, auto... values) { ++records; std::printf(format, values...); std::putchar('\n'); },
                 [&](std::uint32_t anchor) { require(anchor == frame, "Anchor does not identify emitted frame"); ++anchors; });
         };
-        update(0, 20);
-        require(!records && !state.updates && !state.suppressed, "Disabled diagnostics changed counters or emitted output");
-        enabled = true;
         update(0, 20, -1.0);
         require(records == 1 && !state.suppressed, "First spike was not emitted immediately");
         update(1000, 12);

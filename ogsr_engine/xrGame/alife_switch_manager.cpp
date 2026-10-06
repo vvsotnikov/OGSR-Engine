@@ -252,12 +252,12 @@ void CALifeSwitchManager::switch_object(CSE_ALifeDynamicObject* I)
 
 void CALifeSwitchManager::begin_reconciliation()
 {
-    m_reconciliation.begin(m_reconcile_metrics);
+    m_reconciliation.begin();
 }
 
 void CALifeSwitchManager::finish_reconciliation(double elapsed_ms, double budget_ms, u32 visited)
 {
-    m_reconciliation.finish(m_reconcile_metrics, Device.dwTimeGlobal, Device.dwFrame, elapsed_ms, budget_ms, visited,
+    m_reconciliation.finish(Device.dwTimeGlobal, Device.dwFrame, elapsed_ms, budget_ms, visited,
         [](const char* format, auto... values) { Msg(format, values...); },
         [](std::uint32_t frame) { TracyPlot("ALife/engine frame", int64_t(frame)); });
 }

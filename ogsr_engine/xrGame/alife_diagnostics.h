@@ -4,6 +4,9 @@
 
 namespace alife_diagnostics
 {
+// This header also owns the always-used per-object switch lifecycle and update
+// ordering. Only timing and reporting are optional; disabling diagnostics must
+// not bypass reconciliation or scheduled updates.
 // Operations supplies the real object's lifecycle in the engine and controlled
 // operations in tests. release() invalidates the object: never access it after
 // that call. Read online() after synchronization, which may change its state.
@@ -58,13 +61,14 @@ struct Reconciliation
     static constexpr double spike_ms = 10.0;
     static constexpr std::uint32_t spike_log_interval_ms = 1000;
     bool sampled = false;
-    std::uint32_t updates = 0, suppressed = 0;
+    std::uint32_t updates = 0;
+    std::uint32_t suppressed = 0;
     double stages[4] = {};
     std::uint32_t last_spike_log = std::uint32_t(0) - spike_log_interval_ms;
 
-    void begin(bool enabled)
+    void begin()
     {
-        sampled = enabled && (++updates % stage_cadence == 0);
+        sampled = ++updates % stage_cadence == 0;
         if (sampled)
             for (auto& value : stages)
                 value = 0;
@@ -73,15 +77,10 @@ struct Reconciliation
     // Unsigned subtraction preserves the interval across the engine's u32 clock
     // wrap. Emit and anchor run outside the measured reconciliation update.
     template <class Emit, class Anchor>
-    void finish(bool enabled, std::uint32_t now, std::uint32_t frame,
+    void finish(std::uint32_t now, std::uint32_t frame,
                 double elapsed_ms, double budget_ms, std::uint32_t visited,
                 Emit emit, Anchor anchor)
     {
-        if (!enabled)
-        {
-            sampled = false;
-            return;
-        }
         const bool spike = elapsed_ms >= spike_ms;
         const bool report_spike = spike && std::uint32_t(now - last_spike_log) >= spike_log_interval_ms;
         if (sampled || report_spike)
@@ -103,8 +102,11 @@ struct Reconciliation
 
 struct MetricsInterval
 {
-    std::uint32_t time = 0, updates = 0, samples = 0;
-    double switch_ms = 0, offline_scheduled_ms = 0;
+    std::uint32_t time = 0;
+    std::uint32_t updates = 0;
+    std::uint32_t samples = 0;
+    double switch_ms = 0;
+    double offline_scheduled_ms = 0;
 
     template <class Timer, class Now, class Switch, class Scheduled, class Report>
     void update(bool enabled, Now now, Switch switch_objects, Scheduled scheduled, Report report)
