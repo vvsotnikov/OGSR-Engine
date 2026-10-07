@@ -273,8 +273,8 @@ void CAI_Stalker::Hit(SHit* pHDS)
                 clamp(power_factor, 0.f, 1.f);
 
 #ifdef DEBUG
-                IKinematicsAnimated* tpKinematics = smart_cast<IKinematicsAnimated*>(Visual());
-                tpKinematics->LL_GetBoneInstance(pHDS->bone());
+                IKinematics* tpKinematics = smart_cast<IKinematics*>(Visual());
+                VERIFY(tpKinematics);
                 if (pHDS->bone() >= tpKinematics->LL_BoneCount())
                 {
                     Msg("tpKinematics has no bone_id %d", pHDS->bone());

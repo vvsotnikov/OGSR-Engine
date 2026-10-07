@@ -98,9 +98,6 @@ void CObjectList::SingleUpdate(CObject* O)
 
     TracyMessageL(O->cNameSect().c_str());
 
-    O->IAmNotACrowAnyMore(); // важно !! надо делать всегда даже если не нужно вызывать  UpdateCL
-    O->dwFrame_AsCrow = (u32)-1;
-
     if (Device.dwFrame == O->dwFrame_UpdateCL)
     {
 #ifdef DEBUG
@@ -110,6 +107,11 @@ void CObjectList::SingleUpdate(CObject* O)
 
         return;
     }
+
+    // A parent may already have been updated recursively and requeued for the
+    // next frame. A duplicate visit must not clear that pending request.
+    O->IAmNotACrowAnyMore();
+    O->dwFrame_AsCrow = u32(-1);
 
     if (!O->processing_enabled())
     {

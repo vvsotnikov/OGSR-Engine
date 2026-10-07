@@ -42,9 +42,6 @@ void AttachGame()
     CCC_RegisterCommands();
     // keyboard binding
     CCC_RegisterInput();
-#ifdef DEBUG
-    g_profiler = xr_new<CProfiler>();
-#endif
 }
 
 #else
@@ -61,9 +58,6 @@ BOOL APIENTRY DllMain(HANDLE hModule, u32 ul_reason_for_call, LPVOID lpReserved)
         CCC_RegisterCommands();
         // keyboard binding
         CCC_RegisterInput();
-#ifdef DEBUG
-        g_profiler = xr_new<CProfiler>();
-#endif
         break;
     }
 

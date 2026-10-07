@@ -658,7 +658,7 @@ void R_dsgraph_structure::build_subspace(const IRender_Sector::sector_id_t& star
 
     render_position = camera_position;
 
-    VERIFY(_sector);
+    VERIFY(start_sector_id == IRender_Sector::INVALID_SECTOR_ID || start_sector_id < sector_portals_structure.Sectors.size());
     marker++; // !!! critical here
 
     if (start_sector_id != IRender_Sector::INVALID_SECTOR_ID)

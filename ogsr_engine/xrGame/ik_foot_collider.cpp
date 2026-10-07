@@ -1,4 +1,5 @@
 #include "StdAfx.h"
+#include "../xrCDB/cl_intersect.h"
 #include "ik_foot_collider.h"
 
 #include "../xr_3da/GameMtlLib.h"

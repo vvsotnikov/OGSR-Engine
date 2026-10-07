@@ -608,8 +608,8 @@ void CActor::g_SetAnimation(u32 mstate_rl)
 #ifdef DEBUG
     if (bDebug)
     {
-        HUD().Font().pFontStat->OutSetI(0, 0);
-        HUD().Font().pFontStat->OutNext("[%s]", mov_state[moving_idx]);
+        HUD().Font().pFontDI->OutSetI(0, 0);
+        HUD().Font().pFontDI->OutNext("[%s]", mov_state[moving_idx]);
     }
 #endif
 
@@ -644,7 +644,7 @@ void CActor::g_SetAnimation(u32 mstate_rl)
             strcat(buf, "RLookout ");
         if (m_bJumpKeyPressed)
             strcat(buf, "+Jumping ");
-        HUD().Font().pFontStat->OutNext("MSTATE:     [%s]", buf);
+        HUD().Font().pFontDI->OutNext("MSTATE:     [%s]", buf);
     };
 #endif
 

@@ -430,9 +430,10 @@ void CPHGeometryOwner::clear_cashed_tries()
 void CPHGeometryOwner::add_geom(CODEGeom* g)
 {
     VERIFY(b_builded);
-    VERIFY(m_group);
+    VERIFY(g);
     m_geoms.push_back(g);
     group_add(*g);
+    VERIFY(m_group);
     // g->add_to_space( m_group );
 }
 

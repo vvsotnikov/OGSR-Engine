@@ -97,7 +97,7 @@ public:
 
     virtual float get_animation_length(MotionID motion_ID) = 0;
 
-    //#ifdef DEBUG
-    //	virtual	const BlendSVec			&blend_cycle	(const u32 &bone_part_id) const = 0;
-    //#endif //	DEBUG
+#ifdef DEBUG
+    virtual const BlendSVec& blend_cycle(const u32& bone_part_id) const = 0;
+#endif
 };

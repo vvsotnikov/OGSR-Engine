@@ -45,7 +45,7 @@ EParticleAction* pCreateEActionImpl(PAPI::PActionEnum type)
     case PAPI::PATargetVelocityDID: pa = xr_new<EPATargetVelocity>(); break;
     case PAPI::PAVortexID: pa = xr_new<EPAVortex>(); break;
     case PAPI::PATurbulenceID: pa = xr_new<EPATurbulence>(); break;
-    default: NODEFAULT;
+    default: FATAL("Unknown particle action type"); return nullptr;
     }
     pa->type = type;
     return pa;

@@ -83,8 +83,9 @@ void xrCore::_initialize(LPCSTR _ApplicationName, LogCallback cb, BOOL init_fs,
         Msg("CommandLine: [%s]", Core.Params);
 
 #ifdef DEBUG
-        Msg("CRT heap 0x%08x", _get_heap_handle());
-        Msg("Process heap 0x%08x", GetProcessHeap());
+        Msg("Debug assertions: enabled");
+        Msg("CRT heap %p", reinterpret_cast<void*>(_get_heap_handle()));
+        Msg("Process heap %p", GetProcessHeap());
 #endif // DEBUG
     }
 

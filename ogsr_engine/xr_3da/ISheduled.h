@@ -9,10 +9,12 @@ public:
         u32 t_max : 14; // maximal bound of update time (sample: 200ms)
         u32 b_RT : 1;
         u32 b_locked : 1;
+        u32 b_registered : 1; // Logical ownership, including pending operations.
+        u32 b_retired : 1; // Dropped during dispatch; owner cleanup is still expected.
     } shedule;
+    static_assert(sizeof(shedule) == sizeof(u32), "Scheduler flags must fit in one word");
 
 #ifdef DEBUG
-    u32 dbg_startframe;
     u32 dbg_update_shedule;
 #endif
 

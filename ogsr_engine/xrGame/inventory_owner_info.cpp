@@ -63,7 +63,7 @@ bool CInventoryOwner::OnReceiveInfo(shared_str info_id) const
 
 #ifdef DEBUG
     if (psAI_Flags.test(aiInfoPortion))
-        Msg("[%s] Received Info [%s]", Name(), *info_id);
+        Msg("[%s] Received Info [%s]", *smart_cast<const CGameObject*>(this)->cName(), *info_id);
 #endif
 
     //Запустить скриптовый callback
@@ -91,7 +91,7 @@ void CInventoryOwner::DumpInfo() const
     KNOWN_INFO_VECTOR& known_info = m_known_info_registry->registry().objects();
 
     Msg("------------------------------------------");
-    Msg("Start KnownInfo dump for [%s]", Name());
+    Msg("Start KnownInfo dump for [%s]", *smart_cast<const CGameObject*>(this)->cName());
     KNOWN_INFO_VECTOR_IT it = known_info.begin();
     for (int i = 0; it != known_info.end(); ++it, ++i)
     {
@@ -108,7 +108,7 @@ void CInventoryOwner::OnDisableInfo(shared_str info_id) const
 
 #ifdef DEBUG
     if (psAI_Flags.test(aiInfoPortion))
-        Msg("[%s] Disabled Info [%s]", Name(), *info_id);
+        Msg("[%s] Disabled Info [%s]", *smart_cast<const CGameObject*>(this)->cName(), *info_id);
 #endif
 
     KNOWN_INFO_VECTOR& known_info = m_known_info_registry->registry().objects();

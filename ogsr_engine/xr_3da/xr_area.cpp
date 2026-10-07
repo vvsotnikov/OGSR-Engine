@@ -7,6 +7,10 @@
 #include "feel_sound.h"
 #include "x_ray.h"
 #include "GameFont.h"
+#ifdef DEBUG
+#include "../Include/xrRender/DebugRender.h"
+#include "../Include/xrRender/DrawUtils.h"
+#endif
 
 using namespace collide;
 
@@ -123,7 +127,7 @@ CObjectSpace::CObjectSpace()
 #endif // PROFILE_CRITICAL_SECTIONS
 {
 #ifdef DEBUG
-    sh_debug.create("debug\\wireframe", "$null");
+    sh_debug->create("debug\\wireframe", "$null");
 #endif
     m_BoundingVolume.invalidate();
 }
@@ -134,9 +138,6 @@ CObjectSpace::~CObjectSpace()
     Sound->set_geometry_som(nullptr);
     Sound->set_geometry_env(nullptr);
     Sound->set_handler(nullptr);
-#ifdef DEBUG
-    sh_debug.destroy();
-#endif
 }
 //----------------------------------------------------------------------
 int CObjectSpace::GetNearest(xr_vector<ISpatial*>& q_spatial, xr_vector<CObject*>& q_nearest, const Fvector& point, float range, CObject* ignore_object)
@@ -252,3 +253,24 @@ void RayPickAsync::do_work_async()
 
     future_ready = true;
 }
+
+#ifdef DEBUG
+void CObjectSpace::dbgRender()
+{
+    R_ASSERT(bDebug);
+    DRender->SetShader(sh_debug);
+    for (const auto& box : q_debug.boxes)
+    {
+        DU->DrawOBB(Fidentity, box, 0, color_xrgb(255, 0, 0));
+        Fmatrix transform, scale, ellipsoid;
+        box.xform_get(transform);
+        scale.scale(box.m_halfsize);
+        ellipsoid.mul(transform, scale);
+        DU->DrawSphere(ellipsoid, Fvector().set(0, 0, 0), 1.f, 0, color_xrgb(0, 0, 255), false, true);
+    }
+    q_debug.boxes.clear();
+    for (const auto& [sphere, color] : dbg_S)
+        DU->DrawSphere(Fidentity, sphere, 0, color, false, true);
+    dbg_S.clear();
+}
+#endif

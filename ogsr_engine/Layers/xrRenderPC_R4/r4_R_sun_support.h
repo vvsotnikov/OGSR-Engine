@@ -240,7 +240,7 @@ public:
             dest.push_back(light_cuboid_poly.plane);
             dest.back().n.mul(-1);
             dest.back().d *= -1;
-            VERIFY(light_cuboid_polys[i].plane.classify(light_ray.P) > 0);
+            VERIFY(light_cuboid_poly.plane.classify(light_ray.P) > 0);
         }
 
         // Compute ray intersection with light model, this is needed to next cascade to start it's placement.

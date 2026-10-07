@@ -121,6 +121,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\xrRender\dxStatGraphRender.h" />
     <ClInclude Include="..\..\Include\xrRender\DebugRender.h" />
     <ClInclude Include="..\..\Include\xrRender\DebugShader.h" />
     <ClInclude Include="..\..\Include\xrRender\DrawUtils.h" />
@@ -282,6 +283,9 @@
     <ClInclude Include="stdafx.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\xrRender\dxStatGraphRender.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)'!='Debug'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="..\xrRenderDX10\imgui_impl_win32.cpp" />
     <ClCompile Include="..\xrRender\ParticleEffectActions.cpp" />
     <ClCompile Include="..\xrRenderDX10\3DFluid\blender_fluid.cpp" />

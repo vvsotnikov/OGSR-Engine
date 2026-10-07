@@ -58,7 +58,7 @@ bool CPhraseScript::CheckInfo(const CInventoryOwner* pOwner) const
         {
 #ifdef DEBUG
             if (psAI_Flags.test(aiDialogs))
-                Msg("----rejected: [%s] has info %s", pOwner->Name(), *m_HasInfo[i]);
+                Msg("----rejected: [%s] has info %s", *smart_cast<const CGameObject*>(pOwner)->cName(), *m_HasInfo[i]);
 #endif
             return false;
         }
@@ -77,7 +77,7 @@ bool CPhraseScript::CheckInfo(const CInventoryOwner* pOwner) const
         {
 #ifdef DEBUG
             if (psAI_Flags.test(aiDialogs))
-                Msg("----rejected: [%s] dont has info %s", pOwner->Name(), *m_DontHasInfo[i]);
+                Msg("----rejected: [%s] dont has info %s", *smart_cast<const CGameObject*>(pOwner)->cName(), *m_DontHasInfo[i]);
 #endif
             return false;
         }

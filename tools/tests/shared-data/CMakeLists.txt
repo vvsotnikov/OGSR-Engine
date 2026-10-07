@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.19)
+project(shared-data LANGUAGES CXX)
+enable_testing()
+add_executable(shared-data-test SharedDataTest.cpp)
+target_compile_features(shared-data-test PRIVATE cxx_std_17)
+add_test(NAME shared-data-ownership COMMAND shared-data-test)

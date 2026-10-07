@@ -556,15 +556,15 @@ void CLevel::OnRender()
         ObjectSpace.dbgRender();
 
         //---------------------------------------------------------------------
-        HUD().Font().pFontStat->OutSet(170, 630);
-        HUD().Font().pFontStat->SetHeight(16.0f);
-        HUD().Font().pFontStat->SetColor(0xffff0000);
+        HUD().Font().pFontDI->OutSet(170, 630);
+        HUD().Font().pFontDI->SetHeightI(16.0f / Device.dwHeight);
+        HUD().Font().pFontDI->SetColor(0xffff0000);
 
         if (Server)
-            HUD().Font().pFontStat->OutNext("Client Objects:      [%d]", Server->GetEntitiesNum());
-        HUD().Font().pFontStat->OutNext("Server Objects:      [%d]", Objects.o_count());
-        HUD().Font().pFontStat->OutNext("Interpolation Steps: [%d]", Level().GetInterpolationSteps());
-        HUD().Font().pFontStat->SetHeight(8.0f);
+            HUD().Font().pFontDI->OutNext("Client Objects:      [%d]", Server->entity_count());
+        HUD().Font().pFontDI->OutNext("Server Objects:      [%d]", Objects.o_count());
+        HUD().Font().pFontDI->OutNext("Interpolation Steps: [%d]", Level().GetInterpolationSteps());
+        HUD().Font().pFontDI->SetHeightI(8.0f / Device.dwHeight);
         //---------------------------------------------------------------------
     }
 

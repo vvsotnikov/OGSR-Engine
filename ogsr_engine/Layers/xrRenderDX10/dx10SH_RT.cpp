@@ -118,7 +118,7 @@ void CRT::create(LPCSTR Name, u32 w, u32 h, DXGI_FORMAT f, u32 SampleCount /*= 1
 
     HW.stats_manager.increment_stats_rtarget(pSurface);
 #ifdef DEBUG
-        Msg("* created RT(%s), %dx%d, format = %d samples = %d", Name, w, h, dx10FMT, SampleCount);
+        Msg("* created RT(%s), %dx%d, format = %d samples = %d", Name, w, h, fmt, SampleCount);
 #endif // DEBUG
 
     if (pSurface)
@@ -246,13 +246,13 @@ void CRT::destroy()
 
 void CRT::set_slice_read(int slice) const
 {
-    VERIFY(slice <= n_slices || slice == -1);
+    VERIFY(slice == -1 || (slice >= 0 && u32(slice) < n_slices));
     pTexture->set_slice(slice);
 }
 
 void CRT::set_slice_write(u32 context_id, int slice)
 {
-    VERIFY(slice <= n_slices || slice == -1);
+    VERIFY(slice == -1 || (slice >= 0 && u32(slice) < n_slices));
     pZRT[context_id] = (slice < 0) ? dsv_all : dsv_per_slice[slice];
 }
 

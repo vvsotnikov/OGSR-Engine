@@ -334,7 +334,7 @@ void CWeaponKnife::DeviceUpdate()
 
 void CWeaponKnife::UpdateCL()
 {
-    if (H_Parent() && !ParentIsActor() && (strapped_mode() || IsHidden()))
+    if (skip_hidden_npc_update())
         return;
 
     inherited::UpdateCL();

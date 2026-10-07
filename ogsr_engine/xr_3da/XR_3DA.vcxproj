@@ -189,6 +189,7 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="StatGraph.h" />
     <ClInclude Include="..\build_config_defines.h" />
     <ClInclude Include="cf_dynamic_mesh.h" />
     <ClInclude Include="IPhysicsDefinitions.h" />
@@ -274,6 +275,9 @@
     <ClInclude Include="perlin.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="StatGraph.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)'!='Debug'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="bone.cpp" />
     <ClCompile Include="cf_dynamic_mesh.cpp" />
     <ClCompile Include="defines.cpp" />

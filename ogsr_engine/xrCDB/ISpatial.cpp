@@ -6,8 +6,10 @@
 #include "../xr_3da/render.h"
 
 #ifdef DEBUG
-#include "../xrengine/xr_object.h"
-#include "../xrengine/PS_Instance.h"
+#include "../xrCore/Utils/FastDelegate.hpp"
+#include "../xr_3da/device.h"
+#include "../xr_3da/xr_object.h"
+#include "../xr_3da/PS_Instance.h"
 #endif
 
 ISpatial_DB* g_SpatialSpace = nullptr;

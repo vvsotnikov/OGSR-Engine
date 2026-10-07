@@ -1,5 +1,8 @@
 #pragma once
 
+// vector.h is included before log.h; this diagnostic only needs Msg.
+void XRCORE_API __cdecl Msg(const char* format, ...);
+
 template <class T>
 class _cylinder
 {

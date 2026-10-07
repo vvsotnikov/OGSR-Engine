@@ -4,6 +4,10 @@
 
 class dxRenderFactory : public IRenderFactory
 {
+#ifdef DEBUG
+    IStatGraphRender* CreateStatGraphRender() override;
+    void DestroyStatGraphRender(IStatGraphRender* object) override;
+#endif
     virtual IUISequenceVideoItem* CreateUISequenceVideoItem();
     virtual void DestroyUISequenceVideoItem(IUISequenceVideoItem* pObject);
     virtual IUIShader* CreateUIShader();

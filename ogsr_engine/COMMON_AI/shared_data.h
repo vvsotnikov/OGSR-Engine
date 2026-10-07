@@ -115,6 +115,13 @@ public:
         pSharedObj = CSharedObj<SHARED_TYPE, KEY_TYPE>::Instance();
         pSharedObj->_on_self_delete = auto_delete;
     }
+    CSharedClass(const CSharedClass& other) : CSharedClass() { _sd = other._sd; }
+    CSharedClass& operator=(const CSharedClass& other)
+    {
+        // Both objects already own a reference to this specialization's pool.
+        _sd = other._sd;
+        return *this;
+    }
     virtual ~CSharedClass() { pSharedObj->FreeInst(); }
 
     static void DeleteSharedData() { CSharedObj<SHARED_TYPE, KEY_TYPE>::DestroySingleton(); }

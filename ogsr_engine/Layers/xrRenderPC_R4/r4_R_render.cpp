@@ -274,7 +274,7 @@ void CRender::Render()
 
     PIX_EVENT(CRender_Render);
 
-    VERIFY(0 == mapDistort.size());
+    VERIFY(dsgraph.mapDistort.empty());
 
     Target->BeginTemporalUpscaleInput();
     Target->u_setrt(cmd_list, Target->GetRenderWidth(), Target->GetRenderHeight(), nullptr, nullptr, nullptr, nullptr);
@@ -532,7 +532,7 @@ void CRender::Render()
     // wait occ results for next frame lights
     LP_normal.vis_update();
 
-    VERIFY(0 == mapDistort.size());
+    VERIFY(dsgraph.mapDistort.empty());
 }
 
 void CRender::render_forward()
@@ -542,7 +542,8 @@ void CRender::render_forward()
     auto& dsgraph = get_imm_context();
     CBackend& cmd_list = dsgraph.cmd_list;
 
-    VERIFY(0 == mapDistort.size());
+    // Distortion items are consumed by phase_combine after the forward pass.
+    // The empty-queue invariant is checked at the end of CRender::Render.
 
     //******* Main render - second order geometry (the one, that doesn't support deffering)
     //.todo: should be done inside "combine" with estimation of of luminance, tone-mapping, etc.

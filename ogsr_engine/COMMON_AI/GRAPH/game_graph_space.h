@@ -11,6 +11,8 @@
 #include "associative_vector.h"
 #include "..\xr_3da\xrLevel.h"
 
+class CGameGraph;
+
 namespace GameGraph
 {
 typedef u16 _GRAPH_ID;
@@ -45,7 +47,7 @@ public:
     IC void load(IReader* reader);
     IC void save(IWriter* writer);
 
-    friend class CGameGraph;
+    friend class ::CGameGraph;
 };
 
 typedef associative_vector<_LEVEL_ID, SLevel> LEVEL_MAP;
@@ -81,7 +83,7 @@ public:
     IC const u8* vertex_type() const;
     IC const u8& edge_count() const;
     IC const u32& edge_offset() const;
-    friend class CGameGraph;
+    friend class ::CGameGraph;
 };
 
 class CHeader
@@ -108,7 +110,7 @@ public:
     IC const SLevel* level(LPCSTR level_name, bool) const;
     IC void load(IReader* reader);
     IC void save(IWriter* reader);
-    friend class CGameGraph;
+    friend class ::CGameGraph;
 };
 #pragma pack(pop)
 

@@ -54,12 +54,11 @@ void CPlanner::update()
         // printing solution
         if (m_use_log)
         {
-            if (m_solution_changed)
+            if (this->m_solution_changed)
             {
                 show_current_world_state();
                 show_target_world_state();
-                Msg("%6d : Solution for object %s [%d vertices searched]", Device.dwTimeGlobal, object_name(),
-                    ai().graph_engine().solver_algorithm().data_storage().get_visited_node_count());
+                Msg("%6d : Solution for object %s [%u vertices discovered]", Device.dwTimeGlobal, object_name(), this->m_visited_nodes);
                 for (int i = 0; i < (int)solution().size(); ++i)
                     Msg("%s", action2string(solution()[i]));
             }
@@ -67,7 +66,7 @@ void CPlanner::update()
 #endif
 
 #ifdef LOG_ACTION
-        if (m_failed)
+        if (this->m_failed)
         {
             // printing current world state
             show();
@@ -202,14 +201,14 @@ TEMPLATE_SPECIALIZATION
 IC void CPlanner::show_current_world_state()
 {
     Msg("Current world state :");
-    auto I = evaluators().cbegin();
-    auto E = evaluators().cend();
+    auto I = evaluators().begin();
+    auto E = evaluators().end();
     for (; I != E; ++I)
     {
-        xr_vector<COperatorCondition>::const_iterator J =
-            std::lower_bound(current_state().conditions().begin(), current_state().conditions().end(), CWorldProperty((*I).first, false));
+        auto J =
+            std::lower_bound(this->current_state().conditions().begin(), this->current_state().conditions().end(), CWorldProperty((*I).first, false));
         char temp = '?';
-        if ((J != current_state().conditions().end()) && ((*J).condition() == (*I).first))
+        if ((J != this->current_state().conditions().end()) && ((*J).condition() == (*I).first))
         {
             temp = (*J).value() ? '+' : '-';
             Msg("%5c : [%d][%s]", temp, (*I).first, property2string((*I).first));
@@ -221,14 +220,14 @@ TEMPLATE_SPECIALIZATION
 IC void CPlanner::show_target_world_state()
 {
     Msg("Target world state :");
-    auto I = evaluators().cbegin();
-    auto E = evaluators().cend();
+    auto I = evaluators().begin();
+    auto E = evaluators().end();
     for (; I != E; ++I)
     {
-        xr_vector<COperatorCondition>::const_iterator J =
-            std::lower_bound(target_state().conditions().begin(), target_state().conditions().end(), CWorldProperty((*I).first, false));
+        auto J =
+            std::lower_bound(this->target_state().conditions().begin(), this->target_state().conditions().end(), CWorldProperty((*I).first, false));
         char temp = '?';
-        if ((J != target_state().conditions().end()) && ((*J).condition() == (*I).first))
+        if ((J != this->target_state().conditions().end()) && ((*J).condition() == (*I).first))
         {
             temp = (*J).value() ? '+' : '-';
             Msg("%5c : [%d][%s]", temp, (*I).first, property2string((*I).first));
@@ -243,8 +242,8 @@ IC void CPlanner::show(LPCSTR offset)
     strconcat(sizeof(temp), temp, offset, "    ");
     {
         Msg("\n%sEVALUATORS : %d\n", offset, evaluators().size());
-        auto I = evaluators().cbegin();
-        auto E = evaluators().cend();
+        auto I = evaluators().begin();
+        auto E = evaluators().end();
         for (; I != E; ++I)
             Msg("%sevaluator   [%d][%s]", offset, (*I).first, property2string((*I).first));
     }

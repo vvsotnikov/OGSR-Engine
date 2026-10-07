@@ -82,8 +82,8 @@ struct SPHDBGDrawTri : public SPHDBGDrawAbsract
     {
         if (solid)
         {
-            RCache.dbg_DrawTRI(Fidentity, v[0], v[1], v[2], c);
-            RCache.dbg_DrawTRI(Fidentity, v[2], v[1], v[0], c);
+            DRender->dbg_DrawTRI(Fidentity, v[0], v[1], v[2], c);
+            DRender->dbg_DrawTRI(Fidentity, v[2], v[1], v[0], c);
         }
         else
         {
@@ -104,6 +104,11 @@ static void clear_vector(PHABS_DBG_V& v)
         xr_delete(*i);
     }
     v.clear();
+}
+
+void DBG_DrawTri(const Fvector& v0, const Fvector& v1, const Fvector& v2, u32 c, bool solid)
+{
+    DBG_DrawPHAbstruct(xr_new<SPHDBGDrawTri>(v0, v1, v2, c, solid));
 }
 
 void DBG_DrawTri(CDB::RESULT* T, u32 c) { DBG_DrawPHAbstruct(xr_new<SPHDBGDrawTri>(T, c)); }
@@ -261,7 +266,7 @@ struct SPHDBGOutText : public SPHDBGDrawAbsract
     virtual void render()
     {
         // if(rendered) return;
-        HUD().Font().pFontStat->OutNext(s);
+        HUD().Font().pFontDI->OutNext(s);
         rendered = true;
     }
 };
@@ -473,8 +478,8 @@ void PH_DBG_Clear()
 void PH_DBG_Render()
 {
     if (ph_dbg_draw_mask.test(phDbgDrawZDisable))
-        CHK_DX(HW.pDevice->SetRenderState(D3DRS_ZENABLE, 0));
-    HUD().Font().pFontStat->OutSet(550, 250);
+        DRender->CacheSetDepthTest(false);
+    HUD().Font().pFontDI->OutSet(550, 250);
 
     if (ph_dbg_draw_mask.test(phDbgDrawEnabledAABBS))
     {
@@ -530,7 +535,7 @@ void PH_DBG_Render()
 #endif
 
     if (ph_dbg_draw_mask.test(phDbgDrawZDisable))
-        CHK_DX(HW.pDevice->SetRenderState(D3DRS_ZENABLE, 1));
+        DRender->CacheSetDepthTest(true);
 }
 
 void DBG_DrawStatBeforeFrameStep()

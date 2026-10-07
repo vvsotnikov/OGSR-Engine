@@ -36,7 +36,7 @@ ICF CLevelGraph::CVertex* CLevelGraph::vertex(const u32 vertex_id) const
 
 ICF u32 CLevelGraph::vertex(const CVertex* vertex_p) const
 {
-    VERIFY((vertex_p >= m_nodes) && valid_vertex_id(u32(vertex_p - m_nodes)));
+    VERIFY((vertex_p >= m_nodes->begin()) && (vertex_p < m_nodes->end()));
     return (u32(vertex_p - m_nodes->begin()));
 }
 

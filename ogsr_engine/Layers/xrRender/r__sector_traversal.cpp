@@ -198,6 +198,7 @@ void CPortalTraverser::traverse_sector(CSector* sector, CFrustum& F, _scissor& R
 #ifdef DEBUG
 void CPortalTraverser::dbg_draw()
 {
+    auto& cmd_list = RCache;
     cmd_list.OnFrameEnd();
     cmd_list.set_xform_world(Fidentity);
     cmd_list.set_xform_view(Fidentity);
@@ -209,7 +210,9 @@ void CPortalTraverser::dbg_draw()
     {
         CSector* S = (CSector*)dbg_sectors[s];
         FVF::L verts[5];
-        Fbox2 bb = S->r_scissor_merged;
+        if (S->r_scissors.empty()) continue;
+        Fbox2 bb = S->r_scissors.front();
+        for (const auto& scissor : S->r_scissors) bb.merge(scissor);
         bb.min.x = bb.min.x * 2 - 1;
         bb.max.x = bb.max.x * 2 - 1;
         bb.min.y = (1 - bb.min.y) * 2 - 1;

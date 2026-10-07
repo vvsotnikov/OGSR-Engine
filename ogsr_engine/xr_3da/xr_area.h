@@ -1,6 +1,7 @@
 #pragma once
 
 #include "xr_collide_form.h"
+#include "../Include/xrRender/DebugShader.h"
 #include "../xrCDB/xr_collide_defs.h"
 
 // refs
@@ -20,7 +21,7 @@ private:
     Fbox m_BoundingVolume;
 public:
 #ifdef DEBUG
-    ref_shader sh_debug;
+    debug_shader sh_debug;
     clQueryCollision q_debug; // MT: dangerous
     xr_vector<std::pair<Fsphere, u32>> dbg_S; // MT: dangerous
 #endif
@@ -60,7 +61,7 @@ public:
     // Debugging
 #ifdef DEBUG
     void dbgRender();
-    ref_shader dbgGetShader() { return sh_debug; }
+    debug_shader dbgGetShader() { return sh_debug; }
 #endif
 };
 

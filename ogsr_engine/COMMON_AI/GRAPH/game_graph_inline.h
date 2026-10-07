@@ -313,3 +313,11 @@ IC const CGameLevelCrossTable& CGameGraph::cross_table() const
     VERIFY(m_current_level_cross_table);
     return (*m_current_level_cross_table);
 }
+#ifdef DEBUG
+IC void CGameGraph::begin_spawn(u32 vertex_id, const_spawn_iterator& start, const_spawn_iterator& end) const
+{
+    const auto* node = vertex(vertex_id);
+    start = reinterpret_cast<const CLevelPoint*>(reinterpret_cast<const u8*>(m_nodes) + node->dwPointOffset);
+    end = start + node->tDeathPointCount;
+}
+#endif

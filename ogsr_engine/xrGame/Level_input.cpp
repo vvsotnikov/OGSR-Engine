@@ -194,7 +194,7 @@ void CLevel::IR_OnKeyboardPress(int key)
 #ifdef DEBUG
         FS.get_path("$game_config$")->m_Flags.set(FS_Path::flNeedRescan, TRUE);
         FS.get_path("$game_scripts$")->m_Flags.set(FS_Path::flNeedRescan, TRUE);
-        FS.rescan_pathes();
+        FS.rescan_physical_pathes();
 #endif // DEBUG
         string_path saved_game, command;
         strconcat(sizeof(saved_game), saved_game, Core.UserName, "_", "quicksave");
@@ -207,10 +207,10 @@ void CLevel::IR_OnKeyboardPress(int key)
     }
 
 #ifdef DEBUG
+    switch (key)
+    {
     case DIK_RETURN:
     case DIK_NUMPADENTER: bDebug = !bDebug; return;
-
-    case DIK_BACK: HW.Caps.SceneMode = (HW.Caps.SceneMode + 1) % 3; return;
 
     case DIK_F4: {
         if (pInput->iGetAsyncKeyState(DIK_LALT))
@@ -277,7 +277,7 @@ void CLevel::IR_OnKeyboardPress(int key)
                     CHudItem* pHudItem = smart_cast<CHudItem*>(pActor->inventory().ActiveItem());
                     if (pHudItem)
                     {
-                        pHudItem->OnStateSwitch(pHudItem->GetState());
+                        pHudItem->OnStateSwitch(pHudItem->GetState(), pHudItem->GetState());
                     }
                 }
             }
@@ -298,19 +298,20 @@ void CLevel::IR_OnKeyboardPress(int key)
         /**/
 
     case DIK_DIVIDE:
-        if (OnServer())
+        if (Server && Server->game)
         {
             //			float NewTimeFactor				= pSettings->r_float("alife","time_factor");
             Server->game->SetGameTimeFactor(g_fTimeFactor);
         }
         break;
     case DIK_MULTIPLY:
-        if (OnServer())
+        if (Server && Server->game)
         {
             float NewTimeFactor = 1000.f;
             Server->game->SetGameTimeFactor(NewTimeFactor);
         }
         break;
+    }
 #endif
 
     if (bindConsoleCmds.execute(key))

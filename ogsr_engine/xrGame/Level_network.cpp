@@ -113,8 +113,9 @@ void CLevel::remove_objects()
 
     m_debug_render_queue.clear();
 
-    // clean up scheduler queues
-    Engine.Sheduler.Destroy();
+    // eQuickLoad keeps the client game state and UI/dialog owners alive. Their
+    // scheduler registrations must survive too; destroyed objects unregister themselves.
+    // CEngine::Destroy performs the final scheduler cleanup after all owners die.
 
     m_is_removing_objects = false;
 

@@ -338,7 +338,7 @@ bool CEnvironment::SetWeatherFXFromTime(const shared_str& name, const float time
 
 void CEnvironment::StopWeatherFX()
 {
-    VERIFY(CurrentCycleName.size());
+    VERIFY(CurrentName.size());
     b_wfx = false;
     SetWeather(CurrentName, false);
     Current[0] = wfx_end_desc[0];
@@ -396,7 +396,7 @@ void CEnvironment::SelectEnvs(float gt)
 #ifdef WEATHER_LOGGING
         Msg("CEnvironment::SelectEnvs Current[0] == nullptr");
 #endif
-        VERIFY(!bWFX);
+        VERIFY(!b_wfx);
         // first or forced start
         SelectEnvs(CurrentWeather, Current[0], Current[1], gt);
         m_last_weather_shift = Device.dwFrame;

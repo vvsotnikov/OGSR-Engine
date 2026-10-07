@@ -46,7 +46,7 @@ void CKinematics::CalculateBones(BOOL bForceExact)
     Device.Statistic->Animation.End();
 #endif
 
-    VERIFY(LL_GetBonesVisible() != 0);
+    VERIFY(LL_GetBonesVisible() != VisMask{});
 
     // Calculate BOXes/Spheres if needed
     UCalc_Visibox++;
@@ -121,7 +121,7 @@ void CKinematics::CalculateBones(BOOL bForceExact)
             {
                 Fmatrix tr;
                 tr = LL_GetTransform(ii);
-                Log("bone ", LL_BoneName(ii));
+                Msg("bone %s", LL_BoneName(ii));
                 Log("bone_matrix", tr);
             }
             Log("end-------");
@@ -151,7 +151,7 @@ void check_kinematics(CKinematics* _k, LPCSTR s)
             Fmatrix tr;
 
             tr = K->LL_GetTransform(ii);
-            Log("bone ", K->LL_BoneName(ii));
+            Msg("bone %s", K->LL_BoneName(ii));
             Log("bone_matrix", tr);
         }
         Log("end-------");

@@ -90,7 +90,12 @@ void CSE_ALifeOnlineOfflineGroup::unregister_member(ALife::_OBJECT_ID member_id)
             if (!m_bOnline)
                 alife().graph().remove(this, m_tGraphID);
             else if (ID_Parent == 0xffff)
+            {
                 alife().graph().level().remove(this);
+#ifdef DEBUG
+                VERIFY(!alife().graph().level().object(ID, true));
+#endif
+            }
         }
 
         m_flags.set(flUsedAI_Locations, FALSE);

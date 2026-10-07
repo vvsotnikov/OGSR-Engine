@@ -75,7 +75,11 @@ enum
     ph_m1_DbgActorRestriction = 1 << 1,
     phDbgIKOff = 1 << 2,
     phDbgHitAnims = 1 << 3,
-    phDbgDrawIKLimits = 1 << 4
+    phDbgDrawIKLimits = 1 << 4,
+    phDbgDrawIKSHiftObject = 1 << 5,
+    phDbgDrawIKPredict = 1 << 6,
+    phDbgDrawIKCollision = 1 << 7,
+    phDbgDrawIKBlending = 1 << 8
 };
 struct SPHObjDBGDraw
 {

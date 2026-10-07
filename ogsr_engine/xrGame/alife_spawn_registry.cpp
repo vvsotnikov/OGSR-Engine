@@ -102,7 +102,7 @@ void CALifeSpawnRegistry::load(IReader& file_stream, xrGUID* save_guid)
     R_ASSERT2(!save_guid || (*save_guid == header().guid()), "Saved game doesn't correspond to the spawn : DELETE SAVED GAME!");
 
     bool separated_graphs = false;
-    VERIFY(!m_chunk);
+    VERIFY(!m_spawn_chunk);
     IReader* stream = file_stream.open_chunk(4);
     if (!stream)
     {

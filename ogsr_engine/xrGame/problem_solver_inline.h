@@ -90,8 +90,8 @@ IC void CProblemSolverAbstract::add_operator(const _edge_type& operator_id, _ope
 TEMPLATE_SPECIALIZATION
 IC void CProblemSolverAbstract::validate_properties(const CState& conditions) const
 {
-    xr_vector<COperatorCondition>::const_iterator I = conditions.conditions().begin();
-    xr_vector<COperatorCondition>::const_iterator E = conditions.conditions().end();
+    auto I = conditions.conditions().begin();
+    auto E = conditions.conditions().end();
     for (; I != E; ++I)
     {
         if (evaluators().find((*I).condition()) == evaluators().end())
@@ -375,6 +375,9 @@ bool CProblemSolverAbstract::search(const CState FromID, const CState& DestID, x
     TempPriorityNode.push_back({0, FromID});
     TempCameFrom.insert({FromID, FromID});
     TempCostSoFar.insert({FromID, 0});
+#ifdef DEBUG
+    m_visited_nodes = 1;
+#endif
     TempEdges.insert({FromID, 0});
 
     while (!TempPriorityNode.empty())
@@ -432,6 +435,9 @@ bool CProblemSolverAbstract::search(const CState FromID, const CState& DestID, x
                 else
                 {
                     TempCostSoFar.insert({NeighborID, NewCost});
+#ifdef DEBUG
+                    ++m_visited_nodes;
+#endif
                 }
 
                 u16 priority = NewCost + distance;

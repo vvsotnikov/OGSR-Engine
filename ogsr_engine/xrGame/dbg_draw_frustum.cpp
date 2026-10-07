@@ -110,8 +110,7 @@ void dbg_draw_frustum(float FOV, float _FAR, float A, Fvector& P, Fvector& D, Fv
     ProjDirs[2].sub(sPts[2], COP);
     ProjDirs[3].sub(sPts[3], COP);
 
-    RCache.set_CullMode(CULL_NONE);
-    CHK_DX(HW.pDevice->SetRenderState(D3DRS_AMBIENT, 0xffffffff));
+    DRender->CacheSetCullMode(IDebugRender::cmNONE);
 
     Fvector _F[4];
     _F[0].mad(COP, ProjDirs[0], _FAR);
@@ -122,12 +121,12 @@ void dbg_draw_frustum(float FOV, float _FAR, float A, Fvector& P, Fvector& D, Fv
     //	u32 CT	= color_rgba(255,255,255,64);
     u32 CL = color_rgba(255, 0, 0, 255);
     Fmatrix& M = Fidentity;
-    ref_shader l_tShaderReference = Level().ObjectSpace.dbgGetShader();
-    RCache.set_Shader(l_tShaderReference);
-    //	RCache.dbg_DrawTRI	(M,COP,_F[0],_F[1],CT);
-    //	RCache.dbg_DrawTRI	(M,COP,_F[1],_F[2],CT);
-    //	RCache.dbg_DrawTRI	(M,COP,_F[2],_F[3],CT);
-    //	RCache.dbg_DrawTRI	(M,COP,_F[3],_F[0],CT);
+    debug_shader l_tShaderReference = Level().ObjectSpace.dbgGetShader();
+    DRender->SetShader(l_tShaderReference);
+    //	DRender->dbg_DrawTRI	(M,COP,_F[0],_F[1],CT);
+    //	DRender->dbg_DrawTRI	(M,COP,_F[1],_F[2],CT);
+    //	DRender->dbg_DrawTRI	(M,COP,_F[2],_F[3],CT);
+    //	DRender->dbg_DrawTRI	(M,COP,_F[3],_F[0],CT);
     Level().debug_renderer().draw_line(M, COP, _F[0], CL);
     Level().debug_renderer().draw_line(M, COP, _F[1], CL);
     Level().debug_renderer().draw_line(M, COP, _F[2], CL);
@@ -138,7 +137,6 @@ void dbg_draw_frustum(float FOV, float _FAR, float A, Fvector& P, Fvector& D, Fv
     Level().debug_renderer().draw_line(M, _F[2], _F[3], CL);
     Level().debug_renderer().draw_line(M, _F[3], _F[0], CL);
 
-    RCache.set_CullMode(CULL_CCW);
-    CHK_DX(HW.pDevice->SetRenderState(D3DRS_AMBIENT, 0));
+    DRender->CacheSetCullMode(IDebugRender::cmCCW);
 }
 #endif

@@ -195,3 +195,8 @@ inline void FactoryPtr<IFontRender>::DestroyObject()
     RenderFactory->DestroyFontRender(m_pObject);
     m_pObject = nullptr;
 }
+
+#ifdef DEBUG
+template <> inline void FactoryPtr<IStatGraphRender>::CreateObject() { m_pObject = RenderFactory->CreateStatGraphRender(); }
+template <> inline void FactoryPtr<IStatGraphRender>::DestroyObject() { RenderFactory->DestroyStatGraphRender(m_pObject); m_pObject = nullptr; }
+#endif

@@ -637,7 +637,7 @@ void CWeaponMagazined::DeviceUpdate()
 
 void CWeaponMagazined::UpdateCL()
 {
-    if (H_Parent() && !ParentIsActor() && (strapped_mode() || IsHidden()))
+    if (skip_hidden_npc_update())
         return;
 
     inherited::UpdateCL();

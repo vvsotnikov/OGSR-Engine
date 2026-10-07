@@ -8,6 +8,7 @@
 
 #include "stdafx.h"
 #include "script_entity.h"
+#include "ai_debug.h"
 #include "CustomMonster.h"
 #include "..\xr_3da\feel_vision.h"
 #include "..\Include/xrRender/Kinematics.h"

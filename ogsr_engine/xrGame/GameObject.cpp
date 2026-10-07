@@ -675,7 +675,7 @@ void CGameObject::OnRender()
     if (bDebug && Visual())
     {
         Fvector bc, bd;
-        Visual()->vis.box.get_CD(bc, bd);
+        Visual()->getVisData().box.get_CD(bc, bd);
         Fmatrix M = XFORM();
         M.c.add(bc);
         Level().debug_renderer().draw_obb(M, bd, color_rgba(0, 0, 255, 255));

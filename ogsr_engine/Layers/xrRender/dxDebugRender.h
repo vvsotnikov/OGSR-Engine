@@ -14,6 +14,9 @@ public:
     virtual void SetShader(const debug_shader& shader);
     virtual void CacheSetXformWorld(const Fmatrix& M);
     virtual void CacheSetCullMode(CullMode);
+#ifdef DEBUG
+    void CacheSetDepthTest(bool enabled) override;
+#endif
 
     // Shaders
     virtual void SetDebugShader(dbgShaderHandle shdHandle);
@@ -22,6 +25,9 @@ public:
     virtual void dbg_DrawTRI(Fmatrix& T, Fvector& p1, Fvector& p2, Fvector& p3, u32 C);
 
 private:
+#ifdef DEBUG
+    bool m_depth_test = true;
+#endif
     xr_unordered_map<u32, xr_vector<FVF::L>> m_line_vertices;
     xr_unordered_map<u32, xr_vector<u16>> m_line_indices;
 

@@ -498,27 +498,19 @@ void CCC_Register()
     CMD1(CCC_TexturesStat, "stat_textures");
 
 #ifdef DEBUG
-    CMD3(CCC_Mask, "mt_particles", &psDeviceFlags, mtParticles);
 
     CMD1(CCC_DbgStrCheck, "dbg_str_check");
     CMD1(CCC_DbgStrDump, "dbg_str_dump");
 
-    CMD3(CCC_Mask, "mt_sound", &psDeviceFlags, mtSound);
-    CMD3(CCC_Mask, "mt_physics", &psDeviceFlags, mtPhysics);
-    CMD3(CCC_Mask, "mt_network", &psDeviceFlags, mtNetwork);
 
     // Events
     CMD1(CCC_E_Dump, "e_list");
     CMD1(CCC_E_Signal, "e_signal");
 
-    CMD3(CCC_Mask, "rs_wireframe", &psDeviceFlags, rsWireframe);
     CMD3(CCC_Mask, "rs_clear_bb", &psDeviceFlags, rsClearBB);
-    CMD3(CCC_Mask, "rs_occlusion", &psDeviceFlags, rsOcclusion);
 
     CMD3(CCC_Mask, "rs_detail", &psDeviceFlags, rsDetails);
 
-    CMD3(CCC_Mask, "rs_render_statics", &psDeviceFlags, rsDrawStatic);
-    CMD3(CCC_Mask, "rs_render_dynamics", &psDeviceFlags, rsDrawDynamic);
 #endif
 
     // Render device states

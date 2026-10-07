@@ -1,4 +1,5 @@
 #include "StdAfx.h"
+#include "../../xrCore/dump_string.h"
 #include "IKLimb.h"
 #include "../Include/xrRender/Kinematics.h"
 #include "GameObject.h"

@@ -76,7 +76,7 @@ impl Fixture {
             "add_executable(fixture ../fixture.cpp)\nadd_test(NAME assertion COMMAND ${{CMAKE_COMMAND}} -E {assertion})\n")).unwrap();
         fs::write(root.join("tools/tests/fixture.cpp"), source_code).unwrap();
         fs::write(root.join("Fixture.vcxproj"), r#"<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="Build" /></Project>"#).unwrap();
-        fs::write(root.join("Engine.sln"), "Microsoft Visual Studio Solution File, Format Version 12.00\nProject(\"{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}\") = \"Fixture\", \"Fixture.vcxproj\", \"{11111111-1111-1111-1111-111111111111}\"\nEndProject\nGlobal\n GlobalSection(SolutionConfigurationPlatforms) = preSolution\n Release|x64 = Release|x64\n ReleaseTracyProfiler|x64 = ReleaseTracyProfiler|x64\n EndGlobalSection\n GlobalSection(ProjectConfigurationPlatforms) = postSolution\n {11111111-1111-1111-1111-111111111111}.Release|x64.ActiveCfg = Release|x64\n {11111111-1111-1111-1111-111111111111}.Release|x64.Build.0 = Release|x64\n {11111111-1111-1111-1111-111111111111}.ReleaseTracyProfiler|x64.ActiveCfg = ReleaseTracyProfiler|x64\n {11111111-1111-1111-1111-111111111111}.ReleaseTracyProfiler|x64.Build.0 = ReleaseTracyProfiler|x64\n EndGlobalSection\nEndGlobal\n").unwrap();
+        fs::write(root.join("Engine.sln"), "Microsoft Visual Studio Solution File, Format Version 12.00\nProject(\"{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}\") = \"Fixture\", \"Fixture.vcxproj\", \"{11111111-1111-1111-1111-111111111111}\"\nEndProject\nGlobal\n GlobalSection(SolutionConfigurationPlatforms) = preSolution\n Debug|x64 = Debug|x64\n Release|x64 = Release|x64\n ReleaseTracyProfiler|x64 = ReleaseTracyProfiler|x64\n EndGlobalSection\n GlobalSection(ProjectConfigurationPlatforms) = postSolution\n {11111111-1111-1111-1111-111111111111}.Debug|x64.ActiveCfg = Debug|x64\n {11111111-1111-1111-1111-111111111111}.Debug|x64.Build.0 = Debug|x64\n {11111111-1111-1111-1111-111111111111}.Release|x64.ActiveCfg = Release|x64\n {11111111-1111-1111-1111-111111111111}.Release|x64.Build.0 = Release|x64\n {11111111-1111-1111-1111-111111111111}.ReleaseTracyProfiler|x64.ActiveCfg = ReleaseTracyProfiler|x64\n {11111111-1111-1111-1111-111111111111}.ReleaseTracyProfiler|x64.Build.0 = ReleaseTracyProfiler|x64\n EndGlobalSection\nEndGlobal\n").unwrap();
         ok(&root, "git", &["init"]);
         ok(&root, "git", &["config", "core.autocrlf", "true"]);
         ok(&root, "git", &["config", "user.name", "Validation Fixture"]);
@@ -566,4 +566,12 @@ fn path_only_commit_excludes_files_staged_in_the_real_index() {
     assert_eq!(tree, ok(&fixture.0, "git", &["write-tree"]).stdout);
     assert_eq!(head, ok(&fixture.0, "git", &["rev-parse", "HEAD"]).stdout);
     assert!(fixture.0.join("tools/tests/new_api.h").exists());
+}
+
+#[test]
+fn debug_assertion_build_failure_blocks_commit() {
+    let fixture = Fixture::new("int main() {}\n", "true");
+    fs::write(fixture.0.join("Fixture.vcxproj"), r#"<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="Build"><Error Condition="'$(Configuration)'=='Debug' and '$(OgsrRequireDebugAssertions)'!='true'" Text="DEBUG_ASSERTIONS_NOT_REQUIRED" /><Error Condition="'$(Configuration)'=='Debug' and '$(OgsrRequireDebugAssertions)'=='true'" Text="NATIVE_DEBUG_FAILURE" /></Target></Project>"#).unwrap();
+    ok(&fixture.0, "git", &["add", "Engine.sln", "Fixture.vcxproj"]);
+    Fixture::reject_at(&fixture.0, "NATIVE_DEBUG_FAILURE");
 }

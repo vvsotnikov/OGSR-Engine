@@ -442,7 +442,7 @@ void ValidateState(D3D_BLEND_DESC& desc)
 
     for (const auto& i : desc.RenderTarget)
     {
-        VERIFY((desc.RenderTarget[i].BlendEnable == 0) || (desc.RenderTarget[i].BlendEnable == 1));
+        VERIFY((i.BlendEnable == 0) || (i.BlendEnable == 1));
         bBlendEnable |= i.BlendEnable;
     }
 

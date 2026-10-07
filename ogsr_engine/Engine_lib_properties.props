@@ -38,4 +38,5 @@
       </PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
+  <Import Project="Engine_assertions.props" />
 </Project>

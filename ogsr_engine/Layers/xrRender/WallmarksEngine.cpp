@@ -477,8 +477,8 @@ void CWallmarksEngine::Render()
 #ifdef DEBUG
             if (W->used_in_render != Device.dwFrame)
             {
-                Log("W->used_in_render", W->used_in_render);
-                Log("Device.dwFrame", Device.dwFrame);
+                Msg("W->used_in_render: %u", W->used_in_render);
+                Msg("Device.dwFrame: %u", Device.dwFrame);
                 VERIFY(W->used_in_render == Device.dwFrame);
             }
 #endif

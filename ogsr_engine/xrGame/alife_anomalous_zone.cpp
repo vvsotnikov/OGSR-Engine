@@ -78,7 +78,7 @@ void CSE_ALifeAnomalousZone::spawn_artefacts()
 
 
     u16 itemCount = (u16)_GetItemCount(artefacts);
-    VERIFY2(!(n % 2), "Invalid parameters count in line artefacts for anomalous zone");
+    VERIFY2(!(itemCount % 2), "Invalid parameters count in line artefacts for anomalous zone");
     itemCount >>= 1;
 
     typedef std::pair<shared_str, float> artefact_pair;
