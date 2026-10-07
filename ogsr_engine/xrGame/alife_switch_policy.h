@@ -96,9 +96,59 @@ void legacy_group_offline(Operations& op)
         // cleanup of subsequent corpses, even if group permission forces offline.
     }
     if (!op.size() || !op.can_offline()) return;
-    // Inherited behavior, not the desired whole-map contract: #18 tracks the
-    // legacy flesh-group retention defect separately from this refactor.
+    // Distance-mode compatibility: group permission can override a live blocker.
     if (op.can_online() || i == count) op.switch_offline();
+}
+
+// A legacy group is a server-only owner. In whole-map mode each living
+// member follows the intersection of its own and the group's permissions.
+// Conflicting online/offline denials freeze the existing state, as for a
+// standalone object. Unknown member types retain their existing state.
+template <class Operations>
+void legacy_group_whole_map(Operations& op)
+{
+    op.bind_group();
+    op.prepare_members();
+    bool any_online = false;
+    for (unsigned i = 0; i < op.size();)
+    {
+        auto member = op.monster(i);
+        if (!member)
+        {
+            any_online = any_online || op.online_at(i);
+            ++i;
+            continue;
+        }
+        if (!op.alive(member))
+        {
+            const bool was_online = op.online(member);
+            op.mark_dead(member);
+            op.set_direct_control(member);
+            op.erase_member(i);
+            op.set_online(member, false);
+            op.detach_if_attached(member);
+            op.register_member(member);
+            if (was_online) op.remove_graph_if_unattached(member);
+            op.set_online(member, was_online);
+            op.decrement_count();
+            continue;
+        }
+        const bool may_online = op.can_online() && op.can_online(member);
+        const bool may_offline = op.can_offline() && op.can_offline(member);
+        if (op.online(member))
+        {
+            if (may_offline && !may_online) op.deactivate(member);
+        }
+        else if (may_online)
+        {
+            // The container must enter its online registries before client spawn.
+            op.group_online(true);
+            op.activate(member, i);
+        }
+        any_online = any_online || op.online(member);
+        ++i;
+    }
+    op.group_online(any_online);
 }
 
 template <class Operations>

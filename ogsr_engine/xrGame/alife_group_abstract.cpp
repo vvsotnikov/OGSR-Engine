@@ -59,12 +59,14 @@ void CSE_ALifeGroupAbstract::switch_offline()
     ALife::OBJECT_IT E = m_tpMembers.end();
     if (I != E)
     {
-        CSE_ALifeMonsterAbstract* tpGroupMember = smart_cast<CSE_ALifeMonsterAbstract*>(ai().alife().objects().object(*I));
+        CSE_ALifeDynamicObject* member = ai().alife().objects().object(*I);
+        CSE_ALifeMonsterAbstract* tpGroupMember = smart_cast<CSE_ALifeMonsterAbstract*>(member);
         CSE_ALifeMonsterAbstract* tpGroup = smart_cast<CSE_ALifeMonsterAbstract*>(this);
         if (tpGroupMember && tpGroup)
         {
             tpGroup->m_fCurSpeed = tpGroup->m_fCurrentLevelGoingSpeed;
             tpGroup->o_Position = tpGroupMember->o_Position;
+            tpGroup->m_tNodeID = tpGroupMember->m_tNodeID;
             u32 dwNodeID = tpGroup->m_tNodeID;
             tpGroup->m_tGraphID = ai().cross_table().vertex(dwNodeID).game_vertex_id();
             tpGroup->m_fDistanceToPoint = ai().cross_table().vertex(dwNodeID).distance();
@@ -72,20 +74,26 @@ void CSE_ALifeGroupAbstract::switch_offline()
             u16 wNeighbourCount = ai().game_graph().vertex(tpGroup->m_tGraphID)->edge_count();
             CGameGraph::const_iterator i, e;
             ai().game_graph().begin(tpGroup->m_tGraphID, i, e);
-            tpGroup->m_tPrevGraphID = (*(i + ::Random.randI(0, wNeighbourCount))).vertex_id();
+            tpGroup->m_tPrevGraphID = wNeighbourCount ? (*(i + ::Random.randI(0, wNeighbourCount))).vertex_id() : tpGroup->m_tGraphID;
         }
-        object->alife().remove_online(tpGroupMember, false);
+        if (member->m_bOnline)
+            object->alife().remove_online(member, false);
         ++I;
     }
     for (; I != E; ++I)
-        object->alife().remove_online(ai().alife().objects().object(*I), false);
+    {
+        auto* member = ai().alife().objects().object(*I);
+        // Whole-map groups can contain explicitly excluded, already-offline members.
+        if (member->m_bOnline)
+            object->alife().remove_online(member, false);
+    }
     object->alife().scheduled().add(object);
     object->alife().graph().add(object, object->m_tGraphID, false);
 }
 
 bool CSE_ALifeGroupAbstract::synchronize_location()
 {
-    if (m_tpMembers.empty())
+    if (m_tpMembers.empty() || m_bCreateSpawnPositions)
         return (true);
 
     CSE_ALifeDynamicObject* object = smart_cast<CSE_ALifeDynamicObject*>(base());
@@ -93,10 +101,18 @@ bool CSE_ALifeGroupAbstract::synchronize_location()
 
     ALife::OBJECT_VECTOR::iterator I = m_tpMembers.begin();
     ALife::OBJECT_VECTOR::iterator E = m_tpMembers.end();
+    auto* representative = ai().alife().objects().object(m_tpMembers.front());
     for (; I != E; ++I)
-        ai().alife().objects().object(*I)->synchronize_location();
+    {
+        auto* member = ai().alife().objects().object(*I);
+        // Offline indirect members have no graph entry for synchronize_location
+        // to move. Prefer an active member over an excluded offline representative.
+        if (!member->m_bOnline) continue;
+        member->synchronize_location();
+        if (!representative->m_bOnline) representative = member;
+    }
 
-    CSE_ALifeDynamicObject& member = *ai().alife().objects().object(*I); //-V783
+    CSE_ALifeDynamicObject& member = *representative;
     object->o_Position = member.o_Position;
     object->m_tNodeID = member.m_tNodeID;
 
@@ -121,7 +137,15 @@ void CSE_ALifeGroupAbstract::try_switch_online()
     if (m_tpMembers.empty())
         return;
 
-    I->try_switch_online();
+    if (!I->alife().uses_distance_switching())
+    {
+        // Both directions reconcile members individually in whole-map mode.
+        CSE_ALifeGroupAbstract::try_switch_offline();
+        return;
+    }
+
+    // Use the base eligibility checks; virtual dispatch would recurse into this group.
+    I->CSE_ALifeDynamicObject::try_switch_online();
 }
 
 void CSE_ALifeGroupAbstract::try_switch_offline()
@@ -132,6 +156,21 @@ void CSE_ALifeGroupAbstract::try_switch_offline()
         CSE_ALifeDynamicObject* object = nullptr;
         unsigned size() const { return unsigned(group.m_tpMembers.size()); }
         void bind_group() { object = smart_cast<CSE_ALifeDynamicObject*>(group.base()); VERIFY(object); }
+        void prepare_members()
+        {
+            if (!group.m_bCreateSpawnPositions) return;
+            for (unsigned i = 0; i < size(); ++i)
+            {
+                auto* member = ai().alife().objects().object(group.m_tpMembers[i]);
+                member->o_Position = object->o_Position;
+                member->m_tNodeID = object->m_tNodeID;
+                member->m_tGraphID = object->m_tGraphID;
+                if (auto* monster = smart_cast<CSE_ALifeMonsterAbstract*>(member))
+                    monster->o_torso.yaw = angle_normalize_signed(float(i) / float(size()) * PI_MUL_2);
+            }
+            // Excluded members must also have a valid saved location for later activation.
+            group.m_bCreateSpawnPositions = false;
+        }
         CSE_ALifeMonsterAbstract* monster(unsigned i) const { return smart_cast<CSE_ALifeMonsterAbstract*>(ai().alife().objects().object(group.m_tpMembers[i])); }
         bool alive(CSE_ALifeMonsterAbstract* member) const { return member->g_Alive(); }
         bool can_online(CSE_ALifeMonsterAbstract* member) const { return member->can_switch_online(); }
@@ -162,8 +201,34 @@ void CSE_ALifeGroupAbstract::try_switch_offline()
         }
         void decrement_count() { --group.m_wCount; }
         void switch_offline() { object->alife().switch_offline(object); }
+        bool online(CSE_ALifeMonsterAbstract* member) const { return member->m_bOnline; }
+        bool online_at(unsigned i) const { return ai().alife().objects().object(group.m_tpMembers[i])->m_bOnline; }
+        void activate(CSE_ALifeMonsterAbstract* member, unsigned)
+        {
+            object->alife().add_online(member, false);
+        }
+        void deactivate(CSE_ALifeMonsterAbstract* member) { object->alife().remove_online(member, false); }
+        void group_online(bool value)
+        {
+            if (object->m_bOnline == value) return;
+            if (value)
+            {
+                object->m_bOnline = true;
+                object->alife().scheduled().remove(object);
+                object->alife().graph().remove(object, object->m_tGraphID, false);
+            }
+            else
+            {
+                object->alife().switch_offline(object);
+            }
+        }
     } operations{*this};
-    alife_switch_policy::legacy_group_offline(operations);
+    auto* object = smart_cast<CSE_ALifeDynamicObject*>(base());
+    VERIFY(object);
+    if (object->alife().uses_distance_switching())
+        alife_switch_policy::legacy_group_offline(operations);
+    else
+        alife_switch_policy::legacy_group_whole_map(operations);
 }
 
 bool CSE_ALifeGroupAbstract::redundant() const { return (m_tpMembers.empty()); }

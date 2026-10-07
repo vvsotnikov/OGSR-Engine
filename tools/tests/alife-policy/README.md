@@ -6,14 +6,19 @@ eligibility, ownership, valid-location checks and group traversal still apply.
 The launch policy stays in effect even if a script changes `switch_distance`;
 distance setters store values for normal mode but do not control switching while
 the flag is active. The first setter call after construction reports that fact.
-Without the flag, distance behavior is unchanged.
+Without the flag, distance gates and switching-permission decisions are unchanged.
+Legacy-group iterator, activation-dispatch and ownership repairs apply in both modes.
 
-Group traversal has a non-obvious legacy rule: a blocking live member stops
+Distance-mode group traversal has a non-obvious legacy rule: a blocking live member stops
 cleanup of later corpses, while the group's own permission may still allow the
 final offline switch. The policy must not reorder those effects.
-That final rule can switch an eligible legacy `flesh_group` offline in whole-map
-mode. It is an inherited retention defect tracked in #18, not the intended
-contract of #1. These regression tests preserve the old behavior pending that fix.
+Whole-map legacy groups instead reconcile every member. Both group and member
+must permit activation; both must permit deactivation. Conflicting denials retain
+the member's existing state. Excluded members do not prevent eligible siblings
+from activating, and a living member cannot postpone cleanup of later corpses.
+The server-only owner is online while any retained member is online. Indirect
+members have no independent simulation registry entry until detached from the
+group; releasing a member must remove its membership before its ID can be reused.
 
 Configure this directory with CMake, build and run CTest (Python 3, PowerShell, and C/C++17 compilers).
 The engine and tests compile `alife_switch_policy.h` directly. Operations bind
@@ -21,10 +26,9 @@ real engine objects and registries in the engine and controlled state in tests.
 No method text or engine class declarations are copied into the fixtures.
 The tests cover distance boundaries, eligibility, cleanup and group member order;
 real registry effects and client construction require native scenarios. The
-controlled-operation tests do not compile the engine adapters. Release and Tracy
+controlled-operation tests do not compile the engine adapters. Release, Tracy and Debug
 builds compile those adapters; native scenarios exercise their effects only for
-the object types used by each scenario. Full `DEBUG` assertion paths remain
-unverified pending the separate build repairs in #16.
+the object types used by each scenario.
 
 For game validation, package a Release build as `<install>/bin_whole_lifecycle`
 with its DLLs and a `build.json` containing `baseCommit`, executable `sha256`,
@@ -78,6 +82,32 @@ that permission override from normal whole-map activation. Each run copies the
 entire loose `gamedata` tree into its private session, consuming the same disk
 space as that tree; game archives are hard-linked.
 This scenario does not exercise the separate legacy `flesh_group` adapter (#18).
+
+`runtime/Run-LegacyGroupValidation.ps1` uses a private four-member `AI_FLE_G`
+fixture. Its setup writes serialized membership and indirect-control flags, saves
+and exits; only a fresh process may test that save, after native registries have
+been reconstructed. Fixture members are immune to incidental combat; scripted
+death still uses native `kill()`. These sections and saves never alter the user's
+installation. The packet helper is specific to this small fixture and the current
+legacy serialization layout.
+
+```powershell
+./Run-LegacyGroupValidation.ps1 -InstallRoot $install -Package $debugPackage -SeedAppData $barSeed -SaveName bar_center -Stage setup -Mode distance
+./Run-LegacyGroupValidation.ps1 -InstallRoot $install -Package $debugPackage -SeedAppData $fixtureAppdata -Stage policy
+./Run-LegacyGroupValidation.ps1 -InstallRoot $install -Package $debugPackage -SeedAppData $policyAppdata -SaveName legacy_group_result -Stage verify
+./Run-LegacyGroupValidation.ps1 -InstallRoot $install -Package $debugPackage -SeedAppData $fixtureAppdata -Stage control -Mode distance
+./Run-LegacyGroupValidation.ps1 -InstallRoot $install -Package $debugPackage -SeedAppData $fixtureAppdata -Stage control -Mode whole-map
+./Run-LegacyGroupValidation.ps1 -InstallRoot $install -Package $debugPackage -SeedAppData $fixtureAppdata -Stage roundtrip
+./Run-LegacyGroupValidation.ps1 -InstallRoot $install -Package $debugPackage -SeedAppData $fixtureAppdata -Stage ownership
+```
+
+The legacy runner defaults to an assertion-enabled Debug package and checks its
+manifest and executable hash. Appdata arguments are relative to the installation;
+each preceding run prints its private session path. Roundtrips use technical
+`jump_to_level` transitions (Bar → Garbage → Bar twice), including an excluded
+offline member; this does not test walking through campaign exits. Distance
+controls preserve the inherited near-group churn and require distant members to
+stay offline. Whole-map controls require persistent clients in both intervals.
 
 ```powershell
 ./Run-GroupValidation.ps1 -InstallRoot $install -Package $package -SeedAppData $groupSeed -Mode distance -GroupId 22016 -MemberId 22017
