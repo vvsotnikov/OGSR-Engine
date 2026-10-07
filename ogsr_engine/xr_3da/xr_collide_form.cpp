@@ -11,7 +11,12 @@
 
 #ifdef DEBUG
 IC float DET(const Fmatrix& a) { return ((a._11 * (a._22 * a._33 - a._23 * a._32) - a._12 * (a._21 * a._33 - a._23 * a._31) + a._13 * (a._21 * a._32 - a._22 * a._31))); }
-#include "objectdump.h"
+#include "../xrCore/dump_string.h"
+
+static std::string dbg_object_full_dump_string(const CObject* object)
+{
+    return make_string("object=%s id=%u visual=%s ", object->cName().c_str(), object->ID(), object->cNameVisual().c_str()) + dump_string("transform", object->XFORM());
+}
 #endif
 
 using namespace collide;
@@ -149,7 +154,7 @@ void CCF_Skeleton::BuildState()
         Fmatrix ME, T, TW;
         const Fmatrix& Mbone = K->LL_GetTransform(element.elem_id);
 
-        VERIFY(DET(Mbone) > EPS, (make_string("0 scale bone matrix, %d \n", I->elem_id) + dbg_object_full_dump_string(owner)).c_str());
+        VERIFY(DET(Mbone) > EPS, (make_string("0 scale bone matrix, %d \n", element.elem_id) + dbg_object_full_dump_string(owner)).c_str());
 
         switch (element.type)
         {
@@ -172,7 +177,7 @@ void CCF_Skeleton::BuildState()
                 Msg("visual name %s", owner->cNameVisual().c_str());
                 Msg("object name %s", owner->cName().c_str());
 #ifdef DEBUG
-                Msg(dbg_object_full_dump_string(owner).c_str());
+                Msg("%s", dbg_object_full_dump_string(owner).c_str());
 #endif // #ifdef DEBUG
                 element.elem_id = u16(-1); //. hack - disable invalid bone
             }

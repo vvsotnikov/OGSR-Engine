@@ -185,11 +185,14 @@ fn validate(configuration: Option<&str>, tests_only: bool, acquire_lock: bool) -
         let build = msbuild()?;
         let configurations = configuration
             .map(|c| vec![c])
-            .unwrap_or_else(|| vec!["Release", "ReleaseTracyProfiler"]);
+            .unwrap_or_else(|| vec!["Release", "ReleaseTracyProfiler", "Debug"]);
         for variant in configurations {
             let log = format!("target/validation/{variant}.log");
             let mut command = Command::new(&build);
             command.env_remove("CONFIGURATION_GA");
+            if variant == "Debug" {
+                command.arg("/p:OgsrRequireDebugAssertions=true");
+            }
             run(command.args([
                 "Engine.sln",
                 &format!("/m:{jobs}"),

@@ -57,6 +57,9 @@ public:
     IC void accessible(const u32& vertex_id, bool value) const;
     IC bool valid_vertex_id(const u32& vertex_id) const;
     IC void begin(const u32& vertex_id, const_iterator& start, const_iterator& end) const;
+#ifdef DEBUG
+    IC void begin_spawn(u32 vertex_id, const_spawn_iterator& start, const_spawn_iterator& end) const;
+#endif
     IC const _GRAPH_ID& value(const u32& vertex_id, const_iterator& i) const;
     IC const float& edge_weight(const_iterator i) const;
     IC const CVertex* vertex(const u32& vertex_id) const;

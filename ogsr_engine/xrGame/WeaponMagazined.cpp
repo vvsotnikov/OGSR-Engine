@@ -638,7 +638,12 @@ void CWeaponMagazined::DeviceUpdate()
 void CWeaponMagazined::UpdateCL()
 {
     if (H_Parent() && !ParentIsActor() && (strapped_mode() || IsHidden()))
+    {
+#ifdef DEBUG
+        dbg_validate_update_cl();
+#endif
         return;
+    }
 
     inherited::UpdateCL();
     float dt = Device.fTimeDelta;

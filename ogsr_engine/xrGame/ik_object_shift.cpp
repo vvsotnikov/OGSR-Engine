@@ -3,7 +3,8 @@
 
 #ifdef DEBUG
 #include "pose_extrapolation.h"
-#include "xrPhysics/MathUtils.h"
+#include "ode_include.h"
+#include "MathUtils.h"
 #include "PHDebug.h"
 
 void object_shift::dbg_draw(const Fmatrix& current_pos, const extrapolation::points& predict, const Fvector& start) const

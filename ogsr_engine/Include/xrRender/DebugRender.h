@@ -31,6 +31,9 @@ public:
     virtual void SetShader(const debug_shader& shader) = 0;
     virtual void CacheSetXformWorld(const Fmatrix& M) = 0;
     virtual void CacheSetCullMode(CullMode) = 0;
+#ifdef DEBUG
+    virtual void CacheSetDepthTest(bool enabled) = 0;
+#endif
 
     // Shaders
     virtual void SetDebugShader(dbgShaderHandle shdHandle) = 0;

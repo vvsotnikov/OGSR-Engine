@@ -9,7 +9,11 @@
 
 class CSoundRender_Core : public CSound_manager_interface
 {
+#ifdef DEBUG
+    std::atomic<bool> bLocked{false};
+#else
     volatile BOOL bLocked{};
+#endif
 
 protected:
     virtual void _create_data(ref_sound_data& S, LPCSTR fName, esound_type sound_type, int game_type);
@@ -72,6 +76,10 @@ protected:
     std::mutex m_bLocked;
 
 public:
+#ifdef DEBUG
+    bool is_updating() const override { return bLocked.load(std::memory_order_relaxed); }
+#endif
+
     CSoundRender_Core();
     virtual ~CSoundRender_Core();
 

@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "uicursor.h"
+#include "HUDManager.h"
 #include "ui/UIStatic.h"
 
 CUICursor::CUICursor()

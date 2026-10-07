@@ -211,7 +211,12 @@ void CObject::net_Destroy()
 {
     VERIFY(getDestroy());
     xr_delete(collidable.model);
-    if (register_schedule())
+    bool needs_unregister = register_schedule();
+#ifdef DEBUG
+    // shedule_Needed() can retire a dying object before net_Destroy runs.
+    needs_unregister = needs_unregister && Engine.Sheduler.Registered(this);
+#endif
+    if (needs_unregister)
         shedule_unregister();
 
     spatial_unregister();
@@ -285,10 +290,9 @@ void CObject::spatial_update(float eps_P, float eps_R)
 }
 
 // Updates
-void CObject::UpdateCL()
-{
-    // consistency check
 #ifdef DEBUG
+void CObject::dbg_validate_update_cl()
+{
     VERIFY(_valid(renderable.xform), *cName());
 
     if (Device.dwFrame == dbg_update_cl)
@@ -300,6 +304,13 @@ void CObject::UpdateCL()
 
     if ((0 == collidable.model) && (spatial.type & STYPE_COLLIDEABLE))
         FATAL("Object %s registered as 'collidable' but has no collidable model", *cName());
+}
+#endif
+
+void CObject::UpdateCL()
+{
+#ifdef DEBUG
+    dbg_validate_update_cl();
 #endif
 
     spatial_update(base_spu_epsP * 5, base_spu_epsR * 5);

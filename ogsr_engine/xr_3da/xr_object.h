@@ -184,6 +184,10 @@ public:
     virtual void shedule_Update(u32 dt); // Called by sheduler
     virtual void renderable_Render(u32 context_id, IRenderable* root) override;
 
+#ifdef DEBUG
+    // Intentional UpdateCL early exits still validate object state and call order.
+    void dbg_validate_update_cl();
+#endif
     virtual void UpdateCL(); // Called each frame, so no need for dt
     virtual BOOL net_Spawn(CSE_Abstract* data);
     virtual void net_Destroy();

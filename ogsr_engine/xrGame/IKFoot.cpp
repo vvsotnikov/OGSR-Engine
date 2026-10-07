@@ -11,6 +11,8 @@
 
 #ifdef DEBUG
 #include "PHDebug.h"
+#include "ode_include.h"
+#include "MathUtils.h"
 #endif
 
 CIKFoot::CIKFoot() : m_K(nullptr), m_bind_b2_to_b3(Fidentity), m_foot_width(0), m_ref_bone(u16(-1)), m_foot_bone_id(BI_NONE), m_toe_bone_id(BI_NONE) {}

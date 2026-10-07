@@ -19,6 +19,10 @@ class IUISequenceVideoItem;
 class IRenderFactory
 {
 public:
+#ifdef DEBUG
+    virtual IStatGraphRender* CreateStatGraphRender() = 0;
+    virtual void DestroyStatGraphRender(IStatGraphRender* object) = 0;
+#endif
     virtual IUISequenceVideoItem* CreateUISequenceVideoItem() = 0;
     virtual void DestroyUISequenceVideoItem(IUISequenceVideoItem* pObject) = 0;
     virtual IUIShader* CreateUIShader() = 0;

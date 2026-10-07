@@ -30,3 +30,5 @@ IC float CVisualMemoryManager::transparency_threshold() const { return (current_
 IC bool CVisualMemoryManager::enabled() const { return (m_enabled); }
 
 IC void CVisualMemoryManager::enable(bool value) { m_enabled = value; }
+
+IC const CVisualMemoryManager::RAW_VISIBLES& CVisualMemoryManager::raw_objects() const { return m_visible_objects; }

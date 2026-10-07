@@ -30,6 +30,7 @@ CPortal::~CPortal()
 #ifdef DEBUG
 void CPortal::OnRender()
 {
+    auto& cmd_list = RCache;
     if (psDeviceFlags.is(rsOcclusionDraw))
     {
         VERIFY(poly.size());
@@ -58,28 +59,14 @@ void CPortal::OnRender()
         cmd_list.dbg_Draw(D3DPT_TRIANGLEFAN, &*V.begin(), V.size() - 2);
 
         // draw wire
-        if (bDebug)
-        {
-            RImplementation.rmNear();
-        }
-        else
-        {
-            Device.SetNearer(TRUE);
-        }
+        RImplementation.rmNear(cmd_list);
         cmd_list.set_Shader(dxRenderDeviceRender::Instance().m_WireShader);
 
         cmd_list.set_c("tfactor", float(color_get_R(portalColor)) / 255.f, float(color_get_G(portalColor)) / 255.f, float(color_get_B(portalColor)) / 255.f,
                      float(color_get_A(portalColor)) / 255.f);
 
         cmd_list.dbg_Draw(D3DPT_LINESTRIP, &*(V.begin() + 1), V.size() - 2);
-        if (bDebug)
-        {
-            RImplementation.rmNormal();
-        }
-        else
-        {
-            Device.SetNearer(FALSE);
-        }
+        RImplementation.rmNormal(cmd_list);
     }
 }
 #endif

@@ -268,7 +268,8 @@ void CLevelGraph::draw_covers()
         Fvector direction;
         float best_value = -1.f;
 
-        for (u32 i = 0, j = 0; i < 36; ++i)
+        u32 j = 0;
+        for (u32 i = 0; i < 36; ++i)
         {
             float value = high_cover_in_direction(float(10 * i) / 180.f * PI, v);
             direction.setHP(float(10 * i) / 180.f * PI, 0);
@@ -310,8 +311,9 @@ void CLevelGraph::draw_covers()
         position.y += 0.5f;
         Level().debug_renderer().draw_aabb(position, half_size - .01f, 1.f, ai().level_graph().header().cell_size() * .5f - .01f, D3DCOLOR_XRGB(0 * 255, 255, 0 * 255));
         v = vertex((*I)->level_vertex_id());
-        float best_value = -1.f;
-        for (u32 i = 0, j = 0; i < 36; ++i)
+        best_value = -1.f;
+        j = 0;
+        for (u32 i = 0; i < 36; ++i)
         {
             float value = low_cover_in_direction(float(10 * i) / 180.f * PI, v);
             direction.setHP(float(10 * i) / 180.f * PI, 0);
@@ -340,7 +342,7 @@ void CLevelGraph::draw_covers()
         direction.set(position.x, position.y, position.z - half_size * float(v->low_cover(3)) / 15.f);
         Level().debug_renderer().draw_line(Fidentity, position, direction, D3DCOLOR_XRGB(255, 0, 0));
 
-        float value = low_cover_in_direction(float(10 * j) / 180.f * PI, v);
+        value = low_cover_in_direction(float(10 * j) / 180.f * PI, v);
         direction.setHP(float(10 * j) / 180.f * PI, 0);
         direction.normalize();
         direction.mul(value * half_size);

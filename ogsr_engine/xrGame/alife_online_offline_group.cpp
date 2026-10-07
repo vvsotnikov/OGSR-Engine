@@ -90,7 +90,14 @@ void CSE_ALifeOnlineOfflineGroup::unregister_member(ALife::_OBJECT_ID member_id)
             if (!m_bOnline)
                 alife().graph().remove(this, m_tGraphID);
             else if (ID_Parent == 0xffff)
+            {
                 alife().graph().level().remove(this);
+#ifdef DEBUG
+                VERIFY(!alife().graph().level().object(ID, true));
+                if (strstr(Core.Params, "-registry_validation"))
+                    Msg("[registry diagnostic] live online unattached last-member removal group=%u passed", ID);
+#endif
+            }
         }
 
         m_flags.set(flUsedAI_Locations, FALSE);

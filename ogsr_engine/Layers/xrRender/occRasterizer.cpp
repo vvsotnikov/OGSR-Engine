@@ -5,7 +5,7 @@
 #include "stdafx.h"
 #include "occRasterizer.h"
 
-#if DEBUG
+#ifdef DEBUG
 #include "dxRenderDeviceRender.h"
 #include "xrRender_console.h"
 #endif
@@ -18,7 +18,7 @@ occRasterizer Raster;
 
 occRasterizer::occRasterizer()
     : bufFrame{}, bufDepth{}, bufDepth_0{}
-#if DEBUG
+#ifdef DEBUG
       ,
       dbg_HOM_draw_initialized(false)
 #endif
@@ -107,7 +107,7 @@ void occRasterizer::propagade()
 
 void occRasterizer::on_dbg_render()
 {
-#if DEBUG
+#ifdef DEBUG
     if (!ps_r2_ls_flags_ext.is(R2FLAGEXT_HOM_DEPTH_DRAW))
     {
         dbg_HOM_draw_initialized = false;
@@ -151,11 +151,11 @@ void occRasterizer::on_dbg_render()
             Transform.translate(tmp.center);
 
             // draw wire
-            Device.SetNearer(TRUE);
+            RImplementation.rmNear(RCache);
 
-            cmd_list.set_Shader(dxRenderDeviceRender::Instance().m_SelectionShader);
-            cmd_list.dbg_DrawOBB(Transform, tmp.radius, D3DCOLOR_XRGB(u32(255 * pow(tmp.z, 20.f)), u32(255 * (1 - pow(tmp.z, 20.f))), 0));
-            Device.SetNearer(FALSE);
+            RCache.set_Shader(dxRenderDeviceRender::Instance().m_SelectionShader);
+            RCache.dbg_DrawOBB(Transform, tmp.radius, D3DCOLOR_XRGB(u32(255 * pow(tmp.z, 20.f)), u32(255 * (1 - pow(tmp.z, 20.f))), 0));
+            RImplementation.rmNormal(RCache);
         }
     }
 #endif

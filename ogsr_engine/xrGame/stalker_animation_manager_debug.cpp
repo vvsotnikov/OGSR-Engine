@@ -18,19 +18,19 @@ struct animation_id_predicate
 {
     IC bool operator()(const ANIMATION_ID& _1, const ANIMATION_ID& _2) const
     {
-        if (_1.first._get() < _2.first._get())
+        if (_1.first < _2.first)
             return (true);
 
-        if (_2.first._get() < _1.first._get())
+        if (_2.first < _1.first)
             return (false);
 
-        return (_1.second._get() < _2.second._get());
+        return (_1.second < _2.second);
     }
 };
 
 // IC	bool shared_str_predicate	(const shared_str &_1, const shared_str &_2)
 //{
-//	return		(_1._get() < _2._get());
+//	return		(_1 < _2);
 // }
 //
 // typedef xr_set<shared_str,shared_str_predicate>	VISUALS;
@@ -55,7 +55,7 @@ typedef std::pair<ANIMATION_ID, ANIMATION_ID> BLEND_ID;
 
 struct blend_id_predicate
 {
-    IC bool less(const shared_str& _1, const shared_str& _2) const { return (_1._get() < _2._get()); }
+    IC bool less(const shared_str& _1, const shared_str& _2) const { return (_1 < _2); }
 
     template <typename T>
     IC bool less(const std::pair<T, T>& _1, const std::pair<T, T>& _2) const
@@ -176,7 +176,7 @@ void add_animation_stats(const shared_str& animation_id, const shared_str& anima
 
 void CStalkerAnimationManager::add_animation_stats(const ANIMATION_ID& animation_id, const BLEND_ID* blend_id, bool just_started)
 {
-    ::add_animation_stats(animation_id.first, animation_id.second, *object().Visual()->dbg_name, blend_id, just_started);
+    ::add_animation_stats(animation_id.first, animation_id.second, object().Visual()->getDebugName(), blend_id, just_started);
 }
 
 void CStalkerAnimationManager::add_animation_stats()

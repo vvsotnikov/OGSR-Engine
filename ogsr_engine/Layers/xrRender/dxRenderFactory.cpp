@@ -59,3 +59,9 @@ void dxRenderFactory::DestroyFlareRender(IFlareRender* pObject) { xr_delete((dxF
 
 IFontRender* dxRenderFactory::CreateFontRender() { return xr_new<dxFontRender>(); }
 void dxRenderFactory::DestroyFontRender(IFontRender* pObject) { xr_delete((dxFontRender*&)pObject); }
+
+#ifdef DEBUG
+#include "dxStatGraphRender.h"
+IStatGraphRender* dxRenderFactory::CreateStatGraphRender() { return xr_new<dxStatGraphRender>(); }
+void dxRenderFactory::DestroyStatGraphRender(IStatGraphRender* object) { auto* concrete = static_cast<dxStatGraphRender*>(object); xr_delete(concrete); }
+#endif

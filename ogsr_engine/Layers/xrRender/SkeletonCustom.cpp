@@ -1,6 +1,7 @@
 #include "stdafx.h"
 
 #include "SkeletonCustom.h"
+#include "dxRenderDeviceRender.h"
 #include "SkeletonX.h"
 #include "../../xr_3da/fmesh.h"
 #include "../../xr_3da/Render.h"
@@ -35,6 +36,7 @@ const char* CKinematics::LL_BoneName(const u16 ID) const
 #ifdef DEBUG
 void CKinematics::DebugRender(Fmatrix& XFORM)
 {
+    auto& cmd_list = RCache;
     cmd_list.set_Shader(dxRenderDeviceRender::Instance().m_WireShader);
 
     CalculateBones();

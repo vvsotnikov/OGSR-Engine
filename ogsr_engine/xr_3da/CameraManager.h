@@ -109,6 +109,8 @@ protected:
     void OnEffectorAdded(SBaseEffector* e);
     void OnEffectorReleased(SBaseEffector* e);
 
+public:
+    // Also used by the Debug NPC-eye camera.
     void Update(const Fvector& P, const Fvector& D, const Fvector& N, float fFOV_Dest, float fASPECT_Dest, float fFAR_Dest, u32 flags);
 
 public:

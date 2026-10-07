@@ -113,8 +113,9 @@ void CLevel::remove_objects()
 
     m_debug_render_queue.clear();
 
-    // clean up scheduler queues
-    Engine.Sheduler.Destroy();
+    // The client game state survives a same-level reload. Its scheduler
+    // registration must survive too; destroyed objects unregister themselves.
+    // CEngine::Destroy performs the final scheduler cleanup after all owners die.
 
     m_is_removing_objects = false;
 

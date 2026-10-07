@@ -46,16 +46,16 @@ bool CUIDebugFonts::OnKeyboard(int dik, EUIMessages keyboard_action)
 
 void CUIDebugFonts::FillUpList()
 {
-    CFontManager::FONTS_VEC& v = UI()->Font()->m_all_fonts;
-    CFontManager::FONTS_VEC_IT it = v.begin();
-    CFontManager::FONTS_VEC_IT it_e = v.end();
+    auto& v = UI()->Font()->m_all_fonts;
+    auto it = v.begin();
+    auto it_e = v.end();
     Fvector2 pos, sz;
     pos.set(0, 0);
     sz.set(UI_BASE_WIDTH, UI_BASE_HEIGHT);
     string256 str;
     for (; it != it_e; ++it)
     {
-        CGameFont* F = *(*it);
+        CGameFont* F = *it;
         CUIStatic* pItem = xr_new<CUIStatic>();
         pItem->SetWndPos(pos);
         pItem->SetWndSize(sz);

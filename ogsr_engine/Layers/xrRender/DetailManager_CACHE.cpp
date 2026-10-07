@@ -15,7 +15,9 @@ void CDetailManager::cache_Initialize()
             cache[i][j] = slt;
             cache_Task(j, i, slt);
         }
-    VERIFY(cache_Validate());
+    for (u32 z = 0; z < dm_cache_line; ++z)
+        for (u32 x = 0; x < dm_cache_line; ++x)
+            VERIFY(cache[z][x] == cache_pool + z * dm_cache_line + x);
 
     for (u32 _mz1 = 0; _mz1 < dm_cache1_line; _mz1++)
     {

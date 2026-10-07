@@ -904,7 +904,12 @@ float CWeapon::dof_zoom_effect{}, CWeapon::dof_reload_effect{};
 void CWeapon::UpdateCL()
 {
     if (H_Parent() && !ParentIsActor() && (strapped_mode() || IsHidden()))
+    {
+#ifdef DEBUG
+        dbg_validate_update_cl();
+#endif
         return;
+    }
 
     inherited::UpdateCL();
 
@@ -1386,7 +1391,7 @@ int CWeapon::GetAmmoCurrent(bool use_item_to_spawn) const
 
 int CWeapon::GetAmmoCount(u8 ammo_type, u32 max) const
 {
-    VERIFY(m_pInventory);
+    VERIFY(m_pCurrentInventory);
     R_ASSERT(ammo_type < m_ammoTypes.size());
 
     return GetAmmoCount_forType(m_ammoTypes[ammo_type], max);

@@ -324,7 +324,7 @@ void CEnvAmbient::load_shoc(const shared_str& sect)
                 _GetItem(effs, k, tmp);
                 result->life_time = iFloor(pSettings->r_float(tmp, "life_time") * 1000.f);
                 result->particles = pSettings->r_string(tmp, "particles");
-                VERIFY(effects[k].particles.size());
+                VERIFY(result->particles.size());
                 result->offset = pSettings->r_fvector3(tmp, "offset");
                 result->wind_gust_factor = pSettings->r_float(tmp, "wind_gust_factor");
                 if (pSettings->line_exist(tmp, "sound"))

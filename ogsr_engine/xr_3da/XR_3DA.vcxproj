@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -189,6 +189,7 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="StatGraph.h" />
     <ClInclude Include="..\build_config_defines.h" />
     <ClInclude Include="cf_dynamic_mesh.h" />
     <ClInclude Include="IPhysicsDefinitions.h" />
@@ -274,6 +275,9 @@
     <ClInclude Include="perlin.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="StatGraph.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)'!='Debug'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="bone.cpp" />
     <ClCompile Include="cf_dynamic_mesh.cpp" />
     <ClCompile Include="defines.cpp" />

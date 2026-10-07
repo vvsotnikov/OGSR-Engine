@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -182,6 +182,8 @@
     <ClCompile Include="LzHuf.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="debug_assertion_config.h" />
+    <ClInclude Include="dump_string.h" />
     <ClInclude Include="..\Include\xrAPI\xrAPI.h" />
     <ClInclude Include="buffer_vector.h" />
     <ClInclude Include="buffer_vector_inline.h" />

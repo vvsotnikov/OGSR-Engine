@@ -1156,4 +1156,8 @@
       <Filter>imgui_render</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\xrRender\dxStatGraphRender.cpp" />
+    <ClInclude Include="..\xrRender\dxStatGraphRender.h" />
+  </ItemGroup>
 </Project>

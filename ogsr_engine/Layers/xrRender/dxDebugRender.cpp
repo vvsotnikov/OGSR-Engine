@@ -19,6 +19,9 @@ void dxDebugRender::Render()
 
             RCache.set_xform_world(Fidentity);
             RCache.set_Shader(dxRenderDeviceRender::Instance().m_WireShader);
+#ifdef DEBUG
+            if (!m_depth_test) RCache.set_Z(FALSE);
+#endif
             RCache.set_c("tfactor", float(color_get_R(color)) / 255.f, float(color_get_G(color)) / 255.f, float(color_get_B(color)) / 255.f, float(color_get_A(color)) / 255.f);
             RCache.dbg_Draw(D3DPT_LINELIST, &vert_vec.front(), static_cast<int>(vert_vec.size()), &ind_vec.front(), static_cast<int>(ind_vec.size() / 2));
         }
@@ -37,6 +40,9 @@ void dxDebugRender::Render()
 
             RCache.set_xform_world(Fidentity);
             RCache.set_Shader(dxRenderDeviceRender::Instance().m_WireShader);
+#ifdef DEBUG
+            if (!m_depth_test) RCache.set_Z(FALSE);
+#endif
             RCache.set_c("tfactor", float(color_get_R(color)) / 255.f, float(color_get_G(color)) / 255.f, float(color_get_B(color)) / 255.f, float(color_get_A(color)) / 255.f);
             RCache.dbg_Draw_Near(D3DPT_LINELIST, &vert_vec.front(), static_cast<int>(vert_vec.size()), &ind_vec.front(), static_cast<int>(ind_vec.size() / 2));
         }
@@ -140,4 +146,13 @@ struct RDebugRender : public dxDebugRender, public pureRender
 } rdebug_render_impl;
 dxDebugRender* rdebug_render = &rdebug_render_impl;
 
+#endif
+
+#ifdef DEBUG
+void dxDebugRender::CacheSetDepthTest(bool enabled)
+{
+    Render(); // Flush queued lines under the previous depth policy.
+    m_depth_test = enabled;
+    RCache.set_Z(enabled);
+}
 #endif

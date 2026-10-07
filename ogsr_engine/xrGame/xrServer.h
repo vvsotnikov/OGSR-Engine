@@ -126,6 +126,9 @@ protected:
 public:
     // constr / destr
     xrServer();
+#ifdef DEBUG
+    size_t entity_count() const { return entities.size(); }
+#endif
     virtual ~xrServer();
 
     // extended functionality

@@ -18,22 +18,7 @@
 #error Please enable multi-threaded library...
 #endif
 
-#if defined(_DEBUG) && !defined(DEBUG) // Visual Studio defines _DEBUG when you specify the /MTd or /MDd option
-#define DEBUG
-#endif
-
-#if defined(_DEBUG) && defined(NDEBUG)
-#error Something strange...
-#endif
-
-#if defined(DEBUG) && defined(NDEBUG)
-#error Something strange...
-#endif
-
-#if defined(_DEBUG) && defined(DISABLE_DBG_ASSERTIONS)
-#define NDEBUG
-#undef DEBUG
-#endif
+#include "debug_assertion_config.h"
 
 #ifndef DEBUG
 #define MASTER_GOLD
