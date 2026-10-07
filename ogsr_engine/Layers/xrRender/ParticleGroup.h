@@ -56,6 +56,9 @@ class ECORE_API CParticleGroup : public dxParticleCustom
     const CPGDef* m_Def{};
     float m_CurrentTime{};
     Fvector m_InitialPosition{};
+#ifdef DEBUG
+    bool m_departedWithChildren{};
+#endif
 
 public:
     DEFINE_VECTOR(dxRender_Visual*, VisualVec, VisualVecIt);

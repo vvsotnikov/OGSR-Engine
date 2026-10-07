@@ -560,6 +560,15 @@ BOOL CParticleGroup::Compile(CPGDef* def)
 
 void CParticleGroup::Play()
 {
+#ifdef DEBUG
+    if (m_departedWithChildren)
+    {
+        for (const auto& item : items)
+            VERIFY(item._children_related.empty() && item._children_free.empty());
+        Msg("[particle pool] reused-after-child-reset group=%s", m_Def->Name());
+        m_departedWithChildren = false;
+    }
+#endif
     m_CurrentTime = 0;
     m_RT_Flags.set(flRT_DefferedStop, FALSE);
     m_RT_Flags.set(flRT_Playing, TRUE);
@@ -612,6 +621,11 @@ void CParticleGroup::Depart()
     {
         // Pooled groups keep their compiled emitters, but must not retain the
         // related/free children of the previous playback after particle reset.
+        // ModelPool calls Depart outside rendering and before taking its pool
+        // lock, so child model_Delete calls can return their visuals to the pool.
+#ifdef DEBUG
+        m_departedWithChildren |= !item._children_related.empty() || !item._children_free.empty();
+#endif
         item.Stop(FALSE);
         item._effect->Depart();
     }
