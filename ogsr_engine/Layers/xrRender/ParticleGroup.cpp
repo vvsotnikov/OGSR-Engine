@@ -350,7 +350,7 @@ void CParticleGroup::SItem::OnFrame(u32 u_dt, const CPGDef::SEffect& def, Fbox& 
                 PAPI::Particle* particles;
                 u32 p_cnt;
                 PAPI::ParticleManager()->GetParticles(E->GetHandleEffect(), particles, p_cnt);
-                VERIFY(p_cnt == _children_related.size());
+                VERIFY2(p_cnt == _children_related.size(), make_string("effect=%s particles=%u related=%u", def.m_EffectName.c_str(), p_cnt, u32(_children_related.size())));
                 if (p_cnt)
                 {
                     for (u32 i = 0; i < p_cnt; i++)
@@ -608,8 +608,13 @@ void CParticleGroup::Depart()
     m_InitialPosition.set(0, 0, 0);
     vis.clear();
 
-    for (const auto& item : items)
+    for (auto& item : items)
+    {
+        // Pooled groups keep their compiled emitters, but must not retain the
+        // related/free children of the previous playback after particle reset.
+        item.Stop(FALSE);
         item._effect->Depart();
+    }
 }
 
 void CParticleGroup::SetHudMode(BOOL b)
