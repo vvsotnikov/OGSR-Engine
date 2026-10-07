@@ -18,5 +18,5 @@
 #endif
 
 #if defined(OGSR_REQUIRE_DEBUG_ASSERTIONS) && (!defined(_DEBUG) || !defined(DEBUG) || defined(NDEBUG) || defined(DISABLE_DBG_ASSERTIONS))
-#error Local validation requires Debug assertions to be enabled.
+#error Local validation requires Debug assertions. DISABLE_DBG_ASSERTIONS requires OgsrRequireDebugAssertions=false; that opt-out does not satisfy local validation.
 #endif

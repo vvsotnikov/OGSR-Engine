@@ -58,7 +58,7 @@ void CPlanner::update()
             {
                 show_current_world_state();
                 show_target_world_state();
-                Msg("%6d : Solution for object %s [%u vertices visited]", Device.dwTimeGlobal, object_name(), this->m_visited_nodes);
+                Msg("%6d : Solution for object %s [%u vertices discovered]", Device.dwTimeGlobal, object_name(), this->m_visited_nodes);
                 for (int i = 0; i < (int)solution().size(); ++i)
                     Msg("%s", action2string(solution()[i]));
             }

@@ -519,6 +519,7 @@
     <None Include="..\Resources_SoC_1.0006\gamedata\shaders\r3\shadow_direct_tree_s.vs" />
     <None Include="..\Resources_SoC_1.0006\gamedata\shaders\r3\shadow_direct_tree_s_aref.vs" />
     <None Include="..\Resources_SoC_1.0006\gamedata\shaders\r3\simple.ps" />
+    <None Include="..\Resources_SoC_1.0006\gamedata\shaders\r3\debug_graph.ps" />
     <None Include="..\Resources_SoC_1.0006\gamedata\shaders\r3\simple_color.ps" />
     <None Include="..\Resources_SoC_1.0006\gamedata\shaders\r3\skybox.ps" />
     <None Include="..\Resources_SoC_1.0006\gamedata\shaders\r3\skybox.s" />

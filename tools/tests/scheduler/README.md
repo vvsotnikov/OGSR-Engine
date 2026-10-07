@@ -20,5 +20,7 @@ scheduling obligation; it must not revive the canceled invocation.
 
 A scheduler-initiated drop ends dispatch but leaves the owner responsible for
 lifetime cleanup. A later unregister consumes that retirement once; a new
-registration replaces it with a new scheduling obligation. Handling a callback
-exception does not imply support for recovering an entire aborted scheduler update.
+registration replaces it with a new scheduling obligation. Final scheduler shutdown
+can precede an owner's cleanup and must retire its remaining obligation too.
+Debug treats callback exceptions as fatal; Release recovery does not imply
+support for recovering an entire aborted scheduler update.

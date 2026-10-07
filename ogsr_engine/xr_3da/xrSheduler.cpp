@@ -11,8 +11,22 @@ void CSheduler::Initialize() { m_processing_now = false; }
 
 void CSheduler::Destroy()
 {
+    VERIFY(!m_processing_now);
     internal_Registration();
 
+    // Owners can outlive scheduler shutdown. Consume their remaining dispatch
+    // obligations without leaving stale membership flags or queued cleanup.
+    const auto retire = [](const xr_vector<Item>& items) {
+        for (const auto& item : items)
+        {
+            if (!item.Object)
+                continue;
+            item.Object->shedule.b_registered = FALSE;
+            item.Object->shedule.b_retired = TRUE;
+        }
+    };
+    retire(ItemsRT);
+    retire(Items);
     ItemsRT.clear();
     Items.clear();
     Registration.clear();
@@ -225,6 +239,9 @@ void CSheduler::ProcessStep()
             __except (ExceptStackTrace("[CSheduler::ProcessStep] stack trace:\n"))
             {
                 Msg("Scheduler tried to update object %s", *curr.scheduled_name);
+#ifdef DEBUG
+                FATAL("Exception in a scheduled callback; see the preceding stack trace.");
+#endif
                 if (Items[it - 1].Object)
                 {
                     curr.Object->shedule.b_registered = FALSE;
@@ -294,6 +311,9 @@ void CSheduler::ProcessStep()
             __except (ExceptStackTrace("[CSheduler::ProcessStep2] stack trace:\n"))
             {
                 Msg("Scheduler tried to update object %s", *curr.scheduled_name);
+#ifdef DEBUG
+                FATAL("Exception in a scheduled callback; see the preceding stack trace.");
+#endif
                 if (m_current_step_obj)
                 {
                     m_current_step_obj->shedule.b_registered = FALSE;

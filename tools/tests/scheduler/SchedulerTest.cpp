@@ -37,6 +37,9 @@ void clamp(T& value, T low, T high)
 }
 int iFloor(float value) { return int(std::floor(value)); }
 std::vector<std::string> messages;
+// Like VERIFY, record the fatal diagnostic so the fixture can inspect it.
+std::vector<std::string> fatal_errors;
+#define FATAL(message) fatal_errors.emplace_back(message)
 template <class... Args>
 void Msg(const char* format, Args... args)
 {
@@ -152,12 +155,14 @@ struct World
         Device.dwPrecacheFrame = 0;
         clock_ms = 0;
         messages.clear();
+        fatal_errors.clear();
         psShedulerCurrent = 10;
         psShedulerTarget = 10;
         psShedulerMax = 10;
         scheduler.Initialize();
     }
-    ~World() { scheduler.Destroy(); }
+    // NPC fixtures usually die before World. Explicit shutdown tests call
+    // Destroy while the registered owners are still alive.
     void add(NPC& npc, u32 due = 0, u32 last = 0)
     {
         scheduler.Register(&npc);
@@ -698,8 +703,31 @@ void exception_cleanup()
     check(w.calls == std::vector<int>{1}, "object can register again after exception");
 }
 
+void shutdown_ownership()
+{
+    World w;
+    NPC normal(1, w.calls), realtime(2, w.calls), pending(3, w.calls);
+    w.add(normal);
+    w.scheduler.Register(&realtime, true);
+    w.scheduler.internal_Registration();
+    w.scheduler.Register(&pending);
+    w.scheduler.Destroy();
+    for (auto* npc : {&normal, &realtime, &pending})
+    {
+        check(!npc->shedule.b_registered && npc->shedule.b_retired, "shutdown retires surviving owners");
+        w.scheduler.Unregister(npc);
+        check(!npc->shedule.b_retired, "owner cleanup consumes shutdown retirement");
+    }
+    check(w.scheduler.Registration.empty(), "shutdown cleanup queues no dangling owner");
+    w.scheduler.Register(&normal);
+    w.scheduler.internal_Registration();
+    check(normal.shedule.b_registered && !normal.shedule.b_retired, "surviving owner can register again");
+    w.scheduler.Unregister(&normal);
+}
+
 void exceptions()
 {
+    shutdown_ownership();
     for (bool inNeeded : {true, false})
     {
         for (bool neighbor : {false, true})
@@ -712,6 +740,11 @@ void exceptions()
             if (neighbor)
                 w.add(b);
             w.tick(100);
+#ifdef DEBUG
+            check(fatal_errors.size() == 1, "Debug reports a fatal scheduled callback exception");
+#else
+            check(fatal_errors.empty(), "Release retains handled-exception recovery");
+#endif
             check(a.neededCalls == 1, "throwing object queried once");
             check(a.elapsed.size() == (inNeeded ? 0u : 1u), "exception callback count");
             if (neighbor)
@@ -822,6 +855,7 @@ void stress_test()
         psShedulerTarget = 10;
         clock_ms = 0;
         messages.clear();
+        fatal_errors.clear();
         for (u32 i = 0; i < 96; ++i)
         {
             npcs.emplace_back(i, seed);

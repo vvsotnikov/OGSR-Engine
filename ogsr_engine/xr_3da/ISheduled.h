@@ -12,6 +12,7 @@ public:
         u32 b_registered : 1; // Logical ownership, including pending operations.
         u32 b_retired : 1; // Dropped during dispatch; owner cleanup is still expected.
     } shedule;
+    static_assert(sizeof(shedule) == sizeof(u32), "Scheduler flags must fit in one word");
 
 #ifdef DEBUG
     u32 dbg_update_shedule;

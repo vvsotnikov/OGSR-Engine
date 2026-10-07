@@ -35,7 +35,7 @@ void CStateMonsterSmartTerrainTaskAbstract::initialize()
     VERIFY(monster->m_smart_terrain_id != 0xffff);
 
     const auto* task = monster->brain().smart_terrain().task(monster);
-    VERIFY(task);
+    R_ASSERT(task);
     m_current_task = *task;
 }
 

@@ -15,9 +15,8 @@ void CStateMonsterSmartTerrainTaskGraphWalkAbstract::initialize()
 
     // get task
     const auto* task = monster->brain().smart_terrain().task(monster);
-    VERIFY(task);
+    R_ASSERT(task);
     m_task = *task;
-    VERIFY(m_task);
 }
 
 TEMPLATE_SPECIALIZATION
@@ -30,9 +29,8 @@ bool CStateMonsterSmartTerrainTaskGraphWalkAbstract::check_start_conditions()
         return false;
 
     const auto* task = monster->brain().smart_terrain().task(monster);
-    VERIFY(task);
+    R_ASSERT3(task, "Smart terrain selected, but task was not set for monster ", *object->cName());
     m_task = *task;
-    VERIFY3(m_task, "Smart terrain selected, but task was not set for monster ", *object->cName());
     if (object->ai_location().game_vertex_id() == m_task->game_vertex_id())
         return false;
 
