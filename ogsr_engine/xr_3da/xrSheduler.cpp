@@ -151,6 +151,9 @@ bool CSheduler::Registered(ISheduled* object) const
 void CSheduler::Register(ISheduled* A, BOOL RT)
 {
     VERIFY(!Registered(A));
+    VERIFY(!A->shedule.b_registered);
+    A->shedule.b_registered = TRUE;
+    A->shedule.b_retired = FALSE;
 
     auto& R = Registration.emplace_back();
     R.OP = TRUE;
@@ -163,7 +166,14 @@ void CSheduler::Register(ISheduled* A, BOOL RT)
 
 void CSheduler::Unregister(ISheduled* A, bool force)
 {
-    VERIFY(Registered(A));
+    if (A->shedule.b_retired)
+    {
+        VERIFY(!Registered(A) && !A->shedule.b_registered);
+        A->shedule.b_retired = FALSE;
+        return;
+    }
+    VERIFY(Registered(A) && A->shedule.b_registered);
+    A->shedule.b_registered = FALSE;
 
     if (m_processing_now || force)
     {
@@ -215,12 +225,23 @@ void CSheduler::ProcessStep()
             __except (ExceptStackTrace("[CSheduler::ProcessStep] stack trace:\n"))
             {
                 Msg("Scheduler tried to update object %s", *curr.scheduled_name);
+                if (Items[it - 1].Object)
+                {
+                    curr.Object->shedule.b_registered = FALSE;
+                    curr.Object->shedule.b_retired = TRUE;
+                }
                 skip = true;
             }
         }
 
         if (!Items[it - 1].Object) // The needed callback may unregister (and destroy) this object.
             skip = true;
+
+        if (!skip && !shed_need)
+        {
+            curr.Object->shedule.b_registered = FALSE;
+            curr.Object->shedule.b_retired = TRUE;
+        }
 
         // Hide processed slots from Unregister just as erasing them would.
         // Remove the tombstones together below, preserving survivor order.
@@ -273,6 +294,11 @@ void CSheduler::ProcessStep()
             __except (ExceptStackTrace("[CSheduler::ProcessStep2] stack trace:\n"))
             {
                 Msg("Scheduler tried to update object %s", *curr.scheduled_name);
+                if (m_current_step_obj)
+                {
+                    m_current_step_obj->shedule.b_registered = FALSE;
+                    m_current_step_obj->shedule.b_retired = TRUE;
+                }
                 m_current_step_obj = nullptr;
                 break;
             }

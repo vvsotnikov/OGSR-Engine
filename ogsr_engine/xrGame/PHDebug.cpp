@@ -531,7 +531,7 @@ void PH_DBG_Render()
             Level().debug_renderer().draw_line(Fidentity, c.pos, dir, D3DCOLOR_XRGB(255 * is_cyl, 0, 255 * !is_cyl));
         }
     }
-//	HUD().Font().pFontDI->OutNext("---------------------");
+//	HUD().Font().pFontStat->OutNext("---------------------");
 #endif
 
     if (ph_dbg_draw_mask.test(phDbgDrawZDisable))

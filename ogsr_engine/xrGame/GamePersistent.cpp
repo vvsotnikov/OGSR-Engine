@@ -49,10 +49,6 @@ CGamePersistent::CGamePersistent(void)
     m_pMainMenu = NULL;
     m_intro = NULL;
     m_intro_event.bind(this, &CGamePersistent::start_logo_intro);
-#ifdef DEBUG
-    m_frame_counter = 0;
-    m_last_stats_frame = u32(-2);
-#endif
     //
     dSetAllocHandler(ode_alloc);
     dSetReallocHandler(ode_realloc);
@@ -530,9 +526,6 @@ void CGamePersistent::OnFrame()
         xr_delete(g_tutorial);
     }
 
-#ifdef DEBUG
-    ++m_frame_counter;
-#endif
     if (!m_intro_event.empty() && !load_screen_renderer.b_registered)
         m_intro_event();
 
@@ -669,9 +662,6 @@ void CGamePersistent::OnEvent(EVENT E, u64 P1, u64 P2)
 
 void CGamePersistent::Statistics(CGameFont* F)
 {
-#ifdef DEBUG
-    m_last_stats_frame = m_frame_counter;
-#endif
 }
 
 float CGamePersistent::MtlTransparent(u32 mtl_idx) { return GMLib.GetMaterialByIdx((u16)mtl_idx)->fVisTransparencyFactor; }

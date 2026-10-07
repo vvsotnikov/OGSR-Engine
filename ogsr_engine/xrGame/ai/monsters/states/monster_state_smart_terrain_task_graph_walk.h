@@ -1,5 +1,7 @@
 #pragma once
 #include "../state.h"
+#include <optional>
+#include "../../../alife_smart_terrain_task.h"
 
 template <typename _Object>
 class CStateMonsterSmartTerrainTaskGraphWalk : public CStateMove<_Object>
@@ -7,7 +9,8 @@ class CStateMonsterSmartTerrainTaskGraphWalk : public CStateMove<_Object>
     typedef CStateMove<_Object> inherited;
     using inherited::inherited::object;
 
-    CALifeSmartTerrainTask* m_task;
+    // The Lua task result can be collected between state callbacks.
+    std::optional<CALifeSmartTerrainTask> m_task;
 
 public:
     CStateMonsterSmartTerrainTaskGraphWalk(_Object* obj) : inherited(obj) {}

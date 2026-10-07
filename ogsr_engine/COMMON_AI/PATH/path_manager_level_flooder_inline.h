@@ -3,7 +3,7 @@
 //	Created 	: 21.03.2002
 //  Modified 	: 03.03.2004
 //	Author		: Dmitriy Iassenev
-//	Description : Level flooder this->path manager inline functions
+//	Description : Level flooder path manager inline functions
 ////////////////////////////////////////////////////////////////////////////
 
 #pragma once
@@ -20,7 +20,7 @@ IC void CLevelFlooderPathManager::setup(const _Graph* _graph, _DataStorage* _dat
                                         const _index_type& _goal_node_index, const _Parameters& parameters)
 {
     inherited::setup(_graph, _data_storage, _path, _start_node_index, _goal_node_index, parameters);
-    //		this->graph->unpack_xz		(this->graph->vertex(_start_node_index),start_position.x,start_position.y);
+    //		graph->unpack_xz		(graph->vertex(_start_node_index),start_position.x,start_position.y);
     this->graph->unpack_xz(*this->graph->vertex(_start_node_index), x0, y0);
     max_range_sqr = iFloor(_sqr(this->max_range) / this->m_sqr_distance_xz + .5f);
     m_cell_dist = this->graph->header().cell_size();
@@ -32,7 +32,7 @@ IC bool CLevelFlooderPathManager::is_goal_reached(const _index_type& node_index)
     VERIFY(this->path);
     this->path->push_back(node_index);
     this->best_node = this->graph->vertex(node_index);
-    //		y1						= (float)(this->best_node->position().y());
+    //		y1						= (float)(best_node->position().y());
     return (false);
 }
 

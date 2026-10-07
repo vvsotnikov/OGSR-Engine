@@ -211,12 +211,7 @@ void CObject::net_Destroy()
 {
     VERIFY(getDestroy());
     xr_delete(collidable.model);
-    bool needs_unregister = register_schedule();
-#ifdef DEBUG
-    // shedule_Needed() can retire a dying object before net_Destroy runs.
-    needs_unregister = needs_unregister && Engine.Sheduler.Registered(this);
-#endif
-    if (needs_unregister)
+    if (register_schedule())
         shedule_unregister();
 
     spatial_unregister();

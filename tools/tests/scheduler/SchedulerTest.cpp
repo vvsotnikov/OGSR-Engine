@@ -79,7 +79,7 @@ struct ISheduled
     struct
     {
         u32 t_min = 100, t_max = 250;
-        bool b_RT = false, b_locked = false;
+        bool b_RT = false, b_locked = false, b_registered = false, b_retired = false;
     } shedule;
     virtual ~ISheduled() = default;
     virtual float shedule_Scale() = 0;
@@ -294,6 +294,32 @@ void needed()
     check(a.neededCalls == 1 && a.elapsed.empty(), "not-needed item is removed without callback");
     check(w.calls == std::vector<int>({2, 2}), "other item survives needed rejection");
     w.order({2});
+    check(a.shedule.b_retired && !a.shedule.b_registered, "needed rejection records retirement");
+    w.scheduler.Unregister(&a);
+    check(!a.shedule.b_retired && w.scheduler.Registration.empty(), "retired cleanup does not queue a dangling pointer");
+#ifdef DEBUG
+    const unsigned before = failures;
+    w.scheduler.Unregister(&a);
+    const unsigned detected = failures - before;
+    failures = before;
+    w.scheduler.Registration.clear(); // The test recorder returns after VERIFY; the engine assertion stops here.
+    check(detected > 0, "retirement permits one cleanup, not arbitrary absent unregisters");
+#endif
+    a.needed = true;
+    w.scheduler.Register(&a, false);
+    w.tick(300);
+    check(a.shedule.b_registered && !a.shedule.b_retired, "registration resets retirement state");
+    a.needed = false;
+    w.tick(1000);
+    check(a.shedule.b_retired, "second rejection retires the new registration");
+    w.scheduler.Register(&a, false); // A new registration can replace retirement before owner cleanup.
+    a.needed = true;
+    w.tick(1001);
+    check(a.shedule.b_registered && !a.shedule.b_retired, "direct re-registration clears the retirement token");
+    w.scheduler.Unregister(&a);
+    w.tick(1002);
+    check(std::none_of(w.scheduler.Items.begin(), w.scheduler.Items.end(), [&](const auto& item) { return item.Object == &a; }),
+          "cleanup after re-registration removes the new obligation");
 }
 void self_remove()
 {
@@ -699,6 +725,9 @@ void exceptions()
             }
             w.tick(201);
             check(a.neededCalls == 1, "throwing object must not be requeued");
+            check(a.shedule.b_retired && !a.shedule.b_registered, "exception records retirement for owner cleanup");
+            w.scheduler.Unregister(&a);
+            check(!a.shedule.b_retired && w.scheduler.Registration.empty(), "exception cleanup consumes retirement without a dead pointer");
             if (neighbor)
                 check(b.elapsed.size() == 2, "neighbor survives exception");
         }

@@ -18,6 +18,7 @@ Cancellation of the current callback must prevent its requeue, rather than merel
 remove its former queue entry. Re-registering the same object creates a later
 scheduling obligation; it must not revive the canceled invocation.
 
-An object dropped after a handled callback exception is no longer registered.
-A later unregister is valid only after re-registration. Handling that callback
+A scheduler-initiated drop ends dispatch but leaves the owner responsible for
+lifetime cleanup. A later unregister consumes that retirement once; a new
+registration replaces it with a new scheduling obligation. Handling a callback
 exception does not imply support for recovering an entire aborted scheduler update.

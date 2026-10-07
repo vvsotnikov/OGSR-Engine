@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#ifdef DEBUG
 #include "dxStatGraphRender.h"
 #include "blenders/Blender.h"
 
@@ -11,7 +12,7 @@ public:
     void Compile(CBlender_Compile& compiler) override
     {
         IBlender::Compile(compiler);
-        compiler.r_Pass("stub_notransform_t", "simple_color", FALSE, FALSE, FALSE, TRUE, D3DBLEND_SRCALPHA, D3DBLEND_INVSRCALPHA);
+        compiler.r_Pass("stub_notransform_t", "debug_graph", FALSE, FALSE, FALSE, TRUE, D3DBLEND_SRCALPHA, D3DBLEND_INVSRCALPHA);
         compiler.r_End();
     }
 };
@@ -345,3 +346,4 @@ void dxStatGraphRender::RenderMarkers(CStatGraph& owner, FVF::TL** ppv, CStatGra
         (*ppv)++;
     }
 }
+#endif // DEBUG

@@ -159,8 +159,8 @@ void CCar::DbgUbdateCl()
                 HUD().Font().pFontDI->OutNext("BREAKS");
                 HUD().Font().pFontDI->SetColor(color_rgba(0xff, 0xff, 0xff, 0xff));
             }
-            // HUD().pFontDI->OutNext("Vel Magnitude: [%3.2f]",m_PhysicMovementControl->GetVelocityMagnitude());
-            // HUD().pFontDI->OutNext("Vel Actual:    [%3.2f]",m_PhysicMovementControl->GetVelocityActual());
+            // HUD().pFontStat->OutNext("Vel Magnitude: [%3.2f]",m_PhysicMovementControl->GetVelocityMagnitude());
+            // HUD().pFontStat->OutNext("Vel Actual:    [%3.2f]",m_PhysicMovementControl->GetVelocityActual());
         }
 
         if (ph_dbg_draw_mask.test(phDbgDrawCarPlots) && b_plots)

@@ -1255,28 +1255,28 @@ void CActor::OnHUDDraw(CCustomHUD* hud, u32 context_id, IRenderable* root)
 	if (Level().CurrentControlEntity() == this && g_ShowAnimationInfo)
 	{
 		string128 buf;
-		HUD().Font().pFontDI->SetColor	(0xffffffff);
-		HUD().Font().pFontDI->OutSet		(170,530);
-		HUD().Font().pFontDI->OutNext	("Position:      [%3.2f, %3.2f, %3.2f]",VPUSH(Position()));
-		HUD().Font().pFontDI->OutNext	("Velocity:      [%3.2f, %3.2f, %3.2f]",VPUSH(m_PhysicMovementControl->GetVelocity()));
-		HUD().Font().pFontDI->OutNext	("Vel Magnitude: [%3.2f]",m_PhysicMovementControl->GetVelocityMagnitude());
-		HUD().Font().pFontDI->OutNext	("Vel Actual:    [%3.2f]",m_PhysicMovementControl->GetVelocityActual());
+		HUD().Font().pFontStat->SetColor	(0xffffffff);
+		HUD().Font().pFontStat->OutSet		(170,530);
+		HUD().Font().pFontStat->OutNext	("Position:      [%3.2f, %3.2f, %3.2f]",VPUSH(Position()));
+		HUD().Font().pFontStat->OutNext	("Velocity:      [%3.2f, %3.2f, %3.2f]",VPUSH(m_PhysicMovementControl->GetVelocity()));
+		HUD().Font().pFontStat->OutNext	("Vel Magnitude: [%3.2f]",m_PhysicMovementControl->GetVelocityMagnitude());
+		HUD().Font().pFontStat->OutNext	("Vel Actual:    [%3.2f]",m_PhysicMovementControl->GetVelocityActual());
 		switch (m_PhysicMovementControl->Environment())
 		{
 		case CPHMovementControl::peOnGround:	strcpy(buf,"ground");			break;
 		case CPHMovementControl::peInAir:		strcpy(buf,"air");				break;
 		case CPHMovementControl::peAtWall:		strcpy(buf,"wall");				break;
 		}
-		HUD().Font().pFontDI->OutNext	(buf);
+		HUD().Font().pFontStat->OutNext	(buf);
 
 		if (IReceived != 0)
 		{
 			float Size = 0;
-			Size = HUD().Font().pFontDI->GetSize();
-			HUD().Font().pFontDI->SetSize(Size*2);
-			HUD().Font().pFontDI->SetColor	(0xffff0000);
-			HUD().Font().pFontDI->OutNext ("Input :		[%3.2f]", ICoincidenced/IReceived * 100.0f);
-			HUD().Font().pFontDI->SetSize(Size);
+			Size = HUD().Font().pFontStat->GetSize();
+			HUD().Font().pFontStat->SetSize(Size*2);
+			HUD().Font().pFontStat->SetColor	(0xffff0000);
+			HUD().Font().pFontStat->OutNext ("Input :		[%3.2f]", ICoincidenced/IReceived * 100.0f);
+			HUD().Font().pFontStat->SetSize(Size);
 		};
 	};
 #endif

@@ -52,6 +52,7 @@ public:
     virtual void load(IReader& input_packet);
     virtual BOOL net_SaveRelevant() { return inherited::net_SaveRelevant(); }
 
+    bool skip_hidden_npc_update();
     virtual void UpdateCL();
     virtual void shedule_Update(u32 dt);
 

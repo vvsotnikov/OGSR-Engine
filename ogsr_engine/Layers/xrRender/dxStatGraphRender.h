@@ -1,3 +1,4 @@
+#ifdef DEBUG
 #ifndef dxStatGraphRender_included
 #define dxStatGraphRender_included
 #pragma once
@@ -29,3 +30,4 @@ private:
 };
 
 #endif //	dxStatGraphRender_included
+#endif // DEBUG

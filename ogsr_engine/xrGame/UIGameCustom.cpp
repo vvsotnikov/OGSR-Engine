@@ -46,6 +46,8 @@ void CUIGameCustom::shedule_Update(u32 dt) { inherited::shedule_Update(dt); }
 
 void CUIGameCustom::OnFrame()
 {
+    // UI owners survive eQuickLoad and must retain their scheduler membership.
+    VERIFY(Engine.Sheduler.Registered(this));
     st_vec::iterator it = m_custom_statics.begin();
     for (; it != m_custom_statics.end(); ++it)
         (*it).Update();

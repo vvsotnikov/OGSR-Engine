@@ -1,3 +1,4 @@
+#ifdef DEBUG
 //---------------------------------------------------------------------------
 #ifndef StatGraphH
 #define StatGraphH
@@ -164,3 +165,4 @@ public:
     }
 };
 #endif
+#endif // DEBUG

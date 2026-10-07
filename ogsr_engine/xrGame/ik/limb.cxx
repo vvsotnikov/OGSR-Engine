@@ -782,6 +782,7 @@ int Limb::Solve(float x[], float* new_swivel, float* new_pos)
         success = SolveByAngle(swivel_angle, x);
     }
 #ifdef DEBUG
+    // Limb::Debug hides the global assertion handler used by VERIFY.
     if (swivel_angle == -phInfinity)
         ::Debug.fail("swivel_angle != -phInfinity", DEBUG_INFO);
 #endif

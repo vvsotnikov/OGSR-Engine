@@ -18,10 +18,16 @@ Debug keeps the engine's full `DEBUG` path: `VERIFY` checks, diagnostic state,
 and the retained AI/physics debug tools. The startup log reports
 `Debug assertions: enabled`. Validation passes `OgsrRequireDebugAssertions=true`
 to every engine project and rejects overrides that suppress these checks.
-A standalone developer build can still opt out with `DISABLE_DBG_ASSERTIONS`;
-that build does not satisfy validation. Adding or removing the optional override
+IDE and validation Debug builds use the same compiler definitions and cache.
+A standalone developer build can opt out with `DISABLE_DBG_ASSERTIONS` and
+`/p:OgsrRequireDebugAssertions=false`; that build does not satisfy validation. Adding or removing the optional override
 header also invalidates compiler inputs, even if it was absent from the previous
 build's dependency log.
+
+Full Debug also enables the existing gameplay diagnostic keys: Enter/NumpadEnter
+consume the key to toggle `bDebug`; F4 cycles the current entity; Alt+left-click
+switches the viewed entity; keypad `/` and `*` change the game-time factor.
+Use Release for ordinary gameplay without these Debug input overrides.
 
 CTest cases have a two-minute timeout. Failed Rust integration fixtures are
 retained at the path printed in the failure output.

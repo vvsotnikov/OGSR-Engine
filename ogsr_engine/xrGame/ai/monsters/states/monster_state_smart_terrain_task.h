@@ -1,5 +1,6 @@
 #pragma once
 #include "../state.h"
+#include <optional>
 
 #include "../../../alife_smart_terrain_task.h"
 
@@ -16,7 +17,8 @@ class CStateMonsterSmartTerrainTask : public CState<_Object>
     using inherited::prev_substate;
     using inherited::select_state;
 
-    CALifeSmartTerrainTask* m_current_task;
+    // The Lua task result can be collected between state callbacks.
+    std::optional<CALifeSmartTerrainTask> m_current_task;
 
 public:
     CStateMonsterSmartTerrainTask(_Object* obj);

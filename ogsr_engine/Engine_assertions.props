@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Condition="'$(Configuration)'=='Debug' and '$(OgsrRequireDebugAssertions)'==''">
+    <OgsrRequireDebugAssertions>true</OgsrRequireDebugAssertions>
+  </PropertyGroup>
   <!-- A newly added/removed optional header is not in CL's old dependency log.
        Change the compiler command line too, so incremental builds cannot miss it. -->
   <ItemDefinitionGroup Condition="Exists('$(MSBuildThisFileDirectory)build_config_overrides/build_config_defines.h')">

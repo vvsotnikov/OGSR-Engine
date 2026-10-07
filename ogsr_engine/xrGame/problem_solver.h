@@ -63,6 +63,9 @@ protected:
     bool m_actuality;
     bool m_solution_changed;
     bool m_failed;
+#ifdef DEBUG
+    mutable u32 m_visited_nodes = 0;
+#endif
 
 private:
     template <bool>

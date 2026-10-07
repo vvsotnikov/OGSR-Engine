@@ -901,15 +901,20 @@ u8 CWeapon::idle_state()
 
 float CWeapon::dof_zoom_effect{}, CWeapon::dof_reload_effect{};
 
+bool CWeapon::skip_hidden_npc_update()
+{
+    if (!H_Parent() || ParentIsActor() || (!strapped_mode() && !IsHidden()))
+        return false;
+#ifdef DEBUG
+    dbg_validate_update_cl();
+#endif
+    return true;
+}
+
 void CWeapon::UpdateCL()
 {
-    if (H_Parent() && !ParentIsActor() && (strapped_mode() || IsHidden()))
-    {
-#ifdef DEBUG
-        dbg_validate_update_cl();
-#endif
+    if (skip_hidden_npc_update())
         return;
-    }
 
     inherited::UpdateCL();
 

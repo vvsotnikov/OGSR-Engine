@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#ifdef DEBUG
 
 
 #include "StatGraph.h"
@@ -44,3 +45,4 @@ void CStatGraph::OnRender()
 {
     m_pRender->OnRender(*this);
 }
+#endif // DEBUG

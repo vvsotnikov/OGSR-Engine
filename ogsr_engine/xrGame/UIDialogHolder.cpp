@@ -218,6 +218,8 @@ void CDialogHolder::StartStopMenu(CUIDialogWnd* pDialog, bool bDoHideIndicators)
 
 void CDialogHolder::OnFrame()
 {
+    // UI owners survive eQuickLoad and must retain their scheduler membership.
+    VERIFY(Engine.Sheduler.Registered(this));
     if (MainInputReceiver() && GetUICursor()->IsVisible())
     {
         MainInputReceiver()->UpdateFocus();

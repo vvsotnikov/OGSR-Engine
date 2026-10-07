@@ -34,7 +34,9 @@ void CStateMonsterSmartTerrainTaskAbstract::initialize()
     VERIFY(monster);
     VERIFY(monster->m_smart_terrain_id != 0xffff);
 
-    m_current_task = monster->brain().smart_terrain().task(monster);
+    const auto* task = monster->brain().smart_terrain().task(monster);
+    VERIFY(task);
+    m_current_task = *task;
 }
 
 TEMPLATE_SPECIALIZATION
@@ -164,7 +166,8 @@ void CStateMonsterSmartTerrainTaskAbstract::check_force_state()
 
     // check if task has changed
     CALifeSmartTerrainTask* task = monster->brain().smart_terrain().task(monster);
-    if (!task || (m_current_task != task))
+    // Lua may return a fresh wrapper for the same patrol point. Compare the goal, not the wrapper address.
+    if (!task || !m_current_task || m_current_task->point_raw() != task->point_raw())
     {
         if (current_substate != u32(-1))
             get_state_current()->critical_finalize();
@@ -172,7 +175,10 @@ void CStateMonsterSmartTerrainTaskAbstract::check_force_state()
         current_substate = u32(-1);
         prev_substate = u32(-1);
 
-        m_current_task = task;
+        if (task)
+            m_current_task = *task;
+        else
+            m_current_task.reset();
     }
 }
 

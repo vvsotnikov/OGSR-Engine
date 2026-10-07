@@ -7,6 +7,8 @@ ISheduled::ISheduled()
     shedule.t_min = 20;
     shedule.t_max = 1000;
     shedule.b_locked = FALSE;
+    shedule.b_registered = FALSE;
+    shedule.b_retired = FALSE;
 #ifdef DEBUG
     dbg_update_shedule = u32(-1);
 #endif
@@ -19,7 +21,8 @@ ISheduled::~ISheduled()
     // sad, but true
     // we need this to become MASTER_GOLD
 #ifndef DEBUG
-    Engine.Sheduler.Unregister(this);
+    if (shedule.b_registered || shedule.b_retired)
+        Engine.Sheduler.Unregister(this);
 #endif // DEBUG
 }
 
