@@ -16,6 +16,9 @@
 #define VERIFY(...)
 #endif
 void check(bool value, const std::string& message);
+#define VERIFY2(value, message) VERIFY(value)
+#define EXCEPTION_CONTINUE_SEARCH 0
+#define EXCEPTION_EXECUTE_HANDLER 1
 #define R_ASSERT(value) check(bool(value), "R_ASSERT: " #value)
 #define ZoneScoped
 #define ZoneScopedN(...)
@@ -37,9 +40,6 @@ void clamp(T& value, T low, T high)
 }
 int iFloor(float value) { return int(std::floor(value)); }
 std::vector<std::string> messages;
-// Like VERIFY, record the fatal diagnostic so the fixture can inspect it.
-std::vector<std::string> fatal_errors;
-#define FATAL(message) fatal_errors.emplace_back(message)
 template <class... Args>
 void Msg(const char* format, Args... args)
 {
@@ -155,7 +155,6 @@ struct World
         Device.dwPrecacheFrame = 0;
         clock_ms = 0;
         messages.clear();
-        fatal_errors.clear();
         psShedulerCurrent = 10;
         psShedulerTarget = 10;
         psShedulerMax = 10;
@@ -457,6 +456,21 @@ void needed_lifecycle()
     }
 }
 
+// The adapter maps SEH search to C++ propagation; an aborted Debug update
+// cannot be resumed. Release alone may continue after a callback fault.
+bool fault_tick(World& w)
+{
+    bool propagated = false;
+    try { w.tick(100); }
+    catch (const std::runtime_error&) { propagated = true; }
+#ifdef DEBUG
+    check(propagated, "Debug preserves the callback exception for its caller");
+#else
+    check(!propagated, "Release handles the callback exception");
+#endif
+    return propagated;
+}
+
 void callback_budget()
 {
     for (bool prefetch : {false, true})
@@ -497,7 +511,11 @@ void callback_budget()
                 }
                 psShedulerMax = 100.f;
                 Device.dwPrecacheFrame = prefetch ? 1 : 0;
-                w.tick(100);
+                if (outcome == 2)
+                {
+                    if (fault_tick(w)) continue;
+                }
+                else w.tick(100);
                 check(budget_messages() == (prefetch ? 0u : 1u), "single expensive object logs even on cancellation, rejection or exception");
                 check(callbacks == (prefetch ? 3u : 1u), "every callback exit honors budget except during prefetch");
                 check(clock_ms == (prefetch ? 300u : 100u), "only one indivisible callback may overrun normal budget");
@@ -539,7 +557,11 @@ void budget_diagnostics()
                 if (outcome == 2) npc->needed = false;
                 if (outcome == 3) throw std::runtime_error("needed");
             };
-        w.tick(100);
+        if (outcome == 3)
+        {
+            if (fault_tick(w)) continue;
+        }
+        else w.tick(100);
         check(a.neededCalls == 1 && b.neededCalls == 1 && clock_ms == 12, "multiple objects exhaust the budget");
         check(budget_messages() == 0, "aggregate budget stop is not a single-object diagnostic");
     }
@@ -575,7 +597,11 @@ void scale_lifecycle()
         };
         w.add(a);
         w.add(b);
-        w.tick(100);
+        if (mode == 2)
+        {
+            if (fault_tick(w)) continue;
+        }
+        else w.tick(100);
         check(w.calls == std::vector<int>{2}, "canceled/throwing scale callback must not update");
         check(w.scheduler.m_current_step_obj == nullptr, "scale exit clears current callback");
         a.scaleAction = {};
@@ -688,7 +714,7 @@ void exception_cleanup()
     NPC a(1, w.calls);
     a.throwUpdate = true;
     w.add(a);
-    w.tick(100);
+    if (fault_tick(w)) return;
     check(w.scheduler.m_current_step_obj == nullptr, "exception leaves no current object");
     // A stale current pointer must not swallow cancellation of a pending registration.
     a.throwUpdate = false;
@@ -711,7 +737,13 @@ void shutdown_ownership()
     w.scheduler.Register(&realtime, true);
     w.scheduler.internal_Registration();
     w.scheduler.Register(&pending);
+    const unsigned before = failures;
     w.scheduler.Destroy();
+#ifdef DEBUG
+    const unsigned detected = failures - before;
+    failures = before;
+    check(detected == 3, "final shutdown diagnoses every surviving owner");
+#endif
     for (auto* npc : {&normal, &realtime, &pending})
     {
         check(!npc->shedule.b_registered && npc->shedule.b_retired, "shutdown retires surviving owners");
@@ -727,7 +759,6 @@ void shutdown_ownership()
 
 void exceptions()
 {
-    shutdown_ownership();
     for (bool inNeeded : {true, false})
     {
         for (bool neighbor : {false, true})
@@ -739,12 +770,11 @@ void exceptions()
             w.add(a);
             if (neighbor)
                 w.add(b);
-            w.tick(100);
-#ifdef DEBUG
-            check(fatal_errors.size() == 1, "Debug reports a fatal scheduled callback exception");
-#else
-            check(fatal_errors.empty(), "Release retains handled-exception recovery");
-#endif
+            if (fault_tick(w))
+            {
+                check(b.neededCalls == 0, "Debug stops dispatch at the original fault");
+                continue;
+            }
             check(a.neededCalls == 1, "throwing object queried once");
             check(a.elapsed.size() == (inNeeded ? 0u : 1u), "exception callback count");
             if (neighbor)
@@ -855,7 +885,6 @@ void stress_test()
         psShedulerTarget = 10;
         clock_ms = 0;
         messages.clear();
-        fatal_errors.clear();
         for (u32 i = 0; i < 96; ++i)
         {
             npcs.emplace_back(i, seed);
@@ -928,6 +957,9 @@ void stress_test()
                       "registration membership mismatch seed=" + std::to_string(seed) + " frame=" + std::to_string(frame) + " id=" + std::to_string(npc.id) +
                           " registered=" + std::to_string(npc.registered) + " live=" + std::to_string(live.count(&npc)));
         }
+        for (auto& npc : npcs)
+            if (npc.shedule.b_registered || npc.shedule.b_retired)
+                instance.Unregister(&npc);
         instance.Destroy();
     }
     check(calls > 0 && neededCount > 0 && self_removals > 0 && other_removals > 0 && registrations > 0, "stress workload must exercise all interaction categories");
@@ -970,6 +1002,8 @@ int main(int argc, char** argv)
             ordering();
         else if (name == "compaction")
             compaction();
+        else if (name == "shutdown_ownership")
+            shutdown_ownership();
         else if (name == "exceptions")
             exceptions();
         else if (name == "liveness")

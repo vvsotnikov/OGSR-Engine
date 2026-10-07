@@ -7,6 +7,14 @@ float psShedulerTarget = 10.f;
 float psShedulerMax = 10.f;
 constexpr float psShedulerReaction = 1.f; // 0.1f;
 
+// Debug must preserve the original fault context for the debugger/unhandled
+// exception handler and minidump; only Release recovers from callback faults.
+#ifdef DEBUG
+constexpr long scheduler_exception_action = EXCEPTION_CONTINUE_SEARCH;
+#else
+constexpr long scheduler_exception_action = EXCEPTION_EXECUTE_HANDLER;
+#endif
+
 void CSheduler::Initialize() { m_processing_now = false; }
 
 void CSheduler::Destroy()
@@ -14,11 +22,12 @@ void CSheduler::Destroy()
     VERIFY(!m_processing_now);
     internal_Registration();
 
-    // Owners can outlive scheduler shutdown. Consume their remaining dispatch
-    // obligations without leaving stale membership flags or queued cleanup.
+    // Final engine shutdown expects every owner to be gone. Diagnose leaked
+    // registrations before defensively retiring any survivors in Release.
     const auto retire = [](const xr_vector<Item>& items) {
         for (const auto& item : items)
         {
+            VERIFY2(!item.Object, *item.scheduled_name);
             if (!item.Object)
                 continue;
             item.Object->shedule.b_registered = FALSE;
@@ -236,12 +245,9 @@ void CSheduler::ProcessStep()
             {
                 shed_need = curr.Object->shedule_Needed();
             }
-            __except (ExceptStackTrace("[CSheduler::ProcessStep] stack trace:\n"))
+            __except (ExceptStackTrace("[CSheduler::ProcessStep] stack trace:\n"), scheduler_exception_action)
             {
                 Msg("Scheduler tried to update object %s", *curr.scheduled_name);
-#ifdef DEBUG
-                FATAL("Exception in a scheduled callback; see the preceding stack trace.");
-#endif
                 if (Items[it - 1].Object)
                 {
                     curr.Object->shedule.b_registered = FALSE;
@@ -308,12 +314,9 @@ void CSheduler::ProcessStep()
 
                 //cnt++;
             }
-            __except (ExceptStackTrace("[CSheduler::ProcessStep2] stack trace:\n"))
+            __except (ExceptStackTrace("[CSheduler::ProcessStep2] stack trace:\n"), scheduler_exception_action)
             {
                 Msg("Scheduler tried to update object %s", *curr.scheduled_name);
-#ifdef DEBUG
-                FATAL("Exception in a scheduled callback; see the preceding stack trace.");
-#endif
                 if (m_current_step_obj)
                 {
                     m_current_step_obj->shedule.b_registered = FALSE;
