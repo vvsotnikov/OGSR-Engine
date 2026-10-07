@@ -29,6 +29,8 @@ protected:
     float m_switch_factor;
     float m_online_distance;
     float m_offline_distance;
+    bool m_whole_map_online = false;
+    bool m_distance_override_reported = false;
 
 private:
     OBJECT_VECTOR m_saved_chidren;
@@ -51,6 +53,7 @@ public:
     IC CALifeSwitchManager(xrServer* server, LPCSTR section);
     virtual ~CALifeSwitchManager();
     void switch_object(CSE_ALifeDynamicObject* object);
+    IC bool uses_distance_switching() const;
     IC float online_distance() const;
     IC float offline_distance() const;
     IC float switch_distance() const;

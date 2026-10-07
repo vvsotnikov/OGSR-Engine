@@ -21,7 +21,12 @@ IC CALifeSwitchManager::CALifeSwitchManager(xrServer* server, LPCSTR section) : 
     m_switch_distance = pSettings->r_float(section, "switch_distance");
     m_switch_factor = pSettings->r_float(section, "switch_factor");
     set_switch_distance(m_switch_distance);
+    m_whole_map_online = strstr(Core.Params, "-alife_whole_map") != nullptr;
+    if (m_whole_map_online)
+        Msg("* ALife policy: whole-map (EXPERIMENTAL); switch_distance remains configured but does not control switching");
 }
+
+IC bool CALifeSwitchManager::uses_distance_switching() const { return !m_whole_map_online; }
 
 IC float CALifeSwitchManager::online_distance() const { return (m_online_distance); }
 
@@ -31,6 +36,11 @@ IC float CALifeSwitchManager::switch_distance() const { return (m_switch_distanc
 
 IC void CALifeSwitchManager::set_switch_distance(float switch_distance)
 {
+    if (m_whole_map_online && !m_distance_override_reported)
+    {
+        Msg("* ALife whole-map policy: switch distance/factor changes are stored but do not control switching");
+        m_distance_override_reported = true;
+    }
     m_switch_distance = switch_distance;
     m_online_distance = m_switch_distance * (1.f - m_switch_factor);
     m_offline_distance = m_switch_distance * (1.f + m_switch_factor);

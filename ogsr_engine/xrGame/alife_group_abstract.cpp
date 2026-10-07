@@ -7,6 +7,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
+#include "alife_switch_policy.h"
 #include "xrServer_Objects_ALife.h"
 #include "ai_space.h"
 #include "alife_simulator.h"
@@ -125,84 +126,44 @@ void CSE_ALifeGroupAbstract::try_switch_online()
 
 void CSE_ALifeGroupAbstract::try_switch_offline()
 {
-    // checking if group is not empty
-    if (m_tpMembers.empty())
-        return;
-
-    // so, we have a group of objects
-    // therefore check all the group members if they are ready to switch offline
-
-    CSE_ALifeDynamicObject* I = smart_cast<CSE_ALifeDynamicObject*>(base());
-    VERIFY(I);
-
-    u32 i = 0, N = m_tpMembers.size();
-
-    // iterating on group members
-    for (; i < N; ++i)
+    struct Operations
     {
-        // casting group member to the abstract monster to get access to the Health property
-        CSE_ALifeMonsterAbstract* tpGroupMember = smart_cast<CSE_ALifeMonsterAbstract*>(ai().alife().objects().object(m_tpMembers[i]));
-        if (!tpGroupMember)
-            continue;
-
-        // check if monster is not dead
-        if (tpGroupMember->g_Alive())
+        CSE_ALifeGroupAbstract& group;
+        CSE_ALifeDynamicObject* object = nullptr;
+        unsigned size() const { return unsigned(group.m_tpMembers.size()); }
+        void bind_group() { object = smart_cast<CSE_ALifeDynamicObject*>(group.base()); VERIFY(object); }
+        CSE_ALifeMonsterAbstract* monster(unsigned i) const { return smart_cast<CSE_ALifeMonsterAbstract*>(ai().alife().objects().object(group.m_tpMembers[i])); }
+        bool alive(CSE_ALifeMonsterAbstract* member) const { return member->g_Alive(); }
+        bool can_online(CSE_ALifeMonsterAbstract* member) const { return member->can_switch_online(); }
+        bool can_offline(CSE_ALifeMonsterAbstract* member) const { return member->can_switch_offline(); }
+        bool can_online() const { return object->can_switch_online(); }
+        bool can_offline() const { return object->can_switch_offline(); }
+        bool distance_mode() const { return object->alife().uses_distance_switching(); }
+        float actor_distance(CSE_ALifeMonsterAbstract* member) const { return object->alife().graph().actor()->o_Position.distance_to(member->o_Position); }
+        float offline_limit() const { return object->alife().offline_distance(); }
+        void mark_dead(CSE_ALifeMonsterAbstract* member) { member->fHealth = 0.f; }
+        void set_direct_control(CSE_ALifeMonsterAbstract* member) { member->m_bDirectControl = true; }
+        void erase_member(unsigned i) { group.m_tpMembers.erase(group.m_tpMembers.begin() + i); }
+        void set_online(CSE_ALifeMonsterAbstract* member, bool value) { member->m_bOnline = value; }
+        void detach_if_attached(CSE_ALifeMonsterAbstract* member)
         {
-            // so, monster is not dead
-            // checking if the object is _not_ ready to switch offline
-            if (!tpGroupMember->can_switch_offline())
-                continue;
-
-            if (!tpGroupMember->can_switch_online())
-                // so, it is not ready, breaking a cycle, because we can't
-                // switch group offline since not all the group members are ready
-                // to switch offline
-                break;
-
-            if (I->alife().graph().actor()->o_Position.distance_to(tpGroupMember->o_Position) <= I->alife().offline_distance())
-                // so, it is not ready, breaking a cycle, because we can't
-                // switch group offline since not all the group members are ready
-                // to switch offline
-                break;
-
-            continue;
+            auto* item = smart_cast<CSE_ALifeInventoryItem*>(member);
+            if (item && item->attached())
+            {
+                auto* parent = ai().alife().objects().object(member->ID_Parent, true);
+                if (parent) parent->detach(item);
+            }
         }
-
-        // detach object from the group
-        tpGroupMember->fHealth = 0.f;
-        tpGroupMember->m_bDirectControl = true;
-        m_tpMembers.erase(m_tpMembers.begin() + i);
-        tpGroupMember->m_bOnline = false;
-        CSE_ALifeInventoryItem* item = smart_cast<CSE_ALifeInventoryItem*>(tpGroupMember);
-        if (item && item->attached())
+        void register_member(CSE_ALifeMonsterAbstract* member) { object->alife().register_object(member); }
+        void remove_graph_if_unattached(CSE_ALifeMonsterAbstract* member)
         {
-            CSE_ALifeDynamicObject* object = ai().alife().objects().object(tpGroupMember->ID_Parent, true);
-            if (object)
-                object->detach(item);
+            auto* item = smart_cast<CSE_ALifeInventoryItem*>(member);
+            if (!item || !item->attached()) object->alife().graph().remove(member, member->m_tGraphID, false);
         }
-        // store the __new separate object into the registries
-        I->alife().register_object(tpGroupMember);
-
-        // and remove it from the graph point but do not remove it from the current level map
-        CSE_ALifeInventoryItem* l_tpALifeInventoryItem = smart_cast<CSE_ALifeInventoryItem*>(tpGroupMember);
-        if (!l_tpALifeInventoryItem || !l_tpALifeInventoryItem->attached())
-            I->alife().graph().remove(tpGroupMember, tpGroupMember->m_tGraphID, false);
-
-        tpGroupMember->m_bOnline = true;
-        --m_wCount;
-        --i;
-        --N;
-    }
-
-    // checking if group is not empty
-    if (m_tpMembers.empty())
-        return;
-
-    if (!I->can_switch_offline())
-        return;
-
-    if (I->can_switch_online() || (i == N))
-        I->alife().switch_offline(I);
+        void decrement_count() { --group.m_wCount; }
+        void switch_offline() { object->alife().switch_offline(object); }
+    } operations{*this};
+    alife_switch_policy::legacy_group_offline(operations);
 }
 
 bool CSE_ALifeGroupAbstract::redundant() const { return (m_tpMembers.empty()); }

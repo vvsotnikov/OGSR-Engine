@@ -7,6 +7,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
+#include "alife_switch_policy.h"
 #include "xrServer_Objects_ALife_Monsters.h"
 #include "ai_space.h"
 #include "alife_simulator.h"
@@ -137,71 +138,48 @@ bool CSE_ALifeOnlineOfflineGroup::synchronize_location()
 
 void CSE_ALifeOnlineOfflineGroup::try_switch_online()
 {
-    if (m_members.empty())
-        return;
-
-    if (!can_switch_online())
-        return;
-
-    if (!can_switch_offline())
+    struct Operations
     {
-        //.
-        o_Position = alife().graph().actor()->o_Position;
-
-        inherited1::try_switch_online();
-        return;
-    }
-
-    MEMBERS::iterator I = m_members.begin();
-    MEMBERS::iterator E = m_members.end();
-    for (; I != E; ++I)
-    {
-        VERIFY3((*I).second->g_Alive(), "Incorrect situation : some of the OnlineOffline group members is dead", (*I).second->name_replace());
-        VERIFY3((*I).second->can_switch_online(), "Incorrect situation : some of the OnlineOffline group members cannot be switched online due to their personal properties",
-                (*I).second->name_replace());
-        VERIFY3((*I).second->can_switch_offline(), "Incorrect situation : some of the OnlineOffline group members cannot be switched online due to their personal properties",
-                (*I).second->name_replace());
-
-        if (alife().graph().actor()->o_Position.distance_to((*I).second->o_Position) > alife().offline_distance())
-            continue;
-
-        //.
-        o_Position = (*I).second->o_Position;
-
-        inherited1::try_switch_online();
-        return;
-    }
+        CSE_ALifeOnlineOfflineGroup& group;
+        const MEMBERS& members() const { return group.m_members; }
+        bool can_online() const { return group.can_switch_online(); }
+        bool can_offline() const { return group.can_switch_offline(); }
+        bool distance_mode() const { return group.alife().uses_distance_switching(); }
+        void select_actor_position() { group.o_Position = group.alife().graph().actor()->o_Position; }
+        void select_member_position(const MEMBERS::value_type& member) { group.o_Position = member.second->o_Position; }
+        void dynamic_online() { group.inherited1::try_switch_online(); }
+        float actor_distance(const MEMBERS::value_type& member) const { return group.alife().graph().actor()->o_Position.distance_to(member.second->o_Position); }
+        float offline_limit() const { return group.alife().offline_distance(); }
+        void verify_online_member(const MEMBERS::value_type& member) const
+        {
+            VERIFY3(member.second->g_Alive(), "Incorrect situation : some of the OnlineOffline group members is dead", member.second->name_replace());
+            VERIFY3(member.second->can_switch_online(), "Incorrect situation : some of the OnlineOffline group members cannot be switched online due to their personal properties", member.second->name_replace());
+            VERIFY3(member.second->can_switch_offline(), "Incorrect situation : some of the OnlineOffline group members cannot be switched online due to their personal properties", member.second->name_replace());
+        }
+    } operations{*this};
+    alife_switch_policy::online_group_online(operations);
 }
 
 void CSE_ALifeOnlineOfflineGroup::try_switch_offline()
 {
-    if (m_members.empty())
-        return;
-
-    if (!can_switch_offline())
-        return;
-
-    if (!can_switch_online())
+    struct Operations
     {
-        alife().switch_offline(this);
-        return;
-    }
-
-    MEMBERS::iterator I = m_members.begin();
-    MEMBERS::iterator E = m_members.end();
-    for (; I != E; ++I)
-    {
-        VERIFY3((*I).second->g_Alive(), "Incorrect situation : some of the OnlineOffline group members is dead", (*I).second->name_replace());
-        VERIFY3((*I).second->can_switch_offline(), "Incorrect situation : some of the OnlineOffline group members cannot be switched online due to their personal properties",
-                (*I).second->name_replace());
-        VERIFY3((*I).second->can_switch_online(), "Incorrect situation : some of the OnlineOffline group members cannot be switched online due to their personal properties",
-                (*I).second->name_replace());
-
-        if (alife().graph().actor()->o_Position.distance_to((*I).second->o_Position) <= alife().offline_distance())
-            return;
-    }
-
-    alife().switch_offline(this);
+        CSE_ALifeOnlineOfflineGroup& group;
+        const MEMBERS& members() const { return group.m_members; }
+        bool can_online() const { return group.can_switch_online(); }
+        bool can_offline() const { return group.can_switch_offline(); }
+        bool distance_mode() const { return group.alife().uses_distance_switching(); }
+        void switch_offline() { group.alife().switch_offline(&group); }
+        float actor_distance(const MEMBERS::value_type& member) const { return group.alife().graph().actor()->o_Position.distance_to(member.second->o_Position); }
+        float offline_limit() const { return group.alife().offline_distance(); }
+        void verify_offline_member(const MEMBERS::value_type& member) const
+        {
+            VERIFY3(member.second->g_Alive(), "Incorrect situation : some of the OnlineOffline group members is dead", member.second->name_replace());
+            VERIFY3(member.second->can_switch_offline(), "Incorrect situation : some of the OnlineOffline group members cannot be switched online due to their personal properties", member.second->name_replace());
+            VERIFY3(member.second->can_switch_online(), "Incorrect situation : some of the OnlineOffline group members cannot be switched online due to their personal properties", member.second->name_replace());
+        }
+    } operations{*this};
+    alife_switch_policy::online_group_offline(operations);
 }
 
 void CSE_ALifeOnlineOfflineGroup::switch_online()
