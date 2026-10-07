@@ -28,3 +28,4 @@ add_test(NAME policy-session-preparation COMMAND "${POWERSHELL}" -NoProfile -Fil
 add_test(NAME policy-checkout-metadata COMMAND "${POWERSHELL}" -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/runtime/Test-CheckoutMetadata.ps1")
 add_test(NAME policy-messages COMMAND "${POWERSHELL}" -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/runtime/Test-PolicyMessages.ps1")
 add_test(NAME policy-group-preparation COMMAND "${POWERSHELL}" -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/runtime/Test-GroupRunner.ps1")
+add_test(NAME policy-legacy-preparation COMMAND "${POWERSHELL}" -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/runtime/Test-LegacyRunner.ps1")

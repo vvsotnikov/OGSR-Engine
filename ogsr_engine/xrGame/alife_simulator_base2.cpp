@@ -69,6 +69,10 @@ void CALifeSimulatorBase::unregister_object(CSE_ALifeDynamicObject* object, bool
     smart_terrains().remove(object);
     groups().remove(object);
 
+    // A legacy group's indirect members have no independent graph/schedule entry.
+    if (!object->m_bDirectControl)
+        return;
+
     if (!object->m_bOnline)
     {
         graph().remove(object, object->m_tGraphID);

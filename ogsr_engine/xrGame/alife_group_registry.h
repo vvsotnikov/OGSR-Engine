@@ -12,6 +12,7 @@
 
 class CSE_ALifeOnlineOfflineGroup;
 class CSE_ALifeDynamicObject;
+class CSE_ALifeGroupAbstract;
 
 class CALifeGroupRegistry
 {
@@ -21,6 +22,7 @@ public:
 
 protected:
     OBJECTS m_objects;
+    xr_map<ALife::_OBJECT_ID, CSE_ALifeGroupAbstract*> m_legacy_objects;
 
 public:
     virtual ~CALifeGroupRegistry();

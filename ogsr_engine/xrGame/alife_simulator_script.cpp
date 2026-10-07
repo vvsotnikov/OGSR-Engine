@@ -252,7 +252,9 @@ void CALifeSimulator__release(CALifeSimulator* self, CSE_Abstract* object, bool)
     R_ASSERT(object);
     CSE_ALifeObject* alife_object = smart_cast<CSE_ALifeObject*>(object);
     THROW(alife_object);
-    if (!alife_object->m_bOnline)
+    // Legacy owners have no client/server spawn instance, even when their
+    // members are online. A GE_DESTROY packet cannot release that owner.
+    if (!alife_object->m_bOnline || smart_cast<CSE_ALifeGroupAbstract*>(object))
     {
         self->release(object, true);
         return;

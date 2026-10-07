@@ -2,6 +2,8 @@ local function dofile(path) return assert(loadfile(path))() end
 tostring = function(value) assert(type(value) == "boolean"); return value and "true" or "false" end
 local root = assert(...)
 assert(loadfile(root .. "/GroupDriver.lua"))
+assert(loadfile(root .. "/LegacyGroupDriver.lua"))
+assert(loadfile(root .. "/LegacyGroupFixture.lua"))
 dofile(root .. "/Test-SpawnQueue.lua")(dofile(root .. "/SpawnQueue.lua"))
 local clock, object, selected = 0, nil, nil
 local function position(distance)
