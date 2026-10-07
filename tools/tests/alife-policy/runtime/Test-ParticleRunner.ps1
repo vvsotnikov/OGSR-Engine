@@ -35,12 +35,12 @@ try {
     $originals = @('seed/savedgames/bar_center.sav', 'seed/user_ogsr.ltx', 'fsgame.ltx')
     $hashes = @($originals | ForEach-Object { (Get-FileHash "$root/$_").Hash })
     $runner = "$PSScriptRoot/Run-ParticlePoolValidation.ps1"
-    $args = @{InstallRoot=$root; Package='bin_fixture'; SeedAppData='seed'; TimeoutSeconds=900}
-    $session = & $runner @args -PrepareOnly
+    $runArgs = @{InstallRoot=$root; Package='bin_fixture'; SeedAppData='seed'; TimeoutSeconds=900}
+    $session = & $runner @runArgs -PrepareOnly
     $meta = Get-Content "$session/session.json" -Raw | ConvertFrom-Json
     if ($meta.status -ne 'particle-prepared' -or $meta.PSObject.Properties['gamePid'] -or
         $meta.timeoutSeconds -ne 900 -or $meta.build.configuration -ne 'Debug' -or
-        $meta.engineSha256 -ne $hash -or !$meta.arguments.Contains('-alife_whole_map')) {
+        $meta.engineSha256 -ne $hash -or !$meta.arguments.Contains('-alife_whole_map') -or !$meta.arguments.Contains('-particle_pool_probe')) {
         throw 'Prepared session metadata is incorrect'
     }
     if ((Get-FileHash "$session/appdata/RegularDriver.lua").Hash -ne
@@ -53,15 +53,16 @@ try {
         @{configuration='Debug'; tracyEnabled=$false; sha256='invalid'})) {
         $invalid | ConvertTo-Json | Set-Content "$root/bin_fixture/build.json"
         $rejected = $false
-        try { & $runner @args -PrepareOnly | Out-Null } catch {
-            if ($_.Exception.Message -ne 'Expected a matching full-Debug package manifest') { throw }
+        try { & $runner @runArgs -PrepareOnly | Out-Null } catch {
+            if ($_.Exception.Message -notin @('Validation requires a Debug package with tracyEnabled=false',
+                'Validation package executable hash does not match build.json')) { throw }
             $rejected = $true
         }
         if (!$rejected) { throw 'Accepted invalid package manifest' }
     }
     $manifest | ConvertTo-Json | Set-Content "$root/bin_fixture/build.json"
     $rejected = $false
-    try { & $runner @args | Out-Null } catch {
+    try { & $runner @runArgs | Out-Null } catch {
         if ($_.Exception.Message -ne 'Fixture prevented process launch') { throw }
         $rejected = $true
     }
@@ -77,3 +78,4 @@ try {
         (Split-Path -Leaf $root) -notmatch '^ogsr-particle-[0-9a-f-]{36}$') { throw 'Unexpected fixture path' }
     Remove-Item -LiteralPath $root -Recurse
 }
+

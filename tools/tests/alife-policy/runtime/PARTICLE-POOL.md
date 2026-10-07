@@ -18,3 +18,7 @@ failure; it does not cover every particle definition.
 CTest checks session preparation, failure recording, evidence rejection and Lua
 syntax. It does not launch the game. `-PrepareOnly` is not runtime evidence.
 `-TimeoutSeconds` changes the native run's 600-second watchdog for slower machines.
+
+This probe lives beside the shared session/bootstrap helpers it uses. The runner
+sets `-particle_pool_probe` to enable the Debug reuse log; ordinary Debug gameplay
+does not emit it. The child-list assertion remains active in every Debug build.

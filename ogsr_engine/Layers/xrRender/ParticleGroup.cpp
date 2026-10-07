@@ -565,7 +565,8 @@ void CParticleGroup::Play()
     {
         for (const auto& item : items)
             VERIFY(item._children_related.empty() && item._children_free.empty());
-        Msg("[particle pool] reused-after-child-reset group=%s", m_Def->Name());
+        if (strstr(Core.Params, "-particle_pool_probe"))
+            Msg("[particle pool] reused-after-child-reset group=%s", m_Def->Name());
         m_departedWithChildren = false;
     }
 #endif
