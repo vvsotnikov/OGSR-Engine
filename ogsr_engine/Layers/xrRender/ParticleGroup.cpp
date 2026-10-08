@@ -350,7 +350,7 @@ void CParticleGroup::SItem::OnFrame(u32 u_dt, const CPGDef::SEffect& def, Fbox& 
                 PAPI::Particle* particles;
                 u32 p_cnt;
                 PAPI::ParticleManager()->GetParticles(E->GetHandleEffect(), particles, p_cnt);
-                VERIFY(p_cnt == _children_related.size());
+                VERIFY2(p_cnt == _children_related.size(), make_string("effect=%s particles=%u related=%u", def.m_EffectName.c_str(), p_cnt, u32(_children_related.size())));
                 if (p_cnt)
                 {
                     for (u32 i = 0; i < p_cnt; i++)
@@ -560,6 +560,16 @@ BOOL CParticleGroup::Compile(CPGDef* def)
 
 void CParticleGroup::Play()
 {
+#ifdef DEBUG
+    if (m_departedWithChildren)
+    {
+        for (const auto& item : items)
+            VERIFY(item._children_related.empty() && item._children_free.empty());
+        if (strstr(Core.Params, "-particle_pool_probe"))
+            Msg("[particle pool] reused-after-child-reset group=%s", m_Def->Name());
+        m_departedWithChildren = false;
+    }
+#endif
     m_CurrentTime = 0;
     m_RT_Flags.set(flRT_DefferedStop, FALSE);
     m_RT_Flags.set(flRT_Playing, TRUE);
@@ -608,8 +618,18 @@ void CParticleGroup::Depart()
     m_InitialPosition.set(0, 0, 0);
     vis.clear();
 
-    for (const auto& item : items)
+    for (auto& item : items)
+    {
+        // Pooled groups keep their compiled emitters, but must not retain the
+        // related/free children of the previous playback after particle reset.
+        // ModelPool calls Depart outside rendering and before taking its pool
+        // lock, so child model_Delete calls can return their visuals to the pool.
+#ifdef DEBUG
+        m_departedWithChildren |= !item._children_related.empty() || !item._children_free.empty();
+#endif
+        item.Stop(FALSE);
         item._effect->Depart();
+    }
 }
 
 void CParticleGroup::SetHudMode(BOOL b)
