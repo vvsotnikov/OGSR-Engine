@@ -26,8 +26,9 @@ initial unlimited switching budget is recorded separately in each full capture.
 
 Package identity: Release source tree `9179048c2cf2703887231ad693e457642a1107d4`;
 executable SHA-256 and seed SHA-256 are repeated in `runs.csv`. The save is the existing
-`bar_center` seed. Only reporting and the dog-runner flag changed after packaging;
-the measured engine source stayed fixed. Raw captures/logs and proprietary saves are
+`bar_center` seed. The measured source retains one redundant synchronous eligibility marker removed
+after review; its timings are deliberately not reported as eligibility delay. The
+retained dataset describes that identified package, not a rebuilt binary. Raw captures/logs and proprietary saves are
 retained locally, not committed. These tables are shareable derived evidence, not a
 substitute for the raw event stream when investigating an individual ID.
 

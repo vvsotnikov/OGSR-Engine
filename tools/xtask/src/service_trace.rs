@@ -5,7 +5,6 @@ type Key = (u16, u64);
 struct Object {
     member: Option<(u64, u64)>,
     last: Option<(u64, u64)>,
-    observed: Option<u64>,
     online: Option<u64>,
     permission: Option<u64>,
     flags: u32,
@@ -47,7 +46,6 @@ fn censor(r: &mut Report, key: Key, o: &Object, now: u64, reason: &str) {
         ));
     }
     for (kind, start) in [
-        ("observed_to_online", o.observed),
         ("online_to_client", o.online),
         ("permission_to_online", o.permission),
     ] {
@@ -269,19 +267,15 @@ fn read_window(text: &str, window: Option<(u64, u64)>) -> Result<Report, String>
                 }
                 o.last = Some((now, r.updates));
             }
-            "eligible_observed" => {
-                o.observed.get_or_insert(now);
-                o.rejection = "";
-            }
+            // Older captures include this synchronous call-boundary event. It
+            // adds no eligibility-wait measurement, so accept it without a metric.
+            "eligible_observed" => {}
             "online" => {
                 if let Some(start) = o.permission.take() {
                     if o.flags & 4 != 0 {
                         sample(&mut r, "creature_permission_to_online_us", now - start, key);
                     }
                     sample(&mut r, "permission_to_online_us", now - start, key);
-                }
-                if let Some(start) = o.observed.take() {
-                    sample(&mut r, "observed_to_online_us", now - start, key);
                 }
                 if o.online.is_some() {
                     return Err("Online transition before previous activation finished".into());
@@ -312,14 +306,12 @@ fn read_window(text: &str, window: Option<(u64, u64)>) -> Result<Report, String>
                         ));
                     }
                 }
-                o.observed = None;
             }
             "leave" => {
                 censor(&mut r, key, o, now, "left_switch_registry");
                 o.permission = None;
                 o.member = None;
                 o.last = None;
-                o.observed = None;
                 o.online = None;
             }
             "remove" => {
@@ -337,12 +329,16 @@ fn read_window(text: &str, window: Option<(u64, u64)>) -> Result<Report, String>
 impl Report {
     pub fn render(&mut self) -> String {
         let mut out = format!(
-            "duration_us={} updates={} dropped={} unmatched={} complete={}\n",
+            "duration_us={} updates={} dropped={} unmatched={} capture_integrity={}\n",
             self.duration_us,
             self.updates,
             self.dropped,
             self.unmatched,
-            self.dropped == 0
+            if self.dropped == 0 {
+                "ok"
+            } else {
+                "dropped_records"
+            }
         );
         if let Some((start, end)) = self.window {
             writeln!(
@@ -431,7 +427,7 @@ mod tests {
     #[test]
     fn activation_completion_and_censoring() {
         let r=read(&capture("0,register,3,1,0,12\n10,eligible_observed,3,1,0,0\n12,online,3,1,0,0\n40,client,3,1,0,0\n50,offline,3,1,0,0\n60,online,3,1,0,0\n100,end,65535,0,0,0\n")).unwrap();
-        assert_eq!(r.samples["observed_to_online_us"][0].0, 2);
+        assert!(!r.samples.contains_key("observed_to_online_us"));
         assert_eq!(r.samples["online_to_client_us"][0].0, 28);
         assert!(r.waits[0].contains("online_to_client, 40, capture_end"));
     }
@@ -445,13 +441,13 @@ mod tests {
         assert!(read(&capture("0,register,1,1,0,0\n")).is_err());
         assert!(read(&capture("10,register,1,1,0,0\n5,end,65535,0,0,0\n")).is_err());
         let mut r = read(&capture("10,end,65535,0,12,0\n")).unwrap();
-        assert!(r.render().contains("complete=false"));
+        assert!(r.render().contains("capture_integrity=dropped_records"));
     }
     #[test]
     fn permission_trigger_and_revocation_are_not_observation_latency() {
         let r=read(&capture("0,register,1,1,0,60\n1,permission_on,1,1,0,60\n2,permission_on,1,1,0,60\n10,eligible_observed,1,1,0,0\n12,online,1,1,0,0\n14,client,1,1,0,0\n20,offline,1,1,0,0\n21,permission_on,1,1,0,60\n30,permission_off,1,1,0,44\n40,end,65535,0,0,0\n")).unwrap();
         assert_eq!(r.samples["permission_to_online_us"][0].0, 11);
-        assert_eq!(r.samples["observed_to_online_us"][0].0, 2);
+        assert!(!r.samples.contains_key("observed_to_online_us"));
         assert!(r.waits[0].contains("permission_to_online, 9, permission_revoked"));
     }
     #[test]

@@ -4,7 +4,6 @@ r1-whole-on,full,creature_online_to_client_us,500,1713220,4020308,4291674,435872
 r1-whole-on,full,creature_revisit_us,1693497,22849,35078,43022,2088085,6274,1
 r1-whole-on,full,evaluation_update_gap,3347648,2,4,4,13,6438,1
 r1-whole-on,full,first_visit_us,826,387332,411690,411802,425778,0,1
-r1-whole-on,full,observed_to_online_us,781,0,1,1,1,34758,1
 r1-whole-on,full,online_to_client_us,781,1785498,3845404,4253628,4358726,34765,1
 r1-whole-on,full,revisit_us,3346822,20612,34034,41722,2088085,6274,1
 r1-whole-on,warm,creature_revisit_us,934740,24444,35788,42334,62950,32430,1
@@ -16,7 +15,6 @@ r1-distance-on,full,creature_online_to_client_us,132,484103,1629640,1706365,1763
 r1-distance-on,full,creature_revisit_us,2931972,12323,17161,19792,1840123,19209,1
 r1-distance-on,full,evaluation_update_gap,5192325,3,4,4,6,31115,1
 r1-distance-on,full,first_visit_us,832,345218,363897,363932,373387,0,1
-r1-distance-on,full,observed_to_online_us,408,0,1,1,1,32236,1
 r1-distance-on,full,online_to_client_us,408,1635300,1726192,1735972,1763133,33280,1
 r1-distance-on,full,revisit_us,5191493,12044,16906,19620,1840123,19209,1
 r1-distance-on,warm,creature_first_visit_us,5,4571,12203,12203,12203,29831,1
@@ -29,7 +27,6 @@ r2-distance-on,full,creature_online_to_client_us,132,490444,1611823,1687879,1745
 r2-distance-on,full,creature_revisit_us,2906130,12390,17387,20078,1769368,6185,1
 r2-distance-on,full,evaluation_update_gap,5146813,3,4,4,6,32147,1
 r2-distance-on,full,first_visit_us,832,351260,369805,369834,377263,0,1
-r2-distance-on,full,observed_to_online_us,408,0,0,1,1,32512,1
 r2-distance-on,full,online_to_client_us,408,1615794,1702863,1710020,1745112,33280,1
 r2-distance-on,full,revisit_us,5145981,12099,17100,19867,1769368,6185,1
 r2-distance-on,warm,creature_first_visit_us,5,15338,15341,15341,15341,5764,1
@@ -42,7 +39,6 @@ r2-whole-on,full,creature_online_to_client_us,500,1700741,4063799,4348925,441692
 r2-whole-on,full,creature_revisit_us,1729411,21948,34969,43855,2023815,7474,1
 r2-whole-on,full,evaluation_update_gap,3405881,3,4,4,13,31462,1
 r2-whole-on,full,first_visit_us,822,342996,359502,359552,368478,0,1
-r2-whole-on,full,observed_to_online_us,781,0,1,1,1,34781,1
 r2-whole-on,full,online_to_client_us,781,1723792,3884464,4319039,4416929,34805,1
 r2-whole-on,full,revisit_us,3405059,19604,33783,42716,2023884,6491,1
 r2-whole-on,warm,creature_revisit_us,949712,23814,36145,43346,65253,7474,1

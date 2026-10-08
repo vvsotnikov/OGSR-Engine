@@ -19,9 +19,10 @@ for frame percentiles by scenario stage. Keep the original capture alongside the
   First-visit time starts at registry insertion, not global object registration.
 - `visit` is entry to `switch_object`, before redundant-object/attachment/location
   checks. It measures switching service, not a successful switch or client AI update.
-- `eligible_observed` is the dynamic object's existing decision to switch online.
-  It is observed during evaluation: its delay excludes the earlier wait for evaluation.
-  Group-specific decisions that bypass this path have no such sample.
+- Eligibility first noticed by the switching evaluator is not an independent
+  eligibility timestamp. The reader accepts the older `eligible_observed` event
+  without producing a latency metric: it immediately preceded the synchronous
+  online call and measured no meaningful eligibility wait.
 - `permission_on` is recorded after the script-facing permission setter returns.
   Permission-to-online is full eligibility delay only in a controlled fixture that
   establishes the other conditions (current map, detached, matching configuration,
@@ -50,7 +51,8 @@ then counts every dropped event if its writer cannot keep up. A writer thread fo
 and writes batches outside switching callbacks; no file I/O occurs inside the switching budget. Disabled event sites perform a gate check without
 clock reads, allocations or scans. Enabled sites serialize on a mutex; this cost is
 inside the engine's existing switching budget and must be measured with matched runs.
-Final draining and the end record occur before simulator teardown. A crash has no
+The writer wakes at 4,096 queued events; smaller batches wait until that threshold
+or capture end. Final draining and the end record occur before simulator teardown. A crash has no
 completed export; never treat its absence as zero latency. The reader fails on missing
 end records, a footer row count that differs from the parsed record count, malformed data or clock regression and returns failure for dropped records.
 
@@ -69,10 +71,16 @@ With `--frames`, service samples are selected by completion time between the fir
 last recorded ALife update clocks in stage 4. Frame numbers and game milliseconds must
 match. Pre-window history remains available: waits begun earlier are not reset or hidden.
 The report gives the actual clock bounds, and right-censors pending waits at window end.
-A complete capture is not necessarily a successful scenario: also require the runner
+`capture_integrity=ok` certifies format/clock/footer integrity with no dropped events,
+not successful event pairing or gameplay. Unmatched counts remain separate: also require the runner
 to acknowledge completion in session.json and retain the engine log.
 
 The recorder stores event-kind pointers until the writer drains them; call sites must
 use static-lifetime literals from the schema vocabulary. It never stores object pointers.
 
 The first matched Bar results are in [the 2026-10-08 report](alife-service-2026-10-08.md).
+
+The offline reader retains samples for exact nearest-rank quantiles and worst-object
+identities. Its memory use grows with capture length; the producer buffer bound does
+not apply to analysis. Frame recording likewise buffers the bounded runtime fixture's
+frames until completion; it is not an unlimited-duration frame recorder.

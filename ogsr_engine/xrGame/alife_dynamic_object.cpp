@@ -153,7 +153,7 @@ struct DynamicSwitchOperations
         }
 #endif
     }
-    void switch_online() { alife_service_trace::event("eligible_observed", object.ID); object.alife().switch_online(&object); }
+    void switch_online() { object.alife().switch_online(&object); }
     void switch_offline() { object.alife().switch_offline(&object); }
 };
 }
