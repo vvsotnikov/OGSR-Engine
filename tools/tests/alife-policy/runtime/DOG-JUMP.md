@@ -11,6 +11,17 @@ Missing required entries are content errors in every build, never a request to
 use an arbitrary first attack. Multiple hit events for one motion retain their
 existing ordering; name-only jump lookup selects its first configured event.
 
+Mod dog sections must provide a jump-motion hit row, the vanilla `stand_attack_0`
+row, or an explicit `jump_attack_params_anim` naming a valid row. Content relying
+on the old arbitrary-first-row fallback needs that explicit key. Other monsters'
+required hit rows must also exist; missing data is rejected in Release as well.
+
+An attack row also registers a timed melee event for its motion. A jump-motion
+row can therefore produce that event's hit in addition to the jump collision
+hit. This existing event behavior is unchanged and is not counted by this probe.
+To select damage without adding a jump-motion event, use `jump_attack_params_anim`
+with an existing bite row instead.
+
 Use an isolated installation prepared by `Prepare-RegularValidation.ps1`, an
 original Bar save, and a Debug or Release package with its validated `build.json`:
 
