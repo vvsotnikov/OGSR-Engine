@@ -2,8 +2,9 @@
 
 Whole-map mode kept server and client representations for all 400 added characters.
 It roughly doubled warmed frame time compared with stock distance mode, which kept
-only 60–62 of them online. The largest completed creature switching revisit gap was
-65.253 ms; server-online to successful client `net_Spawn` reached 4.417 seconds during
+only 59–62 of them online. The largest completed whole-map creature switching revisit gap was
+64.876 ms; a distance-mode outlier reached 147.808 ms. Server-online to successful
+client `net_Spawn` reached 4.497 seconds during
 loading/creation. The latter is the next operation to investigate, not evidence that
 switching evaluations or NPC decisions themselves took four seconds.
 
@@ -15,7 +16,7 @@ used the same Bar save, package, 400 positions, unbounded server creation burst,
 of each policy/tracing combination, with order reversed between repetitions.
 No builds ran during the captures. Filesystem caches were not flushed. This is a
 stationary density fixture with active game AI, not a player route or deterministic
-replay: whole-map warmed living counts ranged from 394 to 400; all 400 representations
+replay: whole-map warmed living counts ranged from 395 to 400; all 400 representations
 remained present, including corpses. Distance-mode living count stayed at 400.
 
 Hardware: Ryzen 7 5800X (8 cores/16 threads), 96 GiB RAM, RTX 4090. Effective settings:
@@ -24,11 +25,11 @@ Hardware: Ryzen 7 5800X (8 cores/16 threads), 96 GiB RAM, RTX 4090. Effective se
 policy was used without the fixture's artificial 20-metre distance control. The
 initial unlimited switching budget is recorded separately in each full capture.
 
-Package identity: Release source tree `9179048c2cf2703887231ad693e457642a1107d4`;
+Package identity: Release source tree `a126678cdd435c52842c6b494c33ae04eb8f29c1`;
 executable SHA-256 and seed SHA-256 are repeated in `runs.csv`. The save is the existing
-`bar_center` seed. The measured source retains one redundant synchronous eligibility marker removed
-after review; its timings are deliberately not reported as eligibility delay. The
-retained dataset describes that identified package, not a rebuilt binary. Raw captures/logs and proprietary saves are
+`bar_center` seed. The comparisons were repeated after removing the redundant synchronous eligibility
+marker. Subsequent edits only regenerate/report the captured results; the engine
+source is unchanged. Raw captures/logs and proprietary saves are
 retained locally, not committed. These tables are shareable derived evidence, not a
 substitute for the raw event stream when investigating an individual ID.
 
@@ -39,10 +40,10 @@ paired values are repetitions, not confidence intervals.
 
 | Policy / service tracing | Frame p50 | Frame p99 | Largest frame |
 |---|---:|---:|---:|
-| Distance / off | 4.135 / 4.159 | 6.879 / 6.937 | 9.213 / 7.945 |
-| Distance / on | 4.123 / 4.136 | 7.022 / 6.983 | 10.663 / 8.944 |
-| Whole-map / off | 7.840 / 7.743 | 17.500 / 17.715 | 20.682 / 21.866 |
-| Whole-map / on | 7.987 / 7.823 | 18.070 / 17.685 | 23.351 / 21.508 |
+| Distance / off | 4.204 / 4.165 | 7.189 / 7.427 | 11.514 / 11.165 |
+| Distance / on | 4.196 / 4.335 | 7.340 / 7.980 | 9.351 / 52.007 |
+| Whole-map / off | 8.288 / 8.049 | 18.422 / 18.354 | 21.802 / 24.047 |
+| Whole-map / on | 8.521 / 7.809 | 18.898 / 18.117 | 23.193 / 26.855 |
 
 The plot uses the published [quantiles](alife-service-2026-10-08/frame-quantiles.csv);
 `plot.py` regenerates it with matplotlib (3.11.2 used here).
@@ -51,14 +52,14 @@ The plot uses the published [quantiles](alife-service-2026-10-08/frame-quantiles
 
 | Policy / tracing on | Creature revisit samples | Revisit p50 | Revisit p99 | Completed maximum | Largest unfinished revisit age |
 |---|---:|---:|---:|---:|---:|
-| Distance r1 | 1,827,302 | 12.769 | 19.747 | 27.026 | 23.786 |
-| Distance r2 | 1,820,198 | 12.798 | 19.597 | 27.186 | 26.779 |
-| Whole-map r1 | 934,740 | 24.444 | 42.334 | 62.950 | 78.330 |
-| Whole-map r2 | 949,712 | 23.814 | 43.346 | 65.253 | 35.790 |
+| Distance r1 | 1,746,837 | 13.280 | 20.424 | 26.553 | 25.706 |
+| Distance r2 | 1,589,981 | 14.403 | 24.839 | 147.808 | 28.227 |
+| Whole-map r1 | 830,717 | 26.854 | 47.584 | 64.876 | 83.547 |
+| Whole-map r2 | 952,040 | 23.790 | 42.775 | 62.661 | 43.470 |
 
 These are switching evaluations, **not tactical AI update/reaction times**. Creature
 classification includes the actor and corpses. The all-object evaluation gap is
-3 updates at the median and 4 at p99 in every run; lower frame throughput in whole-map
+3 updates at the median and 4–5 at p99; lower frame throughput in whole-map
 mode corresponds to longer wall-clock revisits. This does not isolate the cause of
 that frame cost. Revisit samples are pooled events, so frequently serviced objects
 contribute more samples; worst IDs and unfinished waits are retained separately.
@@ -72,35 +73,47 @@ full loading/creation windows, are in [metrics.csv](alife-service-2026-10-08/met
 Attached non-creature items can have an unfinished first visit without being eligible
 for independent switching. Do not count them as starved NPCs.
 
-Tracing increased whole-map median frame time by 1.0–1.9% in these pairs. Distance
-median changes were slightly negative; p99 generally increased. Two repetitions
-with nondeterministic AI cannot establish a small universal overhead bound. Frame
-recording was enabled on both sides. Dedicated writer CPU time and process memory
+Paired whole-map median differences (tracing on relative to off) were +2.8% and
+−3.0%; distance differences were −0.2% and +4.1%. Two repetitions with
+nondeterministic AI and these run-to-run differences cannot isolate a small tracing
+effect or establish a universal overhead bound. Frame recording was enabled on both
+sides. Dedicated writer CPU time and process memory
 were not measured separately. Enabled trace locking/timestamping consumes part of
 the existing switching budget, so these revisit values include observer cost.
+
+The distance r2 maximum is retained, not trimmed as noise. Creature 33280/1 waited
+147.808 ms from trace time 60.179432 to 60.327240 seconds, spanning four updates.
+Frames 12705–12708 took 29.441, 34.161, 32.923 and 51.563 ms. The
+[correlated excerpt](alife-service-2026-10-08/distance-outlier.json) includes the
+neighboring frame/clock rows. This shows a wall-time delay despite a four-update gap;
+it does not attribute the slow frames to switching, rendering, tracing or the OS.
+The engine log records no save in that interval. Another frame reached 52.007 ms.
 
 ## Activation and capture integrity
 
 The full whole-map runs each contain 500 completed creature client activations:
-server-online to successful `net_Spawn` p99 is 4.292 / 4.349 seconds and maximum is
-4.359 / 4.417 seconds. Loading and the creation burst are included; there are no such
+server-online to successful `net_Spawn` p99 is 4.415 / 4.190 seconds and maximum is
+4.497 / 4.251 seconds. Loading and the creation burst are included; there are no such
 activation samples in the warmed whole-map windows. No unfinished creature client
 activation remains at the warmed boundary. Completion precedes callbacks and
 ownership notification and does not assert that rendering or AI has run.
 
 All four compared traces passed footer-count/clock validation with zero dropped
-events. Whole-map traces contain 3,642,205 / 3,704,215 records (112 / 114 MB decimal);
-distance traces contain 7,403,614 / 7,337,652 (243 / 241 MB). More frames produce more
+events. Whole-map traces contain 3,428,704 / 3,701,470 records (105 / 114 MB decimal);
+distance traces contain 7,090,391 / 6,475,815 (233 / 212 MB). More frames produce more
 visits and therefore larger files even with fewer online characters. Full-capture
-unpaired registered client events were all non-creatures (3,614 / 3,634 whole-map,
-1,174 / 1,161 distance). There were also 451 / 451 and 102 / 102 unregistered client
+unpaired registered client events were all non-creatures (3,603 / 3,636 whole-map,
+1,180 / 1,168 distance). There were also 451 / 451 and 102 / 102 unregistered client
 events respectively; their class cannot be inferred from this trace. They remain
 reported as unmatched and are not included in paired activation distributions.
 
-Additional completed native checks, all with valid zero-drop traces:
+Additional completed native checks, all with valid zero-drop traces. The permission
+fixture was repeated with the comparison package. Reload, roundtrip and combat
+checks used the preceding package with the redundant eligibility marker still
+present; their lifecycle/gameplay implementation is unchanged by its removal:
 
 - Whole-map permission fixture: two controlled permission-to-online samples,
-  488 and 573 microseconds. These small-workload permission tests do not establish
+  238 and 668 microseconds. These small-workload permission tests do not establish
   distance-crossing latency under density.
 - Fresh-process reload of the saved dense run: all 400 saved IDs verified.
 - Bar → Garbage → Bar: three separate simulator capture files, with policy checks
