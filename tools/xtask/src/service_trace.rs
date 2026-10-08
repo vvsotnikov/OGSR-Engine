@@ -217,10 +217,11 @@ fn read_window(text: &str, window: Option<(u64, u64)>) -> Result<Report, String>
                 if let Some(start) = o.permission.take() {
                     if r.collecting {
                         r.waits.push(format!(
-                            "{}, {}, permission_to_online, {}, permission_revoked, , {}",
+                            "{}, {}, permission_to_online, {}, permission_revoked, {}, {}",
                             key.0,
                             key.1,
                             now - start,
+                            o.rejection,
                             o.flags
                         ));
                     }
@@ -300,10 +301,11 @@ fn read_window(text: &str, window: Option<(u64, u64)>) -> Result<Report, String>
                 if let Some(start) = o.online.take() {
                     if r.collecting {
                         r.waits.push(format!(
-                            "{}, {}, online_to_client, {}, offline, , {}",
+                            "{}, {}, online_to_client, {}, offline, {}, {}",
                             key.0,
                             key.1,
                             now - start,
+                            o.rejection,
                             o.flags
                         ));
                     }
@@ -525,7 +527,14 @@ mod tests {
     }
     #[test]
     fn generation_reuse_does_not_complete_old_activation() {
-        let r=read(&capture("0,register,1,1,0,12\n1,online,1,1,0,0\n10,register,1,2,0,12\n11,client,1,2,0,0\n20,end,65535,0,0,0\n")).unwrap();
+        let r = read(&capture(concat!(
+            "0,register,1,1,0,12\n",
+            "1,online,1,1,0,0\n",
+            "10,register,1,2,0,12\n",
+            "11,client,1,2,0,0\n",
+            "20,end,65535,0,0,0\n",
+        )))
+        .unwrap();
         assert!(!r.samples.contains_key("online_to_client_us"));
         assert!(r.waits[0].contains("id_reused"));
         assert_eq!(r.unmatched, 1);
@@ -556,6 +565,28 @@ mod tests {
         let r = read(&second).unwrap();
         assert_eq!(r.samples["first_visit_us"][0].0, 7);
         assert!(!r.samples.contains_key("revisit_us"));
+    }
+    #[test]
+    fn terminated_waits_preserve_last_observed_rejection() {
+        let r = read(&capture(concat!(
+            "0,register,1,1,0,12\n",
+            "1,permission_on,1,1,0,28\n",
+            "2,permission_rejected,1,1,0,0\n",
+            "3,permission_off,1,1,0,12\n",
+            "4,online,1,1,0,0\n",
+            "5,distance_rejected,1,1,0,0\n",
+            "6,offline,1,1,0,0\n",
+            "7,end,65535,0,0,0\n",
+        )))
+        .unwrap();
+        assert!(r
+            .waits
+            .iter()
+            .any(|w| w.contains("permission_to_online, 2, permission_revoked, permission, 12")));
+        assert!(r
+            .waits
+            .iter()
+            .any(|w| w.contains("online_to_client, 2, offline, distance, 12")));
     }
 }
 
@@ -662,6 +693,30 @@ pub fn read_warmed(text: &str, frame_text: &str) -> Result<Report, String> {
 #[cfg(test)]
 mod window_tests {
     use super::*;
+    #[test]
+    fn warmed_window_uses_wall_time_when_game_clock_is_stationary() {
+        let text = concat!(
+            "ogsr-service,1\n",
+            "us,kind,id,generation,value,flags\n",
+            "0,register,1,1,0,12\n",
+            "1,enter,1,1,0,12\n",
+            "2,clock,65535,0,100,10\n",
+            "3,visit,1,1,0,12\n",
+            "1000002,clock,65535,0,100,11\n",
+            "1000003,end,65535,5,0,0\n",
+        );
+        let r = read_warmed(
+            text,
+            "frame,game_ms,stage,wall_ms\n10,100,4,1\n11,100,4,1000\n",
+        )
+        .unwrap();
+        assert_eq!(r.window, Some((2, 1000002)));
+        assert_eq!(r.samples["creature_first_visit_us"][0].0, 2);
+        assert!(r
+            .waits
+            .iter()
+            .any(|w| w.contains("1, 1, revisit, 999999, window_end")));
+    }
     #[test]
     fn warmed_window_preserves_old_unfinished_waits_and_excludes_loading_samples() {
         let text = concat!(

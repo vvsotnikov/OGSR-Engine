@@ -2,11 +2,12 @@
 
 Whole-map mode kept server and client representations for all 400 added characters.
 It roughly doubled warmed frame time compared with stock distance mode, which kept
-only 59–62 of them online. The largest completed whole-map creature switching revisit gap was
+only 59–62 of them online. The largest completed warmed whole-map creature switching revisit gap was
 64.876 ms; a distance-mode outlier reached 147.808 ms. Server-online to successful
 client `net_Spawn` reached 4.497 seconds during
-loading/creation. The latter is the next operation to investigate, not evidence that
-switching evaluations or NPC decisions themselves took four seconds.
+loading/creation. Full-capture switching revisits also reached 1.886–2.039 seconds
+before application readiness. These intervals are distinct from tactical AI
+response and do not by themselves establish starvation.
 
 ## Workload and evidence
 
@@ -67,8 +68,8 @@ contribute more samples; worst IDs and unfinished waits are retained separately.
 No creature awaited its first evaluation at the warmed boundary. There were 529
 unfinished creature revisits at `window_end` in each whole-map capture and 539 in
 each distance capture. Distance runs also have five earlier terminated revisit waits
-within the window, making 544 rows in that category in total. These are ordinary right-censored waits, not automatically
-starvation. Counts, maxima, IDs and termination reasons are in
+within the window, making 544 rows in that category in total. These are ordinary
+right-censored waits, not automatically starvation. Counts, maxima, IDs and termination reasons are in
 [unfinished.csv](alife-service-2026-10-08/unfinished.csv); completed metrics, including
 full loading/creation windows, are in [metrics.csv](alife-service-2026-10-08/metrics.csv).
 Attached non-creature items can have an unfinished first visit without being eligible
@@ -81,6 +82,14 @@ effect or establish a universal overhead bound. Frame recording was enabled on b
 sides. Dedicated writer CPU time and process memory
 were not measured separately. Enabled trace locking/timestamping consumes part of
 the existing switching budget, so these revisit values include observer cost.
+
+All ten warmed frames above 27 ms occurred in distance r2 **with service tracing
+enabled**; none occurred in the other seven runs. The two tracing-off distance
+maxima were 11.514 and 11.165 ms. The tracing-on run wrote a 212-MB service capture,
+but these observations cannot distinguish recorder effects from other run-to-run
+variation. They must not be treated as evidence that enabled tracing is harmless.
+The planned #17 calibration must repeat these on/off comparisons and investigate
+any recurrence alongside the in-budget observer cost.
 
 The distance r2 maximum is retained, not trimmed as noise. Creature 33280/1 waited
 147.808 ms from trace time 60.179432 to 60.327240 seconds, spanning four updates.
@@ -97,6 +106,22 @@ This is not a measured ordinary Bar-entry hitch or solely a client-construction 
 [All frame stages](alife-service-2026-10-08/frame-stages.csv) are published separately
 so warmed percentiles do not hide the artificial creation burst. Frame collection
 starts after application readiness; loading-screen frame costs are not measured.
+
+## Loading switching waits
+
+Full-capture creature revisit maxima were 2.039 / 1.988 seconds in whole-map
+and 1.946 / 1.886 seconds in distance mode. First-visit maxima were
+502.884 / 453.107 ms and 407.993 / 430.748 ms respectively. These are separate from
+the warmed values above; both scopes remain in `metrics.csv`.
+
+The largest revisits belong to IDs 6302, 6250, 6315 and 6326 respectively.
+[Their event endpoints](alife-service-2026-10-08/loading-switch-outliers.json)
+span engine frames 7 to 30–31, before the first recorded ready-state frame (88)
+and before the fixture creates its 400 characters. Thus the fixture's creation
+burst cannot explain these particular gaps. The captured intervals cross loading;
+the exact operations responsible are not attributed. They measure wall time
+between switching visits, not two seconds of switching CPU work, demonstrated
+starvation, or tactical AI response. Loading-screen frame costs were not recorded.
 
 ## Activation and capture integrity
 
@@ -157,7 +182,12 @@ clock bounds (a half-open interval within stage 4). Small boundary differences f
 the Lua frame window are intentional. The 400-added-character counts do not include
 the map's original population; service metrics include all registered creatures.
 
-The next independent engine change is tracked in [#26](https://github.com/vvsotnikov/OGSR-Engine/issues/26): the **client spawn queue**. First
+First, add the low-rate slice comparison in #17: record the existing returned
+visit count and slice boundaries outside the timed traversal, then compare with
+per-object tracing off/on. Repeat the distance pairs to check the tracing-on slow
+frames above. The present revisit numbers include uncalibrated observer cost.
+
+The subsequent client activation change is tracked in [#26](https://github.com/vvsotnikov/OGSR-Engine/issues/26): the **client spawn queue**. First
 record queue admission/dequeue and per-creature construction cost, then replace the
 fixed one-monster/trader-per-frame allowance with a bounded time budget if those
 measurements confirm avoidable queue delay. Preserve parent-before-child handling
