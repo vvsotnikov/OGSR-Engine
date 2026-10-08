@@ -49,10 +49,10 @@ outside Git. See [the measurement contract](alife-service.md) for reusable comma
 A subsequent single-binary matrix repeated both policies twice with all four modes
 (off, slices, lifecycle, full), reversing mode and policy order: 16 more runs with
 the same fixture, settings and warm window. Lifecycle mode omits both visit and
-repeated rejection events. Relative to slices, mean visits/slice changed −1.4% to
+rejection events. Relative to slices, mean visits/slice changed −1.4% to
 +2.1% and visits/second −0.9% to +4.1%; relative to off, frame p99 changed −2.3% to
 +0.1%. Full tracing still lost 35–39% of mean visits/slice. No warmed frames exceeded
-27 ms. These comparisons support separating the high-rate stream, not attributing
+27 ms. These comparisons support separating the visit/rejection stream, not attributing
 all cost to `visit` alone or claiming zero lifecycle cost during heavy transitions.
 
 Use lifecycle mode for permission/activation histories without the high-rate stream;

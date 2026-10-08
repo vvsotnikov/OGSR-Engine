@@ -5,6 +5,12 @@ use std::{
     io::{BufRead, Seek},
 };
 type Key = (u16, u64);
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Slices,
+    Full,
+    Lifecycle,
+}
 #[derive(Default)]
 struct Object {
     member: Option<(u64, u64)>,
@@ -25,7 +31,7 @@ pub struct Report {
     window: Option<(u64, u64)>,
     collecting: bool,
     measured_updates: u64,
-    mode: Option<u8>,
+    mode: Option<Mode>,
     settings: std::collections::BTreeSet<(u16, i64, u32)>,
     schedules: std::collections::BTreeSet<(u64, u32)>,
     unmatched_kinds: BTreeMap<String, u64>,
@@ -34,7 +40,11 @@ fn censor(r: &mut Report, key: Key, o: &Object, now: u64, reason: &str) {
     if !r.collecting {
         return;
     }
-    if let Some(start) = o.last.or(o.member).filter(|_| r.mode != Some(2)) {
+    if let Some(start) = o
+        .last
+        .or(o.member)
+        .filter(|_| r.mode != Some(Mode::Lifecycle))
+    {
         r.waits.push(format!(
             "{}, {}, {}, {}, {}, {}, {}",
             key.0,
@@ -114,7 +124,7 @@ fn read_window(reader: impl BufRead, window: Option<(u64, u64)>) -> Result<Repor
     let mut slice = None;
     let mut completed_slices = 0;
     let mut slice_visits = 0;
-    let mut coverage_error = None;
+    let mut event_error = None;
     for (index, line) in lines.enumerate() {
         let line = line?;
         let f: Vec<_> = line.split(',').collect();
@@ -170,10 +180,10 @@ fn read_window(reader: impl BufRead, window: Option<(u64, u64)>) -> Result<Repor
         r.collecting = window.is_none_or(|(start, end)| now >= start && now < end);
         if f[1] == "end" {
             if slice.is_some() || (r.mode.is_some() && completed_slices != r.updates) {
-                coverage_error.get_or_insert("Incomplete slice coverage");
+                event_error.get_or_insert("Incomplete slice coverage");
             }
             if value == 0 {
-                if let Some(error) = coverage_error {
+                if let Some(error) = event_error {
                     return Err(error.into());
                 }
             }
@@ -194,29 +204,34 @@ fn read_window(reader: impl BufRead, window: Option<(u64, u64)>) -> Result<Repor
             continue;
         }
         if f[1] == "mode" {
-            if index != 0 || value > 2 {
+            if index != 0 {
                 return Err("Invalid trace mode".into());
             }
-            r.mode = Some(value as u8);
+            r.mode = Some(match value {
+                0 => Mode::Slices,
+                1 => Mode::Full,
+                2 => Mode::Lifecycle,
+                _ => return Err("Invalid trace mode".into()),
+            });
             continue;
         }
         if f[1] == "slice_begin" {
             if r.updates != completed_slices + 1 {
-                coverage_error.get_or_insert("Slice without a corresponding update");
+                event_error.get_or_insert("Slice without a corresponding update");
             }
             if slice.replace((now, flags)).is_some() {
-                coverage_error.get_or_insert("Overlapping slices");
+                event_error.get_or_insert("Overlapping slices");
             }
             slice_visits = 0;
             continue;
         }
         if f[1] == "slice_end" {
             let Some((start, population)) = slice.take() else {
-                coverage_error.get_or_insert("Slice end without beginning");
+                event_error.get_or_insert("Slice end without beginning");
                 continue;
             };
-            if r.mode == Some(1) && slice_visits != value {
-                coverage_error.get_or_insert("Slice visit count mismatch");
+            if r.mode == Some(Mode::Full) && slice_visits != value {
+                event_error.get_or_insert("Slice visit count mismatch");
             }
             completed_slices += 1;
             sample(&mut r, "slice_wall_us", now - start, (65535, 0), false);
@@ -246,7 +261,7 @@ fn read_window(reader: impl BufRead, window: Option<(u64, u64)>) -> Result<Repor
         }
         if f[1] == "update" {
             if r.mode.is_some() && r.updates != completed_slices {
-                coverage_error.get_or_insert("Incomplete slice coverage");
+                event_error.get_or_insert("Incomplete slice coverage");
             }
             if r.collecting {
                 if let Some(settings) = settings {
@@ -260,15 +275,17 @@ fn read_window(reader: impl BufRead, window: Option<(u64, u64)>) -> Result<Repor
             r.updates += 1;
             continue;
         }
-        if r.mode == Some(0) {
+        if r.mode == Some(Mode::Slices) {
             return Err("Object event in slice-only capture".into());
         }
+        if r.mode == Some(Mode::Lifecycle)
+            && matches!(f[1], "visit" | "distance_rejected" | "permission_rejected")
+        {
+            return Err("Visit/rejection in lifecycle-only capture".into());
+        }
         if f[1] == "visit" {
-            if r.mode == Some(2) {
-                return Err("Visit in lifecycle-only capture".into());
-            }
-            if r.mode == Some(1) && slice.is_none() {
-                coverage_error.get_or_insert("Visit outside slice");
+            if r.mode == Some(Mode::Full) && slice.is_none() {
+                event_error.get_or_insert("Visit outside slice");
             }
             slice_visits += 1;
         }
@@ -344,7 +361,7 @@ fn read_window(reader: impl BufRead, window: Option<(u64, u64)>) -> Result<Repor
                         flags & 4 != 0,
                     );
                     let gap = r.updates - update;
-                    sample(&mut r, "evaluation_update_gap", gap, key, false);
+                    sample(&mut r, "evaluation_update_gap", gap, key, flags & 4 != 0);
                 } else {
                     unmatched(&mut r, format!("unpaired_{}", f[1]));
                 }
@@ -362,7 +379,8 @@ fn read_window(reader: impl BufRead, window: Option<(u64, u64)>) -> Result<Repor
                     );
                 }
                 if o.online.is_some() {
-                    return Err("Online transition before previous activation finished".into());
+                    event_error
+                        .get_or_insert("Online transition before previous activation finished");
                 }
                 o.online = Some(now);
             }
@@ -433,11 +451,10 @@ impl Report {
             out,
             "mode={}",
             match self.mode {
-                Some(1) => "full",
-                Some(0) => "slices",
-                Some(2) => "lifecycle",
+                Some(Mode::Full) => "full",
+                Some(Mode::Slices) => "slices",
+                Some(Mode::Lifecycle) => "lifecycle",
                 None => "legacy_full",
-                _ => unreachable!(),
             }
         )
         .unwrap();
@@ -489,6 +506,7 @@ impl Report {
         }
         out.push_str("metric,count,p50,p95,p99,max,worst_id,generation\n");
         for (name, values) in &mut self.samples {
+            // Equal maxima select the highest object ID, then its newest incarnation.
             values.sort_unstable_by_key(|v| (v.0, v.2, v.1));
             for creatures_only in [false, true] {
                 let selected = || values.iter().filter(|v| !creatures_only || v.3);
@@ -511,12 +529,12 @@ impl Report {
                     q(95),
                     q(99),
                     worst.0,
-                    if name.starts_with("slice_") {
+                    if (worst.2, worst.1) == (65535, 0) {
                         String::new()
                     } else {
                         worst.2.to_string()
                     },
-                    if name.starts_with("slice_") {
+                    if (worst.2, worst.1) == (65535, 0) {
                         String::new()
                     } else {
                         worst.1.to_string()
@@ -651,6 +669,29 @@ mod tests {
         }
     }
     #[test]
+    fn missing_activation_events_report_overflow_before_pairing_errors() {
+        let rows = concat!(
+            "0,mode,65535,0,2,0\n",
+            "1,register,1,1,0,12\n",
+            "2,online,1,1,0,0\n",
+            // The client's completion and the following offline event were lost.
+            "5,online,1,1,0,0\n",
+            "6,end,65535,0,2,0\n",
+        );
+        assert!(read(&capture(rows))
+            .unwrap()
+            .render()
+            .contains("capture_integrity=dropped_records"));
+        assert_eq!(
+            read(&capture(
+                &rows.replace("6,end,65535,0,2,0", "6,end,65535,0,0,0")
+            ))
+            .err()
+            .as_deref(),
+            Some("Online transition before previous activation finished")
+        );
+    }
+    #[test]
     fn lifecycle_mode_reports_activation_without_inventing_visit_waits() {
         let rows = concat!(
             "0,mode,65535,0,2,0\n",
@@ -666,7 +707,12 @@ mod tests {
         assert_eq!(r.samples["online_to_client_us"][0].0, 3);
         assert!(r.waits.is_empty());
         assert!(r.render().contains("mode=lifecycle"));
-        assert!(read(&capture(&rows.replace("8,client", "8,visit"))).is_err());
+        for forbidden in ["visit", "distance_rejected", "permission_rejected"] {
+            assert!(read(&capture(
+                &rows.replace("8,client", &format!("8,{forbidden}"))
+            ))
+            .is_err());
+        }
     }
     #[test]
     fn shared_samples_preserve_quantiles_and_worst_identity_for_both_populations() {
@@ -713,6 +759,7 @@ mod tests {
         assert_eq!(r.samples["first_visit_us"][0].0, 20);
         assert_eq!(r.samples["revisit_us"][0].0, 40);
         assert!(r.render().contains("revisit, 30, capture_end"));
+        assert!(r.render().contains("creature_evaluation_update_gap,2,"));
     }
     #[test]
     fn never_visited_removal_reuse_and_map_leave() {

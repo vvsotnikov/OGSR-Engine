@@ -5,7 +5,9 @@ For switching throughput, run an isolated Release scenario with
 only when individual switching visits/rejections are needed; it materially reduces
 the visits completed within the switching budget. Use `-ServiceLifecycle -FrameTimes`
 for activation/lifecycle histories without the visit/rejection stream. The runner
-rejects combining modes. Omit all service switches for the tracing-off frame control.
+rejects combining modes. Direct engine launches resolve conflicting flags in the
+order full, lifecycle, slices; use the runner to catch accidental combinations.
+Omit all service switches for the tracing-off frame control.
 Add `-Mode distance` or `-Mode whole-map`, `-Count 400` for density, and `-Eligibility`
 for controlled whole-map permission changes. Use `-Transitions` separately for map lifecycle.
 The runner records save/package hashes and configuration in `session.json`.
@@ -28,7 +30,7 @@ for frame percentiles by scenario stage. Keep the original capture alongside the
   recorder boundary overhead and possible descheduling; it is not pure CPU time.
   Every update must have exactly one completed slice in a modern capture. Full-mode
   visit rows must equal its returned visit count, even outside a selected window.
-  Coverage/count errors are deferred until the footer so producer drops are identified
+  Coverage/count and overlapping-activation errors wait for the footer so drops are identified
   as `dropped_records`; either condition fails validation.
   Slice aggregates report sum, mean and per-second rate over the selected wall-clock
   window (the complete capture duration when no window is selected). Rates of
@@ -75,7 +77,7 @@ inside the engine's existing switching budget in full mode. Slice-only mode reta
 only the cheap detail gates on object paths, with no object clocks, mutexes or
 snapshots. Both modes share slice-boundary recording outside that budget; the
 low-rate control is not literally uninstrumented. Lifecycle mode skips visits and
-repeated rejections but still records actual transitions inside the traversal.
+rejections but still records actual transitions inside the traversal.
 Compare frame effects with tracing off and visits per slice across modes.
 When reconciliation metrics are enabled too, their outer slice timer includes
 trace-boundary recording; do not compare that timer with tracing-off measurements
@@ -100,6 +102,8 @@ With `--frames`, service samples are selected by completion time between the fir
 last recorded ALife update clocks in stage 4. Frame numbers and game milliseconds must
 match. Pre-window history remains available: waits begun earlier are not reset or hidden.
 The report gives the actual clock bounds, and right-censors pending waits at window end.
+Slice aggregates include the entire slice when its end falls inside the window,
+even if its start precedes the window; they are not clipped at the boundary.
 `capture_integrity=ok` certifies format/clock/footer integrity with no dropped events,
 not successful event pairing or gameplay. Unmatched counts remain separate: also require the runner
 to acknowledge completion in session.json and retain the engine log.
