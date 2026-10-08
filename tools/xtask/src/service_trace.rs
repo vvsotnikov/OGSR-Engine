@@ -16,7 +16,7 @@ struct Object {
 }
 #[derive(Default)]
 pub struct Report {
-    samples: BTreeMap<&'static str, Vec<(u64, Key, bool)>>,
+    samples: BTreeMap<&'static str, Vec<(u64, u64, u16, bool)>>,
     pub waits: Vec<String>,
     pub unmatched: u64,
     pub updates: u64,
@@ -80,7 +80,16 @@ fn sample(r: &mut Report, name: &'static str, value: u64, key: Key, creature: bo
     r.samples
         .entry(name)
         .or_default()
-        .push((value, key, creature));
+        .push((value, key.1, key.0, creature));
+}
+fn records(reader: impl BufRead) -> Result<impl Iterator<Item = Result<String, String>>, String> {
+    let mut lines = reader.lines().map(|line| line.map_err(|e| e.to_string()));
+    if lines.next().transpose()?.as_deref() != Some("ogsr-service,1")
+        || lines.next().transpose()?.as_deref() != Some("us,kind,id,generation,value,flags")
+    {
+        return Err("Unsupported service trace header".into());
+    }
+    Ok(lines)
 }
 pub fn read(reader: impl BufRead) -> Result<Report, String> {
     read_window(reader, None)
@@ -89,12 +98,7 @@ fn read_window(reader: impl BufRead, window: Option<(u64, u64)>) -> Result<Repor
     if window.is_some_and(|(start, end)| start >= end) {
         return Err("Invalid measurement window".into());
     }
-    let mut lines = reader.lines().map(|line| line.map_err(|e| e.to_string()));
-    if lines.next().transpose()?.as_deref() != Some("ogsr-service,1")
-        || lines.next().transpose()?.as_deref() != Some("us,kind,id,generation,value,flags")
-    {
-        return Err("Unsupported service trace header".into());
-    }
+    let lines = records(reader)?;
     let mut r = Report {
         window,
         ..Default::default()
@@ -387,9 +391,9 @@ impl Report {
         }
         out.push_str("metric,count,p50,p95,p99,max,worst_id,generation\n");
         for (name, values) in &mut self.samples {
-            values.sort_unstable();
+            values.sort_unstable_by_key(|v| (v.0, v.2, v.1));
             for creatures_only in [false, true] {
-                let selected = || values.iter().filter(|v| !creatures_only || v.2);
+                let selected = || values.iter().filter(|v| !creatures_only || v.3);
                 let n = selected().count();
                 if n == 0 {
                     continue;
@@ -409,8 +413,8 @@ impl Report {
                     q(95),
                     q(99),
                     worst.0,
-                    worst.1 .0,
-                    worst.1 .1
+                    worst.2,
+                    worst.1
                 )
                 .unwrap();
             }
@@ -434,14 +438,14 @@ mod tests {
             ..Default::default()
         };
         sample(&mut r, "revisit_us", 5, (1, 1), false);
-        sample(&mut r, "revisit_us", 10, (2, 1), true);
+        sample(&mut r, "revisit_us", 10, (9, 1), true);
         sample(&mut r, "revisit_us", 10, (3, 2), true);
         sample(&mut r, "revisit_us", 20, (4, 1), false);
         let text = r.render();
         assert!(text.lines().any(|l| l == "revisit_us,4,10,20,20,20,4,1"));
         assert!(text
             .lines()
-            .any(|l| l == "creature_revisit_us,2,10,10,10,10,3,2"));
+            .any(|l| l == "creature_revisit_us,2,10,10,10,10,9,1"));
     }
     fn read(text: &str) -> Result<Report, String> {
         super::read(text.as_bytes())
@@ -671,8 +675,8 @@ pub fn read_warmed(mut reader: impl BufRead + Seek, frame_text: &str) -> Result<
     let mut start = None;
     let mut end = None;
     let clocks: BTreeMap<_, _> = rows.iter().map(|r| (r.number, r.game_ms)).collect();
-    for line in reader.by_ref().lines().skip(2) {
-        let line = line.map_err(|e| e.to_string())?;
+    for line in records(reader.by_ref())? {
+        let line = line?;
         let f: Vec<_> = line.split(',').collect();
         if f.len() != 6 {
             return Err("Invalid service record".into());

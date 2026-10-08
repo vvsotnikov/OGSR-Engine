@@ -82,19 +82,20 @@ void begin()
     });
     enabled.store(true, std::memory_order_release);
 }
-void record(const char* kind, std::uint16_t id, std::uint64_t value, std::uint32_t flags, bool changes_only)
+void record(const char* kind, std::uint16_t id, std::uint64_t value, std::uint32_t flags, Cache cache)
 {
     std::lock_guard<std::mutex> guard(mutex);
     if (!enabled.load(std::memory_order_relaxed)) return;
-    if (changes_only)
+    std::optional<Settings>* previous = nullptr;
+    if (cache != Cache::None)
     {
-        auto& previous = strcmp(kind, "settings") == 0 ? last_settings : last_scheduler;
-        if (previous && previous->id == id && previous->value == value && previous->flags == flags) return;
-        previous = Settings{id, value, flags};
+        previous = cache == Cache::Settings ? &last_settings : &last_scheduler;
+        if (*previous && (*previous)->id == id && (*previous)->value == value && (*previous)->flags == flags) return;
     }
     if (strcmp(kind, "register") == 0) ++generations[id];
     if (events.size() == capacity) { ++dropped; return; }
     events.push_back({now(), generations[id], value, kind, flags, id});
+    if (previous) *previous = Settings{id, value, flags};
     if (events.size() == batch_size) wake.notify_one();
 }
 void object(const char* kind, const CSE_ALifeDynamicObject* object)

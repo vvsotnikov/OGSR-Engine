@@ -83,10 +83,10 @@ void CALifeUpdateManager::update_switch()
     {
         alife_service_trace::event("clock", 65535, Device.dwTimeGlobal, Device.dwFrame);
         alife_service_trace::event("scheduler", 65535,
-            (std::uint64_t(shedule.t_min) << 32) | std::uint64_t(shedule.t_max), m_objects_per_update, true);
+            (std::uint64_t(shedule.t_min) << 32) | std::uint64_t(shedule.t_max), m_objects_per_update, alife_service_trace::Cache::Scheduler);
         alife_service_trace::event("settings", graph().level().level_id(),
             std::uint64_t(std::int64_t(graph().level().time_limit_ms() * 1000.0)),
-            (uses_distance_switching() ? 0u : 1u) | (g_mt_config.test(mtALife) ? 2u : 0u), true);
+            (uses_distance_switching() ? 0u : 1u) | (g_mt_config.test(mtALife) ? 2u : 0u), alife_service_trace::Cache::Settings);
         alife_service_trace::event("update");
     }
 
