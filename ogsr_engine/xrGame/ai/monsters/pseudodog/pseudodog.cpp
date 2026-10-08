@@ -33,6 +33,7 @@ void CAI_PseudoDog::reinit()
 
     if (CCustomMonster::use_simplified_visual())
         return;
+    anim().AA_GetParams("run_jamp_1"); // Validate required jump damage before combat.
     com_man().add_rotation_jump_data("1", "2", "3", "4", deg(90));
 }
 

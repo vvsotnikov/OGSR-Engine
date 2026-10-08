@@ -190,6 +190,18 @@ void CAI_Dog::reinit()
     if (CCustomMonster::use_simplified_visual())
         return;
 
+    // Re-resolve after the animation controller rebuilds its attack table.
+    pcstr section = *cNameSect();
+    jump_attack_params = READ_IF_EXISTS(pSettings, r_string, section, "jump_attack_params_anim", nullptr);
+    if (!jump_attack_params)
+    {
+        pcstr motion = READ_IF_EXISTS(pSettings, r_string, section, "anim_jump_ataka_02", "jump_right_0");
+        // Vanilla's jump movement has no hit row. Its normal bite preserves
+        // vanilla damage without depending on attack-table order.
+        jump_attack_params = anim().AA_FindParams(motion) ? motion : "stand_attack_0";
+    }
+    jump_hit_params = &anim().AA_GetParams(jump_attack_params, "set jump_attack_params_anim to a valid attack_params row");
+
     com_man().add_rotation_jump_data("1", "2", "3", "4", PI_DIV_2);
     com_man().add_rotation_jump_data("5", "6", "7", "8", deg(179));
     // com_man().add_melee_jump_data("5","jump_right_0");
@@ -345,7 +357,11 @@ void CAI_Dog::reload(LPCSTR section)
 
 void CAI_Dog::HitEntityInJump(const CEntity* pEntity)
 {
-    SAAParam& params = anim().AA_GetParams("jump_ataka_02");
+    SAAParam& params = *jump_hit_params;
+
+    static const bool jump_probe = strstr(Core.Params, "-dog_jump_probe") != nullptr;
+    if (jump_probe)
+        Msg("[dog jump] id=%u section=%s attack=%s power=%.6f impulse=%.6f", ID(), *cNameSect(), jump_attack_params, params.hit_power, params.impulse);
 
     HitEntity(pEntity, params.hit_power, params.impulse, params.impulse_dir);
 }

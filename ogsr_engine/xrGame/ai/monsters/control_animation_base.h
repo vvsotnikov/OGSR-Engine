@@ -120,7 +120,8 @@ public:
 
     // работа с анимациями атак
     void AA_reload(LPCSTR section);
-    SAAParam& AA_GetParams(LPCSTR anim_name);
+    SAAParam* AA_FindParams(LPCSTR anim_name);
+    SAAParam& AA_GetParams(LPCSTR anim_name, LPCSTR diagnostic_hint = nullptr);
     SAAParam& AA_GetParams(MotionID motion, float time_perc);
 
     // FX's

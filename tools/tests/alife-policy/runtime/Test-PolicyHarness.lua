@@ -3,6 +3,7 @@ tostring = function(value) assert(type(value) == "boolean"); return value and "t
 local root = assert(...)
 assert(loadfile(root .. "/GroupDriver.lua"))
 assert(loadfile(root .. "/ParticlePoolDriver.lua"))
+assert(loadfile(root .. "/DogJumpDriver.lua"))
 dofile(root .. "/Test-SpawnQueue.lua")(dofile(root .. "/SpawnQueue.lua"))
 local clock, object, selected = 0, nil, nil
 local function position(distance)

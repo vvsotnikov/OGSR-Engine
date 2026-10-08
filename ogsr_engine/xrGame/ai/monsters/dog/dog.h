@@ -50,6 +50,8 @@ public:
     u32 m_smelling_count;
 
 private:
+    pcstr jump_attack_params = nullptr;
+    SAAParam* jump_hit_params = nullptr;
     bool b_state_anim;
     bool b_anim_end;
     u32 current_anim;

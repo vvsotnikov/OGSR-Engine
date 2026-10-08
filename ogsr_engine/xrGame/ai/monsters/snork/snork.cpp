@@ -120,6 +120,7 @@ void CSnork::reinit()
 
     if (CCustomMonster::use_simplified_visual())
         return;
+    anim().AA_GetParams("stand_attack_2_1"); // Validate required jump damage before combat.
     move().load_velocity(*cNameSect(), "Velocity_JumpGround", MonsterMovement::eSnorkVelocityParameterJumpGround);
     com_man().load_jump_data("stand_attack_2_0", 0, "stand_attack_2_1", "stand_somersault_0", u32(-1), MonsterMovement::eSnorkVelocityParameterJumpGround, 0);
 
