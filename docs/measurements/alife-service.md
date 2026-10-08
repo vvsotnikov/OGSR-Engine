@@ -19,10 +19,6 @@ for frame percentiles by scenario stage. Keep the original capture alongside the
   First-visit time starts at registry insertion, not global object registration.
 - `visit` is entry to `switch_object`, before redundant-object/attachment/location
   checks. It measures switching service, not a successful switch or client AI update.
-- Eligibility first noticed by the switching evaluator is not an independent
-  eligibility timestamp. The reader accepts the older `eligible_observed` event
-  without producing a latency metric: it immediately preceded the synchronous
-  online call and measured no meaningful eligibility wait.
 - `permission_on` is recorded after the script-facing permission setter returns.
   Permission-to-online is full eligibility delay only in a controlled fixture that
   establishes the other conditions (current map, detached, matching configuration,
@@ -34,8 +30,10 @@ for frame percentiles by scenario stage. Keep the original capture alongside the
   startup items may use other server paths and are not NPC activation samples.
 - All event times use one process-wide monotonic wall clock, serialized under a mutex.
   They include loading, pause and debugger stops; game-time acceleration does not scale
-  them. `clock` records game milliseconds/frame numbers for correlation. Update records
-  carry level, effective switch budget, policy and actual `mtALife` setting. A negative budget is
+  them. `clock` records game milliseconds/frame numbers for correlation. Settings records
+  carry level, effective switch budget, policy and actual `mtALife` setting.
+  Settings and scheduler configuration are emitted initially and on changes;
+  update records count switching calls. Warmed reports retain pre-window settings. A negative budget is
   the initial unlimited-traversal sentinel, not a huge unsigned allowance.
 - Flags: online=1, attached=2, creature=4, living creature=8, online permission=16,
   offline permission=32. Creature summaries include the actor and corpses; they are
@@ -80,9 +78,11 @@ use static-lifetime literals from the schema vocabulary. It never stores object 
 
 The first matched Bar results are in [the 2026-10-08 report](alife-service-2026-10-08.md).
 
-The offline reader retains samples for exact nearest-rank quantiles and worst-object
-identities. Its memory use grows with capture length; the producer buffer bound does
-not apply to analysis. Frame recording likewise buffers the bounded runtime fixture's
+The offline reader streams input and stores each latency sample once for exact
+nearest-rank quantiles and worst-object identities across both summaries. Sample
+memory still grows with capture length; the producer buffer bound does not apply
+to analysis. Warmed analysis makes two streaming passes to find the exact window
+and then measure it, retaining pre-window object state. Frame recording likewise buffers the bounded runtime fixture's
 frames until completion; it is not an unlimited-duration frame recorder.
 
 The recorded `Device` frame/game-clock pair relies on engine synchronization, not

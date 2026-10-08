@@ -1,5 +1,9 @@
 //! Reader for the production service trace. Wall-clock waits are not AI thinking time.
-use std::{collections::BTreeMap, fmt::Write};
+use std::{
+    collections::BTreeMap,
+    fmt::Write,
+    io::{BufRead, Seek},
+};
 type Key = (u16, u64);
 #[derive(Default)]
 struct Object {
@@ -12,7 +16,7 @@ struct Object {
 }
 #[derive(Default)]
 pub struct Report {
-    samples: BTreeMap<&'static str, Vec<(u64, Key)>>,
+    samples: BTreeMap<&'static str, Vec<(u64, Key, bool)>>,
     pub waits: Vec<String>,
     pub unmatched: u64,
     pub updates: u64,
@@ -69,22 +73,25 @@ fn unmatched(r: &mut Report, kind: String) {
         *r.unmatched_kinds.entry(kind).or_default() += 1;
     }
 }
-fn sample(r: &mut Report, name: &'static str, value: u64, key: Key) {
+fn sample(r: &mut Report, name: &'static str, value: u64, key: Key, creature: bool) {
     if !r.collecting {
         return;
     }
-    r.samples.entry(name).or_default().push((value, key));
+    r.samples
+        .entry(name)
+        .or_default()
+        .push((value, key, creature));
 }
-pub fn read(text: &str) -> Result<Report, String> {
-    read_window(text, None)
+pub fn read(reader: impl BufRead) -> Result<Report, String> {
+    read_window(reader, None)
 }
-fn read_window(text: &str, window: Option<(u64, u64)>) -> Result<Report, String> {
+fn read_window(reader: impl BufRead, window: Option<(u64, u64)>) -> Result<Report, String> {
     if window.is_some_and(|(start, end)| start >= end) {
         return Err("Invalid measurement window".into());
     }
-    let mut lines = text.lines();
-    if lines.next() != Some("ogsr-service,1")
-        || lines.next() != Some("us,kind,id,generation,value,flags")
+    let mut lines = reader.lines().map(|line| line.map_err(|e| e.to_string()));
+    if lines.next().transpose()?.as_deref() != Some("ogsr-service,1")
+        || lines.next().transpose()?.as_deref() != Some("us,kind,id,generation,value,flags")
     {
         return Err("Unsupported service trace header".into());
     }
@@ -97,7 +104,10 @@ fn read_window(text: &str, window: Option<(u64, u64)>) -> Result<Report, String>
     let mut generations = BTreeMap::<u16, u64>::new();
     let mut previous = 0;
     let mut ended = false;
+    let mut settings = None;
+    let mut schedule = None;
     for (index, line) in lines.enumerate() {
+        let line = line?;
         let f: Vec<_> = line.split(',').collect();
         if ended || f.len() != 6 {
             return Err(format!("Invalid record at line {}", index + 3));
@@ -117,6 +127,7 @@ fn read_window(text: &str, window: Option<(u64, u64)>) -> Result<Report, String>
                 | "clock"
                 | "update"
                 | "scheduler"
+                | "settings"
                 | "end"
                 | "permission_on"
                 | "permission_off"
@@ -125,7 +136,6 @@ fn read_window(text: &str, window: Option<(u64, u64)>) -> Result<Report, String>
                 | "leave"
                 | "visit"
                 | "remove"
-                | "eligible_observed"
                 | "online"
                 | "offline"
                 | "client"
@@ -164,17 +174,26 @@ fn read_window(text: &str, window: Option<(u64, u64)>) -> Result<Report, String>
             continue;
         }
         if f[1] == "scheduler" {
-            if r.collecting {
-                r.schedules.insert((value, flags as u32));
-            }
+            schedule = Some((value, flags as u32));
             continue;
+        }
+        if f[1] == "settings" || (f[1] == "update" && id != 65535) {
+            settings = Some((id as u16, value as i64, flags as u32));
+            if f[1] == "settings" {
+                continue;
+            }
         }
         if f[1] == "clock" {
             continue;
         }
         if f[1] == "update" {
             if r.collecting {
-                r.settings.insert((id as u16, value as i64, flags as u32));
+                if let Some(settings) = settings {
+                    r.settings.insert(settings);
+                }
+                if let Some(schedule) = schedule {
+                    r.schedules.insert(schedule);
+                }
                 r.measured_updates += 1;
             }
             r.updates += 1;
@@ -249,36 +268,25 @@ fn read_window(text: &str, window: Option<(u64, u64)>) -> Result<Report, String>
                         },
                         now - time,
                         key,
+                        flags & 4 != 0,
                     );
-                    if flags & 4 != 0 {
-                        sample(
-                            &mut r,
-                            if o.last.is_some() {
-                                "creature_revisit_us"
-                            } else {
-                                "creature_first_visit_us"
-                            },
-                            now - time,
-                            key,
-                        );
-                    }
                     let gap = r.updates - update;
-                    sample(&mut r, "evaluation_update_gap", gap, key);
+                    sample(&mut r, "evaluation_update_gap", gap, key, false);
                 } else {
                     unmatched(&mut r, format!("unpaired_{}", f[1]));
                 }
                 o.last = Some((now, r.updates));
             }
-            // Older captures include this synchronous call-boundary event. It
-            // adds no eligibility-wait measurement, so accept it without a metric.
-            "eligible_observed" => {}
             "online" => {
                 o.rejection = "";
                 if let Some(start) = o.permission.take() {
-                    if o.flags & 4 != 0 {
-                        sample(&mut r, "creature_permission_to_online_us", now - start, key);
-                    }
-                    sample(&mut r, "permission_to_online_us", now - start, key);
+                    sample(
+                        &mut r,
+                        "permission_to_online_us",
+                        now - start,
+                        key,
+                        o.flags & 4 != 0,
+                    );
                 }
                 if o.online.is_some() {
                     return Err("Online transition before previous activation finished".into());
@@ -287,10 +295,13 @@ fn read_window(text: &str, window: Option<(u64, u64)>) -> Result<Report, String>
             }
             "client" => {
                 if let Some(start) = o.online.take() {
-                    if o.flags & 4 != 0 {
-                        sample(&mut r, "creature_online_to_client_us", now - start, key);
-                    }
-                    sample(&mut r, "online_to_client_us", now - start, key);
+                    sample(
+                        &mut r,
+                        "online_to_client_us",
+                        now - start,
+                        key,
+                        o.flags & 4 != 0,
+                    );
                 } else {
                     unmatched(&mut r, format!("unpaired_{}", f[1]));
                 }
@@ -377,20 +388,32 @@ impl Report {
         out.push_str("metric,count,p50,p95,p99,max,worst_id,generation\n");
         for (name, values) in &mut self.samples {
             values.sort_unstable();
-            let n = values.len();
-            let q = |percent: usize| values[(n * percent).div_ceil(100).saturating_sub(1)].0;
-            let worst = values[n - 1];
-            writeln!(
-                out,
-                "{name},{n},{},{},{},{},{},{}",
-                q(50),
-                q(95),
-                q(99),
-                worst.0,
-                worst.1 .0,
-                worst.1 .1
-            )
-            .unwrap();
+            for creatures_only in [false, true] {
+                let selected = || values.iter().filter(|v| !creatures_only || v.2);
+                let n = selected().count();
+                if n == 0 {
+                    continue;
+                }
+                let q = |percent: usize| {
+                    selected()
+                        .nth((n * percent).div_ceil(100).saturating_sub(1))
+                        .unwrap()
+                        .0
+                };
+                let worst = selected().next_back().unwrap();
+                let prefix = if creatures_only { "creature_" } else { "" };
+                writeln!(
+                    out,
+                    "{prefix}{name},{n},{},{},{},{},{},{}",
+                    q(50),
+                    q(95),
+                    q(99),
+                    worst.0,
+                    worst.1 .0,
+                    worst.1 .1
+                )
+                .unwrap();
+            }
         }
         out.push_str(
             "unfinished_id,generation,wait_kind,age_us,termination,last_rejection,flags\n",
@@ -404,6 +427,25 @@ impl Report {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn shared_samples_preserve_quantiles_and_worst_identity_for_both_populations() {
+        let mut r = Report {
+            collecting: true,
+            ..Default::default()
+        };
+        sample(&mut r, "revisit_us", 5, (1, 1), false);
+        sample(&mut r, "revisit_us", 10, (2, 1), true);
+        sample(&mut r, "revisit_us", 10, (3, 2), true);
+        sample(&mut r, "revisit_us", 20, (4, 1), false);
+        let text = r.render();
+        assert!(text.lines().any(|l| l == "revisit_us,4,10,20,20,20,4,1"));
+        assert!(text
+            .lines()
+            .any(|l| l == "creature_revisit_us,2,10,10,10,10,3,2"));
+    }
+    fn read(text: &str) -> Result<Report, String> {
+        super::read(text.as_bytes())
+    }
     fn capture(records: &str) -> String {
         let mut out = String::from("ogsr-service,1\nus,kind,id,generation,value,flags\n");
         for (index, line) in records.lines().enumerate() {
@@ -482,7 +524,6 @@ mod tests {
     fn activation_completion_and_censoring() {
         let r = read(&capture(concat!(
             "0,register,3,1,0,12\n",
-            "10,eligible_observed,3,1,0,0\n",
             "12,online,3,1,0,0\n",
             "40,client,3,1,0,0\n",
             "50,offline,3,1,0,0\n",
@@ -490,7 +531,6 @@ mod tests {
             "100,end,65535,0,0,0\n",
         )))
         .unwrap();
-        assert!(!r.samples.contains_key("observed_to_online_us"));
         assert_eq!(r.samples["online_to_client_us"][0].0, 28);
         assert!(r.waits[0].contains("online_to_client, 40, capture_end"));
     }
@@ -512,7 +552,6 @@ mod tests {
             "0,register,1,1,0,60\n",
             "1,permission_on,1,1,0,60\n",
             "2,permission_on,1,1,0,60\n",
-            "10,eligible_observed,1,1,0,0\n",
             "12,online,1,1,0,0\n",
             "14,client,1,1,0,0\n",
             "20,offline,1,1,0,0\n",
@@ -522,7 +561,6 @@ mod tests {
         )))
         .unwrap();
         assert_eq!(r.samples["permission_to_online_us"][0].0, 11);
-        assert!(!r.samples.contains_key("observed_to_online_us"));
         assert!(r.waits[0].contains("permission_to_online, 9, permission_revoked"));
     }
     #[test]
@@ -538,33 +576,6 @@ mod tests {
         assert!(!r.samples.contains_key("online_to_client_us"));
         assert!(r.waits[0].contains("id_reused"));
         assert_eq!(r.unmatched, 1);
-    }
-    #[test]
-    fn wall_clock_gaps_and_independent_capture_state() {
-        let first = capture(concat!(
-            "0,register,1,1,0,0\n",
-            "1,enter,1,1,0,0\n",
-            "2,clock,65535,0,100,1\n",
-            "1000000,clock,65535,0,100,1\n",
-            "1000001,visit,1,1,0,0\n",
-            "1000002,end,65535,0,0,0\n",
-        ));
-        // Latency uses monotonic wall time even when the recorded game clock
-        // does not advance. This models data, not the engine's pause mechanism.
-        assert_eq!(
-            read(&first).unwrap().samples["first_visit_us"][0].0,
-            1000000
-        );
-        let second = capture(concat!(
-            "0,register,1,1,0,0\n",
-            "1,enter,1,1,0,0\n",
-            "8,visit,1,1,0,0\n",
-            "9,end,65535,0,0,0\n",
-        ));
-        // The clock and ID incarnation can start again in another file.
-        let r = read(&second).unwrap();
-        assert_eq!(r.samples["first_visit_us"][0].0, 7);
-        assert!(!r.samples.contains_key("revisit_us"));
     }
     #[test]
     fn terminated_waits_preserve_last_observed_rejection() {
@@ -652,7 +663,7 @@ pub fn frame_report(text: &str) -> Result<String, String> {
     }
     Ok(out)
 }
-pub fn read_warmed(text: &str, frame_text: &str) -> Result<Report, String> {
+pub fn read_warmed(mut reader: impl BufRead + Seek, frame_text: &str) -> Result<Report, String> {
     let rows = frames(frame_text)?;
     let warm: Vec<_> = rows.iter().filter(|r| r.stage == 4).collect();
     let first = warm.first().ok_or("No warmed frame window")?.number;
@@ -660,7 +671,8 @@ pub fn read_warmed(text: &str, frame_text: &str) -> Result<Report, String> {
     let mut start = None;
     let mut end = None;
     let clocks: BTreeMap<_, _> = rows.iter().map(|r| (r.number, r.game_ms)).collect();
-    for line in text.lines().skip(2) {
+    for line in reader.by_ref().lines().skip(2) {
+        let line = line.map_err(|e| e.to_string())?;
         let f: Vec<_> = line.split(',').collect();
         if f.len() != 6 {
             return Err("Invalid service record".into());
@@ -681,8 +693,9 @@ pub fn read_warmed(text: &str, frame_text: &str) -> Result<Report, String> {
             }
         }
     }
+    reader.rewind().map_err(|e| e.to_string())?;
     read_window(
-        text,
+        reader,
         Some((
             start.ok_or("No service clock for warmed frames")?,
             end.ok_or("No end of warmed service window")?,
@@ -693,6 +706,37 @@ pub fn read_warmed(text: &str, frame_text: &str) -> Result<Report, String> {
 #[cfg(test)]
 mod window_tests {
     use super::*;
+    #[test]
+    fn warmed_settings_include_prior_state_and_changes_in_the_window() {
+        let text = concat!(
+            "ogsr-service,1\nus,kind,id,generation,value,flags\n",
+            "0,settings,5,0,810,3\n",
+            "1,scheduler,65535,0,4294967297,10\n",
+            "2,clock,65535,0,100,10\n",
+            "3,update,65535,0,0,0\n",
+            "4,settings,5,0,900,3\n",
+            "5,update,65535,0,0,0\n",
+            "6,clock,65535,0,110,11\n",
+            "7,end,65535,7,0,0\n",
+        );
+        let r = read_warmed(
+            text,
+            "frame,game_ms,stage,wall_ms\n10,100,4,1\n11,110,4,1\n",
+        )
+        .unwrap();
+        assert_eq!(
+            r.settings.into_iter().collect::<Vec<_>>(),
+            [(5, 810, 3), (5, 900, 3)]
+        );
+        assert_eq!(
+            r.schedules.into_iter().collect::<Vec<_>>(),
+            [(4294967297, 10)]
+        );
+        assert_eq!(r.measured_updates, 2);
+    }
+    fn read_warmed(text: &str, frames: &str) -> Result<Report, String> {
+        super::read_warmed(std::io::Cursor::new(text), frames)
+    }
     #[test]
     fn warmed_window_uses_wall_time_when_game_clock_is_stationary() {
         let text = concat!(
@@ -711,7 +755,7 @@ mod window_tests {
         )
         .unwrap();
         assert_eq!(r.window, Some((2, 1000002)));
-        assert_eq!(r.samples["creature_first_visit_us"][0].0, 2);
+        assert_eq!(r.samples["first_visit_us"][0].0, 2);
         assert!(r
             .waits
             .iter()

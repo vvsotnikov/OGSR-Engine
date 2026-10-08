@@ -268,10 +268,10 @@ exec sh .githooks/pre-commit
 }
 
 fn service_report(path: &str, frames: Option<&str>) -> Result {
-    let text = fs::read_to_string(path)?;
+    let reader = std::io::BufReader::new(fs::File::open(path)?);
     let mut report = match frames {
-        Some(frames) => xtask::service_trace::read_warmed(&text, &fs::read_to_string(frames)?)?,
-        None => xtask::service_trace::read(&text)?,
+        Some(frames) => xtask::service_trace::read_warmed(reader, &fs::read_to_string(frames)?)?,
+        None => xtask::service_trace::read(reader)?,
     };
     print!("{}", report.render());
     if report.dropped != 0 {

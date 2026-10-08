@@ -9,6 +9,7 @@
 #include <condition_variable>
 #include <thread>
 #include <string>
+#include <optional>
 
 namespace alife_service_trace
 {
@@ -24,6 +25,8 @@ std::thread worker;
 bool stopping = false;
 IWriter* writer = nullptr;
 std::uint64_t written = 0;
+struct Settings { std::uint16_t id; std::uint64_t value; std::uint32_t flags; };
+std::optional<Settings> last_settings, last_scheduler;
 std::array<std::uint64_t, 65536> generations{};
 Clock::time_point epoch;
 std::uint64_t dropped = 0, serial = 0;
@@ -36,6 +39,8 @@ void begin()
     if (!strstr(Core.Params, "-alife_service_trace")) return;
     std::lock_guard<std::mutex> guard(mutex);
     R_ASSERT(!enabled.load());
+    last_settings.reset();
+    last_scheduler.reset();
     events.clear();
     events.reserve(capacity);
     generations.fill(0);
@@ -77,10 +82,16 @@ void begin()
     });
     enabled.store(true, std::memory_order_release);
 }
-void record(const char* kind, std::uint16_t id, std::uint64_t value, std::uint32_t flags)
+void record(const char* kind, std::uint16_t id, std::uint64_t value, std::uint32_t flags, bool changes_only)
 {
     std::lock_guard<std::mutex> guard(mutex);
     if (!enabled.load(std::memory_order_relaxed)) return;
+    if (changes_only)
+    {
+        auto& previous = strcmp(kind, "settings") == 0 ? last_settings : last_scheduler;
+        if (previous && previous->id == id && previous->value == value && previous->flags == flags) return;
+        previous = Settings{id, value, flags};
+    }
     if (strcmp(kind, "register") == 0) ++generations[id];
     if (events.size() == capacity) { ++dropped; return; }
     events.push_back({now(), generations[id], value, kind, flags, id});
