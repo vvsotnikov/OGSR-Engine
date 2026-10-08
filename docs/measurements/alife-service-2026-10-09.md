@@ -43,3 +43,23 @@ complete footers and zero drops. Both travel scenarios completed. Full traces re
 unmatched lifecycle/client events separately; format integrity does not imply complete
 activation pairing. Raw data, plots, scripts and package/save identities stay local,
 outside Git. See [the measurement contract](alife-service.md) for reusable commands.
+
+## Lifecycle-only follow-up
+
+A subsequent single-binary matrix repeated both policies twice with all four modes
+(off, slices, lifecycle, full), reversing mode and policy order: 16 more runs with
+the same fixture, settings and warm window. Lifecycle mode omits both visit and
+repeated rejection events. Relative to slices, mean visits/slice changed −1.4% to
++2.1% and visits/second −0.9% to +4.1%; relative to off, frame p99 changed −2.3% to
++0.1%. Full tracing still lost 35–39% of mean visits/slice. No warmed frames exceeded
+27 ms. These comparisons support separating the high-rate stream, not attributing
+all cost to `visit` alone or claiming zero lifecycle cost during heavy transitions.
+
+Use lifecycle mode for permission/activation histories without the high-rate stream;
+retain full mode only when the individual visit/rejection history is itself needed.
+The shipped reader reproduced all slice sums, means and rates from the raw records,
+and verified full-mode visit counts. All 12 traces passed integrity checks. Native
+permission scenarios passed in lifecycle and full modes, as did lifecycle map travel;
+all five resulting traces passed, with no invented first/revisit waits in lifecycle
+reports. Both matrices' data and plots remain local. Their measurements are not pooled
+as if they shared one binary, and neither establishes untraced per-object latency.

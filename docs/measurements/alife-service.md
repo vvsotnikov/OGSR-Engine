@@ -110,9 +110,8 @@ use static-lifetime literals from the schema vocabulary. It never stores object 
 The [observer calibration](alife-service-2026-10-09.md) compares both modes with
 tracing off. Full-mode per-object times describe the instrumented engine; do not
 scale them by the throughput ratio to claim untraced latencies. Slice totals cannot
-identify an individual object that is starved. Both Bar experiments observed warmed
-frames above 27 ms only in full-trace runs (two of ten full runs, none of sixteen
-other runs); this is a reason to avoid full tracing for performance measurement,
+identify an individual object that is starved. Across the Bar comparisons, warmed frames above 27 ms occurred only in full-trace
+runs (two of fourteen full runs, none of twenty-eight other runs); this is a reason to avoid full tracing for performance measurement,
 not proof that it caused those stalls. The earlier
 [Bar results](alife-service-2026-10-08.md) have the same observer limitation.
 
