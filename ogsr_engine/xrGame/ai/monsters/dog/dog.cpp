@@ -1,5 +1,4 @@
 #include "stdafx.h"
-#include <exception>
 #include "dog.h"
 #include "dog_state_manager.h"
 #include "../monster_velocity_space.h"
@@ -201,12 +200,7 @@ void CAI_Dog::reinit()
         // vanilla damage without depending on attack-table order.
         jump_attack_params = anim().AA_FindParams(motion) ? motion : "stand_attack_0";
     }
-    jump_hit_params = anim().AA_FindParams(jump_attack_params);
-    if (!jump_hit_params)
-    {
-        FATAL("Missing attack parameters: section=%s animation=%s; set jump_attack_params_anim to a valid attack_params row", section, jump_attack_params);
-        std::terminate(); // FATAL may return when continued under a debugger.
-    }
+    jump_hit_params = &anim().AA_GetParams(jump_attack_params, "set jump_attack_params_anim to a valid attack_params row");
 
     com_man().add_rotation_jump_data("1", "2", "3", "4", PI_DIV_2);
     com_man().add_rotation_jump_data("5", "6", "7", "8", deg(179));

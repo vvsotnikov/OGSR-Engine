@@ -324,12 +324,12 @@ SAAParam* CControlAnimationBase::AA_FindParams(LPCSTR anim_name)
     return nullptr;
 }
 
-SAAParam& CControlAnimationBase::AA_GetParams(LPCSTR anim_name)
+SAAParam& CControlAnimationBase::AA_GetParams(LPCSTR anim_name, LPCSTR diagnostic_hint)
 {
     if (SAAParam* params = AA_FindParams(anim_name))
         return *params;
 
-    FATAL("Missing attack parameters: section=%s animation=%s", *m_object->cNameSect(), anim_name);
+    FATAL("Missing attack parameters: section=%s animation=%s%s%s", *m_object->cNameSect(), anim_name, diagnostic_hint ? "; " : "", diagnostic_hint ? diagnostic_hint : "");
     std::terminate(); // A debugger can continue after FATAL; never return unrelated damage data.
 }
 
