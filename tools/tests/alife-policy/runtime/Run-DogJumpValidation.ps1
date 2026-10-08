@@ -68,7 +68,9 @@ attack_params = validation_jump_empty_parameters
 attack_params = validation_jump_missing_parameters
 [validation_jump_pseudodog]:pseudodog_normal
 attack_params = validation_jump_missing_parameters
-[validation_jump_chimera]:m_chimera_e
+; The unused SoC chimera base lacks ALife defaults; retain its class/model but
+; supply missing common settings from the complete dog section.
+[validation_jump_chimera]:dog_normal,m_chimera_e
 attack_params = validation_jump_missing_parameters
 '@
 if ((Get-Content "$runtime/gamedata/config/misc/items.ltx" -Raw).Contains('[validation_jump_default]')) {
