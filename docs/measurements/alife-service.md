@@ -5,7 +5,9 @@ Add `-Mode distance` or `-Mode whole-map`, `-Count 400` for density, and `-Eligi
 for controlled whole-map permission changes. Use `-Transitions` separately for map lifecycle.
 The runner records save/package hashes and configuration in `session.json`.
 Run `cargo xtask service-report <capture>/appdata/alife-service-<pid>-<session>.csv`
-for each completed simulator session. Keep the original capture alongside the report.
+for each completed simulator session. Add `--frames <capture>/appdata/regular-frames.csv`
+to select the warmed interval. Run `cargo xtask frame-report <capture>/appdata/regular-frames.csv`
+for frame percentiles by scenario stage. Keep the original capture alongside the report.
 
 ## Interpretation
 
@@ -35,7 +37,9 @@ for each completed simulator session. Keep the original capture alongside the re
   carry level, effective switch budget, policy and actual `mtALife` setting. A negative budget is
   the initial unlimited-traversal sentinel, not a huge unsigned allowance.
 - Flags: online=1, attached=2, creature=4, living creature=8, online permission=16,
-  offline permission=32. Permissions include the existing configuration filter.
+  offline permission=32. Creature summaries include the actor and corpses; they are
+  a subset of server objects, not an assertion that each object runs tactical AI.
+  Permissions include the existing configuration filter.
   Unfinished waits retain the last observed flags/rejection; those are not proof of
   continuous eligibility between observations. No unagreed starvation threshold is used.
 
@@ -60,5 +64,15 @@ of overhead comparisons. Lua buffers wall-clock frame intervals and writes them 
 at scenario completion. Stage 4 is the existing warmed 45-second measurement window;
 other stages contain initial settling, creation and subsequent settling. This fixture
 loads a save into a new process but does not flush filesystem caches; do not call it a
-cold-cache measurement. Service summaries currently cover the entire simulator capture,
-including loading; report them separately from warmed frame intervals.
+cold-cache measurement. Default service summaries cover the entire simulator capture, including loading.
+With `--frames`, service samples are selected by completion time between the first and
+last recorded ALife update clocks in stage 4. Frame numbers and game milliseconds must
+match. Pre-window history remains available: waits begun earlier are not reset or hidden.
+The report gives the actual clock bounds, and right-censors pending waits at window end.
+A complete capture is not necessarily a successful scenario: also require the runner
+to acknowledge completion in session.json and retain the engine log.
+
+The recorder stores event-kind pointers until the writer drains them; call sites must
+use static-lifetime literals from the schema vocabulary. It never stores object pointers.
+
+The first matched Bar results are in [the 2026-10-08 report](alife-service-2026-10-08.md).

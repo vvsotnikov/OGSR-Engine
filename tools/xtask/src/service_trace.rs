@@ -19,11 +19,17 @@ pub struct Report {
     pub updates: u64,
     pub duration_us: u64,
     pub dropped: u64,
+    window: Option<(u64, u64)>,
+    collecting: bool,
+    measured_updates: u64,
     settings: std::collections::BTreeSet<(u16, i64, u32)>,
     schedules: std::collections::BTreeSet<(u64, u32)>,
     unmatched_kinds: BTreeMap<String, u64>,
 }
 fn censor(r: &mut Report, key: Key, o: &Object, now: u64, reason: &str) {
+    if !r.collecting {
+        return;
+    }
     if let Some(start) = o.last.or(o.member) {
         r.waits.push(format!(
             "{}, {}, {}, {}, {}, {}, {}",
@@ -59,17 +65,36 @@ fn censor(r: &mut Report, key: Key, o: &Object, now: u64, reason: &str) {
         }
     }
 }
+fn unmatched(r: &mut Report, kind: String) {
+    if r.collecting {
+        r.unmatched += 1;
+        *r.unmatched_kinds.entry(kind).or_default() += 1;
+    }
+}
 fn sample(r: &mut Report, name: &'static str, value: u64, key: Key) {
+    if !r.collecting {
+        return;
+    }
     r.samples.entry(name).or_default().push((value, key));
 }
 pub fn read(text: &str) -> Result<Report, String> {
+    read_window(text, None)
+}
+fn read_window(text: &str, window: Option<(u64, u64)>) -> Result<Report, String> {
+    if window.is_some_and(|(start, end)| start >= end) {
+        return Err("Invalid measurement window".into());
+    }
     let mut lines = text.lines();
     if lines.next() != Some("ogsr-service,1")
         || lines.next() != Some("us,kind,id,generation,value,flags")
     {
         return Err("Unsupported service trace header".into());
     }
-    let mut r = Report::default();
+    let mut r = Report {
+        window,
+        ..Default::default()
+    };
+    let mut closed = false;
     let mut objects = BTreeMap::<Key, Object>::new();
     let mut generations = BTreeMap::<u16, u64>::new();
     let mut previous = 0;
@@ -88,8 +113,41 @@ pub fn read(text: &str) -> Result<Report, String> {
         if now < previous || id > u16::MAX as u64 || flags > u32::MAX as u64 {
             return Err("Invalid clock or field range".into());
         }
+        if !matches!(
+            f[1],
+            "register"
+                | "clock"
+                | "update"
+                | "scheduler"
+                | "end"
+                | "permission_on"
+                | "permission_off"
+                | "offline_permission"
+                | "enter"
+                | "leave"
+                | "visit"
+                | "remove"
+                | "eligible_observed"
+                | "online"
+                | "offline"
+                | "client"
+                | "distance_rejected"
+                | "permission_rejected"
+        ) {
+            return Err(format!("Unknown event {}", f[1]));
+        }
         previous = now;
         let key = (id as u16, generation);
+        if let Some((_, end)) = window {
+            if now >= end && !closed {
+                r.collecting = true;
+                for (key, o) in &objects {
+                    censor(&mut r, *key, o, end, "window_end");
+                }
+                closed = true;
+            }
+        }
+        r.collecting = window.is_none_or(|(start, end)| now >= start && now < end);
         if f[1] == "end" {
             if generation != index as u64 {
                 return Err("Record count mismatch: missing or duplicated rows".into());
@@ -97,21 +155,34 @@ pub fn read(text: &str) -> Result<Report, String> {
             r.duration_us = now;
             r.dropped = value;
             ended = true;
-            for (key, o) in &objects {
-                censor(&mut r, *key, o, now, "capture_end");
+            if window.is_some_and(|(_, end)| end > now) {
+                return Err("Window exceeds capture".into());
+            }
+            if !closed {
+                for (key, o) in &objects {
+                    censor(&mut r, *key, o, now, "capture_end");
+                }
             }
             continue;
         }
         if f[1] == "scheduler" {
-            r.schedules.insert((value, flags as u32));
+            if r.collecting {
+                r.schedules.insert((value, flags as u32));
+            }
             continue;
         }
         if f[1] == "clock" {
             continue;
         }
         if f[1] == "update" {
-            r.settings.insert((id as u16, value as i64, flags as u32));
+            if r.collecting {
+                r.settings.insert((id as u16, value as i64, flags as u32));
+                r.measured_updates += 1;
+            }
             r.updates += 1;
+            continue;
+        }
+        if closed {
             continue;
         }
         if f[1] == "register" {
@@ -132,29 +203,8 @@ pub fn read(text: &str) -> Result<Report, String> {
             );
             continue;
         }
-        if !matches!(
-            f[1],
-            "permission_on"
-                | "permission_off"
-                | "offline_permission"
-                | "enter"
-                | "leave"
-                | "visit"
-                | "remove"
-                | "eligible_observed"
-                | "online"
-                | "offline"
-                | "client"
-                | "distance_rejected"
-                | "permission_rejected"
-        ) {
-            return Err(format!("Unknown event {}", f[1]));
-        }
         let Some(o) = objects.get_mut(&key) else {
-            r.unmatched += 1;
-            *r.unmatched_kinds
-                .entry(format!("unregistered_{}", f[1]))
-                .or_default() += 1;
+            unmatched(&mut r, format!("unregistered_{}", f[1]));
             continue;
         };
         match f[1] {
@@ -167,13 +217,15 @@ pub fn read(text: &str) -> Result<Report, String> {
             "permission_off" => {
                 o.flags = flags as u32;
                 if let Some(start) = o.permission.take() {
-                    r.waits.push(format!(
-                        "{}, {}, permission_to_online, {}, permission_revoked, , {}",
-                        key.0,
-                        key.1,
-                        now - start,
-                        o.flags
-                    ));
+                    if r.collecting {
+                        r.waits.push(format!(
+                            "{}, {}, permission_to_online, {}, permission_revoked, , {}",
+                            key.0,
+                            key.1,
+                            now - start,
+                            o.flags
+                        ));
+                    }
                 }
             }
             "offline_permission" => {
@@ -213,10 +265,7 @@ pub fn read(text: &str) -> Result<Report, String> {
                     let gap = r.updates - update;
                     sample(&mut r, "evaluation_update_gap", gap, key);
                 } else {
-                    r.unmatched += 1;
-                    *r.unmatched_kinds
-                        .entry(format!("unpaired_{}", f[1]))
-                        .or_default() += 1;
+                    unmatched(&mut r, format!("unpaired_{}", f[1]));
                 }
                 o.last = Some((now, r.updates));
             }
@@ -226,6 +275,9 @@ pub fn read(text: &str) -> Result<Report, String> {
             }
             "online" => {
                 if let Some(start) = o.permission.take() {
+                    if o.flags & 4 != 0 {
+                        sample(&mut r, "creature_permission_to_online_us", now - start, key);
+                    }
                     sample(&mut r, "permission_to_online_us", now - start, key);
                 }
                 if let Some(start) = o.observed.take() {
@@ -238,25 +290,27 @@ pub fn read(text: &str) -> Result<Report, String> {
             }
             "client" => {
                 if let Some(start) = o.online.take() {
+                    if o.flags & 4 != 0 {
+                        sample(&mut r, "creature_online_to_client_us", now - start, key);
+                    }
                     sample(&mut r, "online_to_client_us", now - start, key);
                 } else {
-                    r.unmatched += 1;
-                    *r.unmatched_kinds
-                        .entry(format!("unpaired_{}", f[1]))
-                        .or_default() += 1;
+                    unmatched(&mut r, format!("unpaired_{}", f[1]));
                 }
             }
             "distance_rejected" => o.rejection = "distance",
             "permission_rejected" => o.rejection = "permission",
             "offline" => {
                 if let Some(start) = o.online.take() {
-                    r.waits.push(format!(
-                        "{}, {}, online_to_client, {}, offline, , {}",
-                        key.0,
-                        key.1,
-                        now - start,
-                        o.flags
-                    ));
+                    if r.collecting {
+                        r.waits.push(format!(
+                            "{}, {}, online_to_client, {}, offline, , {}",
+                            key.0,
+                            key.1,
+                            now - start,
+                            o.flags
+                        ));
+                    }
                 }
                 o.observed = None;
             }
@@ -290,6 +344,14 @@ impl Report {
             self.unmatched,
             self.dropped == 0
         );
+        if let Some((start, end)) = self.window {
+            writeln!(
+                out,
+                "window_start_us={start} window_end_us={end} measured_updates={}",
+                self.measured_updates
+            )
+            .unwrap();
+        }
         for (level, budget, flags) in &self.settings {
             writeln!(
                 out,
@@ -407,5 +469,144 @@ mod tests {
         for _ in 0..2 {
             assert_eq!(read(&data).unwrap().samples["first_visit_us"][0].0, 1000000);
         }
+    }
+}
+
+struct Frame {
+    number: u32,
+    game_ms: u64,
+    stage: u32,
+    ms: f64,
+}
+fn frames(text: &str) -> Result<Vec<Frame>, String> {
+    let mut lines = text.lines();
+    if lines.next() != Some("frame,game_ms,stage,wall_ms") {
+        return Err("Invalid frame capture header".into());
+    }
+    let mut result = Vec::new();
+    let mut previous = None;
+    for line in lines {
+        let f: Vec<_> = line.split(',').collect();
+        if f.len() != 4 {
+            return Err("Invalid frame row".into());
+        }
+        let number = f[0].parse::<u32>().map_err(|_| "Invalid frame number")?;
+        let game_ms = f[1].parse::<u64>().map_err(|_| "Invalid game time")?;
+        let stage = f[2].parse::<u32>().map_err(|_| "Invalid frame stage")?;
+        let ms = f[3].parse::<f64>().map_err(|_| "Invalid frame interval")?;
+        if !ms.is_finite() || ms < 0. || stage > 4 || previous.is_some_and(|v| number <= v) {
+            return Err("Invalid frame interval or ordering".into());
+        }
+        previous = Some(number);
+        result.push(Frame {
+            number,
+            game_ms,
+            stage,
+            ms,
+        });
+    }
+    if result.is_empty() {
+        return Err("Empty frame capture".into());
+    }
+    Ok(result)
+}
+pub fn frame_report(text: &str) -> Result<String, String> {
+    let rows = frames(text)?;
+    let mut stages = BTreeMap::<u32, Vec<f64>>::new();
+    for row in rows {
+        stages.entry(row.stage).or_default().push(row.ms);
+    }
+    let mut out = String::from("stage,frames,total_ms,p50_ms,p95_ms,p99_ms,max_ms\n");
+    for (stage, mut times) in stages {
+        times.sort_by(f64::total_cmp);
+        let n = times.len();
+        let q = |p: usize| times[(n * p).div_ceil(100).saturating_sub(1)];
+        writeln!(
+            out,
+            "{stage},{n},{:.3},{:.3},{:.3},{:.3},{:.3}",
+            times.iter().sum::<f64>(),
+            q(50),
+            q(95),
+            q(99),
+            q(100)
+        )
+        .unwrap();
+    }
+    Ok(out)
+}
+pub fn read_warmed(text: &str, frame_text: &str) -> Result<Report, String> {
+    let rows = frames(frame_text)?;
+    let warm: Vec<_> = rows.iter().filter(|r| r.stage == 4).collect();
+    let first = warm.first().ok_or("No warmed frame window")?.number;
+    let last = warm.last().unwrap().number;
+    let mut start = None;
+    let mut end = None;
+    let clocks: BTreeMap<_, _> = rows.iter().map(|r| (r.number, r.game_ms)).collect();
+    for line in text.lines().skip(2) {
+        let f: Vec<_> = line.split(',').collect();
+        if f.len() != 6 {
+            return Err("Invalid service record".into());
+        }
+        if f[1] == "clock" {
+            let us = f[0].parse::<u64>().map_err(|_| "Invalid clock")?;
+            let frame = f[5].parse::<u32>().map_err(|_| "Invalid clock frame")?;
+            if let Some(expected) = clocks.get(&frame) {
+                if f[4].parse::<u64>().map_err(|_| "Invalid game clock")? != *expected {
+                    return Err("Frame and service clocks do not match".into());
+                }
+            }
+            if frame >= first && frame <= last {
+                if start.is_none() {
+                    start = Some(us);
+                }
+                end = Some(us);
+            }
+        }
+    }
+    read_window(
+        text,
+        Some((
+            start.ok_or("No service clock for warmed frames")?,
+            end.ok_or("No end of warmed service window")?,
+        )),
+    )
+}
+
+#[cfg(test)]
+mod window_tests {
+    use super::*;
+    #[test]
+    fn warmed_window_preserves_old_unfinished_waits_and_excludes_loading_samples() {
+        let text="ogsr-service,1\nus,kind,id,generation,value,flags\n0,register,1,1,0,12\n1,enter,1,1,0,12\n2,visit,1,1,0,12\n3,register,2,1,0,12\n4,enter,2,1,0,12\n10,clock,65535,0,100,10\n11,visit,1,1,0,12\n20,clock,65535,0,110,11\n21,visit,1,1,0,12\n30,clock,65535,0,120,12\n40,end,65535,10,0,0\n";
+        let r = read_warmed(
+            text,
+            "frame,game_ms,stage,wall_ms\n10,100,4,10\n11,110,4,10\n",
+        )
+        .unwrap();
+        assert!(!r.samples.contains_key("first_visit_us"));
+        assert_eq!(r.samples["revisit_us"].len(), 1);
+        assert!(r
+            .waits
+            .iter()
+            .any(|w| w.contains("2, 1, first_visit, 16, window_end")));
+    }
+    #[test]
+    fn mismatched_frame_capture_is_rejected() {
+        let text="ogsr-service,1\nus,kind,id,generation,value,flags\n0,clock,65535,0,100,10\n10,clock,65535,0,110,11\n20,end,65535,2,0,0\n";
+        assert!(read_warmed(
+            text,
+            "frame,game_ms,stage,wall_ms\n10,101,4,10\n11,111,4,10\n"
+        )
+        .is_err());
+    }
+    #[test]
+    fn frame_reader_checks_bad_values_and_uses_nearest_rank() {
+        assert!(frame_report("frame,game_ms,stage,wall_ms\n1,1,4,NaN\n").is_err());
+        assert!(frame_report("frame,game_ms,stage,wall_ms\n1,1,4,1\n1,2,4,1\n").is_err());
+        assert!(
+            frame_report("frame,game_ms,stage,wall_ms\n1,1,4,1\n2,2,4,3\n")
+                .unwrap()
+                .contains("4,2,4.000,1.000,3.000,3.000,3.000")
+        );
     }
 }

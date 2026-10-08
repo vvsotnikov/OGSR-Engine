@@ -5,6 +5,7 @@ param(
     [ValidateSet('Debug','Release')][string]$Configuration = 'Debug',
     [string]$SeedAppData = 'seeds/bar-2026-10-03',
     [ValidateRange(1,86400)][int]$TimeoutSeconds = 240,
+    [switch]$ServiceTrace,
     [switch]$PrepareOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -22,6 +23,7 @@ $meta = Get-Content "$session/session.json" -Raw | ConvertFrom-Json
 $meta | Add-Member build $build
 $meta | Add-Member case $Case
 $meta | Add-Member configuration $Configuration
+$meta | Add-Member serviceTrace ([bool]$ServiceTrace)
 $meta | Add-Member timeoutSeconds $TimeoutSeconds
 $runtime = New-Item -ItemType Directory "$session/runtime"
 Copy-Item "$InstallRoot/gamedata" "$runtime/gamedata" -Recurse
@@ -87,6 +89,7 @@ if ($indices.Count -ne 1) { throw 'Expected one appdata root' }
 $fs[$indices[0]] = '$app_data_root$ = true| false| ' + ("$session/appdata/" -replace '/', '\')
 $fs | Set-Content "$session/fsgame.ltx" -Encoding ascii
 $meta.arguments = '-fsltx ..\fsgame.ltx -alife_whole_map -dog_jump_probe -start server(bar_center/single/alife/load) client(localhost)'
+if ($ServiceTrace) { $meta.arguments += ' -alife_service_trace' }
 Set-Content "$session/appdata/regular-config.lua" "return {section='$section'}" -Encoding ascii
 Copy-Item "$PSScriptRoot/DogJumpDriver.lua" "$session/appdata/RegularDriver.lua"
 $meta.status = 'dog-prepared'

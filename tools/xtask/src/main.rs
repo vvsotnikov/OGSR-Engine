@@ -277,6 +277,16 @@ fn main_result() -> Result {
         .collect::<Vec<_>>()
         .as_slice()
     {
+        ["frame-report", path] => {
+            print!("{}",xtask::service_trace::frame_report(&fs::read_to_string(path)?)?);
+            Ok(())
+        }
+        ["service-report", path, "--frames", frames] => {
+            let mut report=xtask::service_trace::read_warmed(&fs::read_to_string(path)?,&fs::read_to_string(frames)?)?;
+            print!("{}",report.render());
+            if report.dropped != 0 { return Err("Service capture dropped events; do not use as complete latency evidence".into()); }
+            Ok(())
+        }
         ["service-report", path] => {
             let mut report = xtask::service_trace::read(&fs::read_to_string(path)?)?;
             print!("{}", report.render());
@@ -302,7 +312,7 @@ fn main_result() -> Result {
         _ => Err(concat!(
             "Usage: cargo xtask {validate [--tests-only | ",
             "--configuration Debug|Release|ReleaseTracyProfiler] | ",
-            "install-hooks | pre-commit | reset-snapshot}"
+            "install-hooks | pre-commit | reset-snapshot | service-report TRACE [--frames FRAMES] | frame-report FRAMES}"
         )
         .into()),
     }
