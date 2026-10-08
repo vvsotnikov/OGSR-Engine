@@ -340,12 +340,20 @@ void CAI_Dog::reload(LPCSTR section)
     pcstr jump_ataka_01 = READ_IF_EXISTS(pSettings, r_string, section, "anim_jump_ataka_01", 0 /*"jump_ataka_01"*/);
     pcstr jump_ataka_02 = READ_IF_EXISTS(pSettings, r_string, section, "anim_jump_ataka_02", "jump_right_0" /*"jump_ataka_02"*/);
     pcstr jump_ataka_03 = READ_IF_EXISTS(pSettings, r_string, section, "anim_jump_ataka_03", 0 /*"jump_ataka_03"*/);
+    // Vanilla's default jump_right_0 has no attack entry. Use its ordinary
+    // bite explicitly; a configured jump instead requires its own parameters.
+    jump_attack_params = READ_IF_EXISTS(pSettings, r_string, section, "anim_jump_ataka_02", "stand_attack_0");
     com_man().load_jump_data(0, jump_ataka_01, jump_ataka_02, jump_ataka_03, MonsterMovement::eVelocityParameterRunNormal, MonsterMovement::eVelocityParameterRunNormal, 0);
 }
 
 void CAI_Dog::HitEntityInJump(const CEntity* pEntity)
 {
-    SAAParam& params = anim().AA_GetParams("jump_ataka_02");
+    SAAParam& params = anim().AA_GetParams(jump_attack_params);
+
+#ifdef DEBUG
+    if (strstr(Core.Params, "-dog_jump_probe"))
+        Msg("[dog jump] id=%u section=%s attack=%s power=%.6f impulse=%.6f", ID(), *cNameSect(), jump_attack_params, params.hit_power, params.impulse);
+#endif
 
     HitEntity(pEntity, params.hit_power, params.impulse, params.impulse_dir);
 }

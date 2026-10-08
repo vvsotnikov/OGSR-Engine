@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <exception>
 #include "control_animation_base.h"
 #include "control_direction_base.h"
 #include "control_movement_base.h"
@@ -320,8 +321,8 @@ SAAParam& CControlAnimationBase::AA_GetParams(LPCSTR anim_name)
             return attack_anim;
     }
 
-    VERIFY3(FALSE, "Error! No animation in AA_VECTOR! Animation = ", anim_name);
-    return (*(m_attack_anims.begin()));
+    FATAL("Missing attack parameters: section=%s animation=%s", *m_object->cNameSect(), anim_name);
+    std::terminate(); // A debugger can continue after FATAL; never return unrelated damage data.
 }
 
 SAAParam& CControlAnimationBase::AA_GetParams(MotionID motion, float time_perc)
@@ -333,8 +334,8 @@ SAAParam& CControlAnimationBase::AA_GetParams(MotionID motion, float time_perc)
             return attack_anim;
     }
 
-    VERIFY2(FALSE, "Error! No animation in AA_VECTOR! Animation = [UNKNOWN]");
-    return (*(m_attack_anims.begin()));
+    FATAL("Missing attack parameters: section=%s time=%f", *m_object->cNameSect(), time_perc);
+    std::terminate();
 }
 
 EPState CControlAnimationBase::GetState(EMotionAnim a)
