@@ -70,7 +70,8 @@ void CClientSpawnManager::remove(REQUESTED_REGISTRY& registry, ALife::_OBJECT_ID
     REQUESTED_REGISTRY::iterator I = registry.find(requested_id);
     if (I == registry.end())
     {
-        ai().script_engine().script_log(eLuaMessageTypeError, "There is no spawn callback on object with id %d from object with id %d!", requesting_id, requested_id);
+        if (!no_warning)
+            ai().script_engine().script_log(eLuaMessageTypeError, "There is no spawn callback on object with id %d from object with id %d!", requesting_id, requested_id);
         return;
     }
 

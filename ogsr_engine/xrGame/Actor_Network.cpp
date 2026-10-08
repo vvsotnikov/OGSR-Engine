@@ -222,7 +222,8 @@ void CActor::net_Destroy()
 {
     inherited::net_Destroy();
 
-    if (m_holder_id != ALife::_OBJECT_ID(-1))
+    // The callback may have fired already (including immediately during add).
+    if (m_holder_id != ALife::_OBJECT_ID(-1) && Level().client_spawn_manager().callback(ID(), m_holder_id))
         Level().client_spawn_manager().remove(m_holder_id, ID());
 
     delete_data(m_game_task_manager);
