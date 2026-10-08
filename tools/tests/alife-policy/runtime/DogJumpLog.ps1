@@ -13,8 +13,12 @@ function Assert-DogJumpLog([string]$Log, [string]$Case, [int]$ExitCode, [string]
         'chimera' { 'jump_attack_1' }
     }
     if ($required) {
+        $expected = "Missing attack parameters: section=$section animation=$required"
+        if ($Case -in @('missing','empty')) {
+            $expected += '; set jump_attack_params_anim to a valid attack_params row'
+        }
         $fatal = $Log.IndexOf('FATAL ERROR')
-        if ($fatal -lt 0 -or $Log -notmatch "Missing attack parameters: section=$section animation=$required" -or
+        if ($fatal -lt 0 -or !$Log.Contains($expected) -or
             $Log -match "\[dog jump\] id=\d+ section=$section " -or $Log -match '\[dog fixture\] complete') {
             throw 'Expected attack-parameter rejection missing'
         }

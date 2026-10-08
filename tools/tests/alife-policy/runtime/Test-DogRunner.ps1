@@ -30,6 +30,14 @@ foreach ($case in @('missing','empty','snork','pseudodog','chimera')) {
         'snork' { 'stand_attack_2_1' }; 'pseudodog' { 'run_jamp_1' }; 'chimera' { 'jump_attack_1' }; default { 'jump_right_0' }
     }
     $log = "Debug assertions: enabled`n[dog fixture] begin section=validation_jump_$case`nFATAL ERROR`nMissing attack parameters: section=validation_jump_$case animation=$required"
+    if ($case -in @('missing','empty')) {
+        foreach ($configuration in @('Debug','Release')) {
+            $rejected = $false
+            try { Assert-DogJumpLog $log $case 0 $configuration } catch { $rejected = $true }
+            if (!$rejected) { throw 'Accepted dog error without repair hint' }
+        }
+        $log += '; set jump_attack_params_anim to a valid attack_params row'
+    }
     Assert-DogJumpLog $log $case 0
     Assert-DogJumpLog ($log.Replace('Debug assertions: enabled','Debug assertions: disabled')) $case 0 Release
     $rejected = $false
