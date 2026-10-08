@@ -310,7 +310,7 @@ void CControlAnimationBase::CheckReplacedAnim()
         }
 }
 
-SAAParam& CControlAnimationBase::AA_GetParams(LPCSTR anim_name)
+SAAParam* CControlAnimationBase::AA_FindParams(LPCSTR anim_name)
 {
     // искать текущую анимацию в AA_VECTOR
     MotionID motion = smart_cast<IKinematicsAnimated*>(m_object->Visual())->LL_MotionID(anim_name);
@@ -318,8 +318,16 @@ SAAParam& CControlAnimationBase::AA_GetParams(LPCSTR anim_name)
     for (SAAParam& attack_anim : m_attack_anims)
     {
         if (attack_anim.motion == motion)
-            return attack_anim;
+            return &attack_anim;
     }
+
+    return nullptr;
+}
+
+SAAParam& CControlAnimationBase::AA_GetParams(LPCSTR anim_name)
+{
+    if (SAAParam* params = AA_FindParams(anim_name))
+        return *params;
 
     FATAL("Missing attack parameters: section=%s animation=%s", *m_object->cNameSect(), anim_name);
     std::terminate(); // A debugger can continue after FATAL; never return unrelated damage data.

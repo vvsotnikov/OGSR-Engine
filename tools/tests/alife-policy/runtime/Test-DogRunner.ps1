@@ -3,13 +3,19 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/DogJumpLog.ps1"
 $log = @'
 Debug assertions: enabled
+[dog fixture] begin section=validation_jump_default
 [dog fixture] spawned id=123 section=validation_jump_default
+[dog fixture] spawned id=124 section=validation_jump_default
+[dog fixture] spawned id=125 section=validation_jump_default
 [dog jump] id=123 section=validation_jump_default attack=stand_attack_0 power=0.150000 impulse=30.000000
 [dog fixture] complete
 '@
 Assert-DogJumpLog $log default 0
-$override = $log.Replace('validation_jump_default','validation_jump_override').Replace('stand_attack_0 power=0.150000 impulse=30.000000','stand_attack_1 power=0.370000 impulse=47.000000')
+$override = $log.Replace('validation_jump_default','validation_jump_override').Replace('stand_attack_0 power=0.150000 impulse=30.000000','jump_right_0 power=0.370000 impulse=47.000000')
 Assert-DogJumpLog $override override 0
+Assert-DogJumpLog ($override.Replace('Debug assertions: enabled','Debug assertions: disabled')) override 0 Release
+Assert-DogJumpLog ($log.Replace('validation_jump_default','validation_jump_explicit')) explicit 0
+Assert-DogJumpLog ($override.Replace('validation_jump_override','validation_jump_damage').Replace('jump_right_0','stand_attack_1')) damage 0
 $rejected = $false
 try { Assert-DogJumpLog $log default 1 } catch { $rejected = $true }
 if (!$rejected) { throw 'Accepted nonzero game exit' }
@@ -20,10 +26,11 @@ foreach ($bad in @($log.Replace('[dog jump]', '[other]'), $log.Replace('power=0.
     if (!$rejected) { throw 'Accepted incomplete or incorrect jump evidence' }
 }
 foreach ($case in @('missing','empty')) {
-    $log = "Debug assertions: enabled`n[dog fixture] spawned id=123 section=validation_jump_$case`nFATAL ERROR`nMissing attack parameters: section=validation_jump_$case animation=stand_attack_1"
+    $log = "Debug assertions: enabled`n[dog fixture] begin section=validation_jump_$case`nFATAL ERROR`nMissing attack parameters: section=validation_jump_$case animation=jump_right_0"
     Assert-DogJumpLog $log $case 0
+    Assert-DogJumpLog ($log.Replace('Debug assertions: enabled','Debug assertions: disabled')) $case 0 Release
     $rejected = $false
-    try { Assert-DogJumpLog ($log.Replace('stand_attack_1','other')) $case 0 } catch { $rejected = $true }
+    try { Assert-DogJumpLog ($log.Replace('jump_right_0','other')) $case 0 } catch { $rejected = $true }
     if (!$rejected) { throw 'Accepted unrelated failure' }
 }
 $root = Join-Path ([IO.Path]::GetTempPath()) ('ogsr-dog-' + [guid]::NewGuid())
@@ -43,7 +50,7 @@ try {
         ConvertTo-Json | Set-Content "$root/bin_fixture/build.json"
     $paths = @('gamedata/config/misc/items.ltx','seed/savedgames/bar_center.sav','seed/user_ogsr.ltx','fsgame.ltx')
     $before = @($paths | ForEach-Object { (Get-FileHash "$root/$_").Hash })
-    foreach ($case in @('default','override','missing','empty')) {
+    foreach ($case in @('default','explicit','override','damage','missing','empty')) {
         $session = & "$PSScriptRoot/Run-DogJumpValidation.ps1" -InstallRoot $root -Package bin_fixture -SeedAppData seed -Case $case -PrepareOnly
         $meta = Get-Content "$session/session.json" -Raw | ConvertFrom-Json
         if ($meta.status -ne 'dog-prepared' -or $meta.case -ne $case -or !$meta.arguments.Contains('-dog_jump_probe') -or

@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory)][string]$InstallRoot,
     [Parameter(Mandatory)][ValidatePattern('^bin_[a-zA-Z0-9_]+$')][string]$Package,
-    [ValidateSet('default','override','missing','empty')][string]$Case = 'default',
+    [ValidateSet('default','explicit','override','damage','missing','empty')][string]$Case = 'default',
+    [ValidateSet('Debug','Release')][string]$Configuration = 'Debug',
     [string]$SeedAppData = 'seeds/bar-2026-10-03',
     [ValidateRange(1,86400)][int]$TimeoutSeconds = 240,
     [switch]$PrepareOnly
@@ -12,7 +13,7 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/DogJumpLog.ps1"
 $InstallRoot = (Resolve-Path -LiteralPath $InstallRoot).Path
 $engine = Join-Path $InstallRoot "$Package/xrEngine.exe"
-$build = Read-ValidationPackage -Engine $engine -Configuration Debug
+$build = Read-ValidationPackage -Engine $engine -Configuration $Configuration
 if (!(Get-Content "$InstallRoot/gamedata/scripts/_g.script" -Raw).Contains('regular-config.lua')) {
     throw 'Use an isolated installation prepared by Prepare-RegularValidation.ps1'
 }
@@ -20,6 +21,7 @@ $session = & "$PSScriptRoot/Prepare-Session.ps1" -InstallRoot $InstallRoot -Pack
 $meta = Get-Content "$session/session.json" -Raw | ConvertFrom-Json
 $meta | Add-Member build $build
 $meta | Add-Member case $Case
+$meta | Add-Member configuration $Configuration
 $meta | Add-Member timeoutSeconds $TimeoutSeconds
 $runtime = New-Item -ItemType Directory "$session/runtime"
 Copy-Item "$InstallRoot/gamedata" "$runtime/gamedata" -Recurse
@@ -41,17 +43,25 @@ telepatic_immunity = 0
 chemical_burn_immunity = 0
 explosion_immunity = 0
 fire_wound_immunity = 0
-[validation_jump_override]:validation_jump_default
-anim_jump_ataka_02 = stand_attack_1
+[validation_jump_explicit]:validation_jump_default
+anim_jump_ataka_02 = jump_right_0
+[validation_jump_override]:validation_jump_explicit
 attack_params = validation_jump_parameters
 [validation_jump_parameters]
 stand_attack_0 = 0.35,0.11,31,1,0.1,0,-0.5,0.5,-1,1,1.8
+jump_right_0 = 0.45,0.37,47,1,0.1,0,-0.5,0.5,-1,1,1.8
+[validation_jump_damage]:validation_jump_explicit
+jump_attack_params_anim = stand_attack_1
+attack_params = validation_jump_damage_parameters
+[validation_jump_damage_parameters]
+stand_attack_0 = 0.35,0.11,31,1,0.1,0,-0.5,0.5,-1,1,1.8
 stand_attack_1 = 0.45,0.37,47,1,0.1,0,-0.5,0.5,-1,1,1.8
 [validation_jump_missing]:validation_jump_override
+jump_attack_params_anim = jump_right_0
 attack_params = validation_jump_missing_parameters
 [validation_jump_missing_parameters]
 stand_attack_0 = 0.35,0.11,31,1,0.1,0,-0.5,0.5,-1,1,1.8
-[validation_jump_empty]:validation_jump_override
+[validation_jump_empty]:validation_jump_missing
 attack_params = validation_jump_empty_parameters
 [validation_jump_empty_parameters]
 '@
@@ -82,7 +92,7 @@ try {
     $logs = @(Get-ChildItem "$session/appdata/logs" -Filter '*.log')
     if ($logs.Count -ne 1) { throw 'Expected one log' }
     $log = [IO.File]::ReadAllText($logs[0].FullName)
-    Assert-DogJumpLog $log $Case $game.ExitCode
+    Assert-DogJumpLog $log $Case $game.ExitCode $Configuration
     $meta.status = 'dog-completed'
     Write-Output "COMPLETE dog case=$Case session=$session"
 } catch {

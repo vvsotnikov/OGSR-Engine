@@ -1,6 +1,7 @@
 return function(cfg)
     local start, spawned, done, sampled
     local node, graph, target
+    local assigned = {}
     level.add_call(function()
         if done or not db.actor or not app_ready() or device().precache_frame ~= 0 then return false end
         local ok, err = xpcall(function()
@@ -18,11 +19,26 @@ return function(cfg)
             if now - start < 3000 then return end
             if not spawned then
                 spawned = {}
+                log1("[dog fixture] begin section=" .. cfg.section)
                 -- A lone dog can panic instead of attacking a stronger actor.
                 for i = 1, 3 do
                     local id = assert(alife():create(cfg.section, level.vertex_position(node), node, graph)).id
                     spawned[i] = id
                     log1(string.format("[dog fixture] spawned id=%d section=%s", id, cfg.section))
+                end
+            end
+            for _,id in ipairs(spawned) do
+                local member = level.object_by_id(id)
+                if member and not assigned[id] then
+                    member:set_enemy_callback(function(_, enemy) return enemy:id() == db.actor:id() end)
+                    local stimulus = hit()
+                    stimulus.draftsman = db.actor
+                    stimulus.type = hit.fire_wound
+                    stimulus.power = 0.01
+                    stimulus.impulse = 0
+                    stimulus.direction = vector():set(1, 0, 0)
+                    member:hit(stimulus)
+                    assigned[id] = true
                 end
             end
             local dog = level.object_by_id(spawned[1])

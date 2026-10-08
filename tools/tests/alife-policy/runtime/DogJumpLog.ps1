@@ -1,22 +1,26 @@
-function Assert-DogJumpLog([string]$Log, [string]$Case, [int]$ExitCode) {
+function Assert-DogJumpLog([string]$Log, [string]$Case, [int]$ExitCode, [string]$Configuration = 'Debug') {
     $section = "validation_jump_$Case"
     $spawn = [regex]::Matches($Log, "\[dog fixture\] spawned id=(\d+) section=$section\b")
-    if ($spawn.Count -lt 1 -or $spawn.Count -gt 3 -or $Log -notmatch 'Debug assertions: enabled' -or $Log -match '\[dog fixture\] FAILED') {
+    if (($Configuration -eq 'Debug' -and $Log -notmatch 'Debug assertions: enabled') -or
+        $Log -notmatch "\[dog fixture\] begin section=$section\b" -or $Log -match '\[dog fixture\] FAILED') {
         throw 'Dog fixture evidence incomplete'
     }
     if ($Case -in @('missing','empty')) {
         $fatal = $Log.IndexOf('FATAL ERROR')
-        if ($fatal -lt 0 -or $Log -notmatch "Missing attack parameters: section=$section animation=stand_attack_1" -or
+        if ($fatal -lt 0 -or $Log -notmatch "Missing attack parameters: section=$section animation=jump_right_0" -or
             $Log -match "\[dog jump\] id=\d+ section=$section " -or $Log -match '\[dog fixture\] complete') {
             throw 'Expected attack-parameter rejection missing'
         }
         Assert-ValidationLogHealthy $Log.Substring(0, $fatal)
         return
     }
+    if ($spawn.Count -ne 3) { throw 'Expected three test dogs' }
     Assert-ValidationLogHealthy $Log
     $expected = switch ($Case) {
         'default' { 'attack=stand_attack_0 power=0.150000 impulse=30.000000' }
-        'override' { 'attack=stand_attack_1 power=0.370000 impulse=47.000000' }
+        'explicit' { 'attack=stand_attack_0 power=0.150000 impulse=30.000000' }
+        'override' { 'attack=jump_right_0 power=0.370000 impulse=47.000000' }
+        'damage' { 'attack=stand_attack_1 power=0.370000 impulse=47.000000' }
         default { throw 'Unknown dog case' }
     }
     $hits = @($spawn | Where-Object { $Log.Contains("[dog jump] id=$($_.Groups[1].Value) section=$section $expected") })
