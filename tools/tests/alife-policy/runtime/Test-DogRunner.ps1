@@ -25,12 +25,15 @@ foreach ($bad in @($log.Replace('[dog jump]', '[other]'), $log.Replace('power=0.
     try { Assert-DogJumpLog $bad default 0 } catch { $rejected = $true }
     if (!$rejected) { throw 'Accepted incomplete or incorrect jump evidence' }
 }
-foreach ($case in @('missing','empty')) {
-    $log = "Debug assertions: enabled`n[dog fixture] begin section=validation_jump_$case`nFATAL ERROR`nMissing attack parameters: section=validation_jump_$case animation=jump_right_0"
+foreach ($case in @('missing','empty','snork','pseudodog','chimera')) {
+    $required = switch ($case) {
+        'snork' { 'stand_attack_2_1' }; 'pseudodog' { 'run_jamp_1' }; 'chimera' { 'jump_attack_1' }; default { 'jump_right_0' }
+    }
+    $log = "Debug assertions: enabled`n[dog fixture] begin section=validation_jump_$case`nFATAL ERROR`nMissing attack parameters: section=validation_jump_$case animation=$required"
     Assert-DogJumpLog $log $case 0
     Assert-DogJumpLog ($log.Replace('Debug assertions: enabled','Debug assertions: disabled')) $case 0 Release
     $rejected = $false
-    try { Assert-DogJumpLog ($log.Replace('jump_right_0','other')) $case 0 } catch { $rejected = $true }
+    try { Assert-DogJumpLog ($log.Replace($required,'other')) $case 0 } catch { $rejected = $true }
     if (!$rejected) { throw 'Accepted unrelated failure' }
 }
 $root = Join-Path ([IO.Path]::GetTempPath()) ('ogsr-dog-' + [guid]::NewGuid())
@@ -50,7 +53,7 @@ try {
         ConvertTo-Json | Set-Content "$root/bin_fixture/build.json"
     $paths = @('gamedata/config/misc/items.ltx','seed/savedgames/bar_center.sav','seed/user_ogsr.ltx','fsgame.ltx')
     $before = @($paths | ForEach-Object { (Get-FileHash "$root/$_").Hash })
-    foreach ($case in @('default','explicit','override','damage','missing','empty')) {
+    foreach ($case in @('default','explicit','override','damage','missing','empty','snork','pseudodog','chimera')) {
         $session = & "$PSScriptRoot/Run-DogJumpValidation.ps1" -InstallRoot $root -Package bin_fixture -SeedAppData seed -Case $case -PrepareOnly
         $meta = Get-Content "$session/session.json" -Raw | ConvertFrom-Json
         if ($meta.status -ne 'dog-prepared' -or $meta.case -ne $case -or !$meta.arguments.Contains('-dog_jump_probe') -or

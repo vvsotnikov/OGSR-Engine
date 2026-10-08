@@ -5,9 +5,16 @@ function Assert-DogJumpLog([string]$Log, [string]$Case, [int]$ExitCode, [string]
         $Log -notmatch "\[dog fixture\] begin section=$section\b" -or $Log -match '\[dog fixture\] FAILED') {
         throw 'Dog fixture evidence incomplete'
     }
-    if ($Case -in @('missing','empty')) {
+    $required = switch ($Case) {
+        'missing' { 'jump_right_0' }
+        'empty' { 'jump_right_0' }
+        'snork' { 'stand_attack_2_1' }
+        'pseudodog' { 'run_jamp_1' }
+        'chimera' { 'jump_attack_1' }
+    }
+    if ($required) {
         $fatal = $Log.IndexOf('FATAL ERROR')
-        if ($fatal -lt 0 -or $Log -notmatch "Missing attack parameters: section=$section animation=jump_right_0" -or
+        if ($fatal -lt 0 -or $Log -notmatch "Missing attack parameters: section=$section animation=$required" -or
             $Log -match "\[dog jump\] id=\d+ section=$section " -or $Log -match '\[dog fixture\] complete') {
             throw 'Expected attack-parameter rejection missing'
         }

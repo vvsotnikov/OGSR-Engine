@@ -15,6 +15,9 @@ Mod dog sections must provide a jump-motion hit row, the vanilla `stand_attack_0
 row, or an explicit `jump_attack_params_anim` naming a valid row. Content relying
 on the old arbitrary-first-row fallback needs that explicit key. Other monsters'
 required hit rows must also exist; missing data is rejected in Release as well.
+Snork, pseudodog and chimera validate their jump rows during initialization too.
+Cat and pseudogiant do not enable attack jumps in this engine; their dormant hit
+handlers retain strict lookup without imposing an unused row at initialization.
 
 An attack row also registers a timed melee event for its motion. A jump-motion
 row can therefore produce that event's hit in addition to the jump collision
@@ -36,6 +39,8 @@ original Bar save, and a Debug or Release package with its validated `build.json
 
 Pass `-Configuration Release` when using a Release package; run the missing/empty
 cases there too, since their rejection must not depend on Debug assertions.
+Cases `snork`, `pseudodog` and `chimera` exercise the same initialization rejection
+for the other active jump-attack classes, using a table missing their required row.
 
 The private fixture places an invulnerable pack near an elevated actor so the
 production attack AI and jump controller produce hits. An enemy filter excludes

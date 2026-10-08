@@ -147,6 +147,9 @@ void CChimera::reinit()
 {
     inherited::reinit();
 
+    if (!CCustomMonster::use_simplified_visual())
+        anim().AA_GetParams("jump_attack_1"); // Validate required jump damage before combat.
+
     move().load_velocity(*cNameSect(), "Velocity_JumpGround", MonsterMovement::eChimeraVelocityParameterJumpGround);
 
     com_man().load_jump_data(0, //"jump_attack_0",
