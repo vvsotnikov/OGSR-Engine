@@ -15,6 +15,7 @@ namespace alife_service_trace
 {
 std::atomic<bool> enabled{false};
 std::atomic<bool> detail_enabled{false};
+std::atomic<bool> visits_enabled{false};
 namespace
 {
 using Clock = std::chrono::steady_clock;
@@ -37,7 +38,8 @@ std::uint64_t now() { return std::chrono::duration_cast<std::chrono::microsecond
 }
 void begin()
 {
-    const bool detail = strstr(Core.Params, "-alife_service_trace") != nullptr;
+    const bool visits = strstr(Core.Params, "-alife_service_trace") != nullptr;
+    const bool detail = visits || strstr(Core.Params, "-alife_service_lifecycle") != nullptr;
     if (!detail && !strstr(Core.Params, "-alife_service_slices")) return;
     std::lock_guard<std::mutex> guard(mutex);
     R_ASSERT(!enabled.load());
@@ -58,7 +60,7 @@ void begin()
     writer->w_printf("ogsr-service,1\n");
     writer->w_printf("us,kind,id,generation,value,flags\n");
     epoch = Clock::now();
-    events.push_back({0, 0, detail ? 1u : 0u, "mode", 0, 65535});
+    events.push_back({0, 0, visits ? 1u : (detail ? 2u : 0u), "mode", 0, 65535});
     worker = std::thread([] {
         std::vector<Event> batch;
         batch.reserve(capacity);
@@ -83,8 +85,9 @@ void begin()
             batch.clear();
         }
     });
-    enabled.store(true, std::memory_order_release);
+    visits_enabled.store(visits, std::memory_order_release);
     detail_enabled.store(detail, std::memory_order_release);
+    enabled.store(true, std::memory_order_release);
 }
 void record(const char* kind, std::uint16_t id, std::uint64_t value, std::uint32_t flags, Cache cache)
 {
@@ -118,6 +121,7 @@ void end()
     std::uint64_t stop;
     {
         std::lock_guard<std::mutex> guard(mutex);
+        visits_enabled.store(false, std::memory_order_release);
         detail_enabled.store(false, std::memory_order_release);
         if (!enabled.exchange(false)) return;
         stop = now();

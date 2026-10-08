@@ -2,9 +2,10 @@
 
 For switching throughput, run an isolated Release scenario with
 `Run-RegularValidation.ps1 -ServiceSlices -FrameTimes`. Use `-ServiceTrace -FrameTimes`
-when individual object histories are needed; full tracing materially reduces the
-visits completed within the switching budget. The runner rejects combining the two
-modes. Omit both switches for the tracing-off frame-time control.
+only when individual switching visits/rejections are needed; it materially reduces
+the visits completed within the switching budget. Use `-ServiceLifecycle -FrameTimes`
+for activation/lifecycle histories without the visit/rejection stream. The runner
+rejects combining modes. Omit all service switches for the tracing-off frame control.
 Add `-Mode distance` or `-Mode whole-map`, `-Count 400` for density, and `-Eligibility`
 for controlled whole-map permission changes. Use `-Transitions` separately for map lifecycle.
 The runner records save/package hashes and configuration in `session.json`.
@@ -15,7 +16,9 @@ for frame percentiles by scenario stage. Keep the original capture alongside the
 
 ## Interpretation
 
-- A `mode` row identifies full (`value=1`) or slice-only (`value=0`) recording.
+- A `mode` row identifies full (`value=1`), slice-only (`value=0`), or lifecycle
+  (`value=2`) recording. Lifecycle mode does not infer first/revisit waits or reasons
+  for failed switching attempts; permission and construction waits remain available.
   Slice-only captures contain clocks, settings, updates and slice boundaries, with
   no object events or inferred per-object waits. Older captures without a mode row
   are reported as `legacy_full`.
@@ -23,7 +26,13 @@ for frame percentiles by scenario stage. Keep the original capture alongside the
   returned visit count (`value`). Their `flags` give registry sizes before/after.
   Recording is outside the iterator's timed traversal. The measured span includes
   recorder boundary overhead and possible descheduling; it is not pure CPU time.
-  Every update must have exactly one completed slice in a modern capture.
+  Every update must have exactly one completed slice in a modern capture. Full-mode
+  visit rows must equal its returned visit count, even outside a selected window.
+  Coverage/count errors are deferred until the footer so producer drops are identified
+  as `dropped_records`; either condition fails validation.
+  Slice aggregates report sum, mean and per-second rate over the selected wall-clock
+  window (the complete capture duration when no window is selected). Rates of
+  `slice_wall_us` are recorded microseconds per wall-clock second, not CPU utilization.
 - Registration creates a new incarnation of an engine ID. Identity is scoped to one
   capture file; it is not a persistent campaign identity. Reload/map travel creates
   a new capture, and unfinished waits in the old capture remain reported.
@@ -57,15 +66,20 @@ for frame percentiles by scenario stage. Keep the original capture alongside the
 
 ## Capture integrity and cost
 
-Collection is opt-in (`-alife_service_trace` or `-alife_service_slices`), uses two fixed-capacity 65,536-event buffers,
+Collection is opt-in (`-alife_service_trace`, `-alife_service_lifecycle`, or
+`-alife_service_slices`), uses two fixed-capacity 65,536-event buffers,
 then counts every dropped event if its writer cannot keep up. A writer thread formats
 and writes batches outside switching callbacks; no file I/O occurs inside the switching budget. Disabled event sites perform a gate check without
 clock reads, allocations or scans. Enabled sites serialize on a mutex; this cost is
 inside the engine's existing switching budget in full mode. Slice-only mode retains
 only the cheap detail gates on object paths, with no object clocks, mutexes or
 snapshots. Both modes share slice-boundary recording outside that budget; the
-low-rate control is not literally uninstrumented. Compare its frame effects with
-tracing off, and its visits per slice with full tracing.
+low-rate control is not literally uninstrumented. Lifecycle mode skips visits and
+repeated rejections but still records actual transitions inside the traversal.
+Compare frame effects with tracing off and visits per slice across modes.
+When reconciliation metrics are enabled too, their outer slice timer includes
+trace-boundary recording; do not compare that timer with tracing-off measurements
+as if the instrumentation were identical.
 The writer wakes at 4,096 queued events; smaller batches wait until that threshold
 or capture end. Final draining and the end record occur before simulator teardown. A crash has no
 completed export; never treat its absence as zero latency. The reader fails on missing
@@ -96,7 +110,10 @@ use static-lifetime literals from the schema vocabulary. It never stores object 
 The [observer calibration](alife-service-2026-10-09.md) compares both modes with
 tracing off. Full-mode per-object times describe the instrumented engine; do not
 scale them by the throughput ratio to claim untraced latencies. Slice totals cannot
-identify an individual object that is starved. The earlier
+identify an individual object that is starved. Both Bar experiments observed warmed
+frames above 27 ms only in full-trace runs (two of ten full runs, none of sixteen
+other runs); this is a reason to avoid full tracing for performance measurement,
+not proof that it caused those stalls. The earlier
 [Bar results](alife-service-2026-10-08.md) have the same observer limitation.
 
 The offline reader streams input and stores each latency sample once for exact

@@ -6,9 +6,10 @@ class CSE_ALifeDynamicObject;
 namespace alife_service_trace
 {
 enum class Cache { None, Settings, Scheduler };
-// One process-wide gate; all mutable collection state is protected in the recorder.
+// Collection gates; mutable capture state is protected in the recorder.
 extern std::atomic<bool> enabled;
 extern std::atomic<bool> detail_enabled;
+extern std::atomic<bool> visits_enabled;
 void begin();
 void end();
 void record(const char* kind, std::uint16_t id = 65535, std::uint64_t value = 0, std::uint32_t flags = 0, Cache cache = Cache::None);

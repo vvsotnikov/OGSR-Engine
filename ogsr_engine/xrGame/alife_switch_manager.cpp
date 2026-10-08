@@ -252,7 +252,8 @@ struct CALifeSwitchManager::ReconciliationOperations
 
 void CALifeSwitchManager::switch_object(CSE_ALifeDynamicObject* I)
 {
-    alife_service_trace::object("visit", I);
+    if (alife_service_trace::visits_enabled.load(std::memory_order_relaxed))
+        alife_service_trace::object("visit", I);
     ReconciliationOperations operations{*this, I};
     alife_diagnostics::reconcile_object<CTimer>(m_reconciliation.sampled, m_reconciliation.stages, operations);
 }

@@ -9,9 +9,9 @@ mtALife enabled. Whole-map kept all 400 characters online; distance kept 59–62
 | Measurement | Observed result |
 |---|---|
 | Warmed frame p99, distance / whole-map | 7.2–8.0 / 18.1–18.9 ms |
-| Warmed whole-map creature switching revisit p99 / maximum | 43–48 / 65 ms |
-| Largest unfinished whole-map creature revisit at warmed boundary | 84 ms |
-| Full-capture creature revisit maximum | 1.886–2.039 s, during loading |
+| Full-trace warmed whole-map creature switching revisit p99 / maximum | 43–48 / 65 ms |
+| Full-trace largest unfinished whole-map creature revisit at warmed boundary | 84 ms |
+| Full-trace whole-capture creature revisit maximum | 1.886–2.039 s, during loading |
 | Whole-map server-online to client net_Spawn maximum | 4.497 s |
 
 These are switching/construction measurements, not tactical AI response times.

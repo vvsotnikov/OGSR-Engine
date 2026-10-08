@@ -25,7 +25,7 @@ pub struct Report {
     window: Option<(u64, u64)>,
     collecting: bool,
     measured_updates: u64,
-    detail: Option<bool>,
+    mode: Option<u8>,
     settings: std::collections::BTreeSet<(u16, i64, u32)>,
     schedules: std::collections::BTreeSet<(u64, u32)>,
     unmatched_kinds: BTreeMap<String, u64>,
@@ -34,7 +34,7 @@ fn censor(r: &mut Report, key: Key, o: &Object, now: u64, reason: &str) {
     if !r.collecting {
         return;
     }
-    if let Some(start) = o.last.or(o.member) {
+    if let Some(start) = o.last.or(o.member).filter(|_| r.mode != Some(2)) {
         r.waits.push(format!(
             "{}, {}, {}, {}, {}, {}, {}",
             key.0,
@@ -113,6 +113,8 @@ fn read_window(reader: impl BufRead, window: Option<(u64, u64)>) -> Result<Repor
     let mut schedule = None;
     let mut slice = None;
     let mut completed_slices = 0;
+    let mut slice_visits = 0;
+    let mut coverage_error = None;
     for (index, line) in lines.enumerate() {
         let line = line?;
         let f: Vec<_> = line.split(',').collect();
@@ -167,8 +169,13 @@ fn read_window(reader: impl BufRead, window: Option<(u64, u64)>) -> Result<Repor
         }
         r.collecting = window.is_none_or(|(start, end)| now >= start && now < end);
         if f[1] == "end" {
-            if slice.is_some() || (r.detail.is_some() && completed_slices != r.updates) {
-                return Err("Incomplete slice coverage".into());
+            if slice.is_some() || (r.mode.is_some() && completed_slices != r.updates) {
+                coverage_error.get_or_insert("Incomplete slice coverage");
+            }
+            if value == 0 {
+                if let Some(error) = coverage_error {
+                    return Err(error.into());
+                }
             }
             if generation != index as u64 {
                 return Err("Record count mismatch: missing or duplicated rows".into());
@@ -187,23 +194,30 @@ fn read_window(reader: impl BufRead, window: Option<(u64, u64)>) -> Result<Repor
             continue;
         }
         if f[1] == "mode" {
-            if index != 0 || value > 1 {
+            if index != 0 || value > 2 {
                 return Err("Invalid trace mode".into());
             }
-            r.detail = Some(value == 1);
+            r.mode = Some(value as u8);
             continue;
         }
         if f[1] == "slice_begin" {
             if r.updates != completed_slices + 1 {
-                return Err("Slice without a corresponding update".into());
+                coverage_error.get_or_insert("Slice without a corresponding update");
             }
             if slice.replace((now, flags)).is_some() {
-                return Err("Overlapping slices".into());
+                coverage_error.get_or_insert("Overlapping slices");
             }
+            slice_visits = 0;
             continue;
         }
         if f[1] == "slice_end" {
-            let (start, population) = slice.take().ok_or("Slice end without beginning")?;
+            let Some((start, population)) = slice.take() else {
+                coverage_error.get_or_insert("Slice end without beginning");
+                continue;
+            };
+            if r.mode == Some(1) && slice_visits != value {
+                coverage_error.get_or_insert("Slice visit count mismatch");
+            }
             completed_slices += 1;
             sample(&mut r, "slice_wall_us", now - start, (65535, 0), false);
             sample(&mut r, "slice_visits", value, (65535, 0), false);
@@ -231,8 +245,8 @@ fn read_window(reader: impl BufRead, window: Option<(u64, u64)>) -> Result<Repor
             continue;
         }
         if f[1] == "update" {
-            if r.detail.is_some() && r.updates != completed_slices {
-                return Err("Incomplete slice coverage".into());
+            if r.mode.is_some() && r.updates != completed_slices {
+                coverage_error.get_or_insert("Incomplete slice coverage");
             }
             if r.collecting {
                 if let Some(settings) = settings {
@@ -246,8 +260,17 @@ fn read_window(reader: impl BufRead, window: Option<(u64, u64)>) -> Result<Repor
             r.updates += 1;
             continue;
         }
-        if r.detail == Some(false) {
+        if r.mode == Some(0) {
             return Err("Object event in slice-only capture".into());
+        }
+        if f[1] == "visit" {
+            if r.mode == Some(2) {
+                return Err("Visit in lifecycle-only capture".into());
+            }
+            if r.mode == Some(1) && slice.is_none() {
+                coverage_error.get_or_insert("Visit outside slice");
+            }
+            slice_visits += 1;
         }
         if closed {
             continue;
@@ -409,10 +432,12 @@ impl Report {
         writeln!(
             out,
             "mode={}",
-            match self.detail {
-                Some(true) => "full",
-                Some(false) => "slices",
+            match self.mode {
+                Some(1) => "full",
+                Some(0) => "slices",
+                Some(2) => "lifecycle",
                 None => "legacy_full",
+                _ => unreachable!(),
             }
         )
         .unwrap();
@@ -445,6 +470,23 @@ impl Report {
         for (kind, count) in &self.unmatched_kinds {
             writeln!(out, "unmatched {kind}={count}").unwrap();
         }
+        let span = self.window.map_or(self.duration_us, |(a, b)| b - a);
+        for name in ["slice_visits", "slice_wall_us"] {
+            if let Some(values) = self.samples.get(name) {
+                let sum: u128 = values.iter().map(|v| u128::from(v.0)).sum();
+                writeln!(
+                    out,
+                    "aggregate {name} sum={sum} mean={:.6} per_second={:.6}",
+                    sum as f64 / values.len() as f64,
+                    if span == 0 {
+                        0.0
+                    } else {
+                        sum as f64 * 1_000_000.0 / span as f64
+                    }
+                )
+                .unwrap();
+            }
+        }
         out.push_str("metric,count,p50,p95,p99,max,worst_id,generation\n");
         for (name, values) in &mut self.samples {
             values.sort_unstable_by_key(|v| (v.0, v.2, v.1));
@@ -469,8 +511,16 @@ impl Report {
                     q(95),
                     q(99),
                     worst.0,
-                    worst.2,
-                    worst.1
+                    if name.starts_with("slice_") {
+                        String::new()
+                    } else {
+                        worst.2.to_string()
+                    },
+                    if name.starts_with("slice_") {
+                        String::new()
+                    } else {
+                        worst.1.to_string()
+                    }
                 )
                 .unwrap();
             }
@@ -519,6 +569,104 @@ mod tests {
             read(&text).err().as_deref(),
             Some("Incomplete slice coverage")
         );
+    }
+    #[test]
+    fn slice_totals_and_rates_are_reproducible() {
+        let text = capture(concat!(
+            "0,mode,65535,0,0,0\n",
+            "1,update,65535,0,0,0\n",
+            "2,slice_begin,65535,0,0,40\n",
+            "812,slice_end,65535,0,7,41\n",
+            "1000,end,65535,0,0,0\n",
+        ));
+        let report = read(&text).unwrap().render();
+        assert!(
+            report.contains("aggregate slice_visits sum=7 mean=7.000000 per_second=7000.000000")
+        );
+        assert!(report
+            .contains("aggregate slice_wall_us sum=810 mean=810.000000 per_second=810000.000000"));
+        assert!(report.contains("slice_visits,1,7,7,7,7,,"));
+        let warm = read_window(text.as_bytes(), Some((2, 902)))
+            .unwrap()
+            .render();
+        assert!(warm.contains("aggregate slice_visits sum=7 mean=7.000000 per_second=7777.777778"));
+    }
+    #[test]
+    fn full_visit_counts_are_checked_even_after_the_warmed_window() {
+        let rows = concat!(
+            "0,mode,65535,0,1,0\n",
+            "1,register,1,1,0,12\n",
+            "2,enter,1,1,0,12\n",
+            "3,update,65535,0,0,0\n",
+            "4,slice_begin,65535,0,0,1\n",
+            "5,visit,1,1,0,12\n",
+            "6,slice_end,65535,0,1,1\n",
+            "7,end,65535,0,0,0\n",
+        );
+        assert!(read(&capture(rows)).is_ok());
+        let broken = capture(&rows.replace("6,slice_end,65535,0,1,1", "6,slice_end,65535,0,2,1"));
+        assert_eq!(
+            read(&broken).err().as_deref(),
+            Some("Slice visit count mismatch")
+        );
+        assert_eq!(
+            read_window(broken.as_bytes(), Some((1, 3)))
+                .err()
+                .as_deref(),
+            Some("Slice visit count mismatch")
+        );
+        let dropped = capture(
+            &rows
+                .replace("5,visit,1,1,0,12\n", "")
+                .replace("7,end,65535,0,0,0", "7,end,65535,0,1,0"),
+        );
+        assert!(read(&dropped)
+            .unwrap()
+            .render()
+            .contains("capture_integrity=dropped_records"));
+    }
+    #[test]
+    fn overflow_takes_precedence_over_missing_slice_records() {
+        let rows = concat!(
+            "0,mode,65535,0,0,0\n",
+            "1,update,65535,0,0,0\n",
+            "2,slice_begin,65535,0,0,1\n",
+            "3,slice_end,65535,0,1,1\n",
+            "4,end,65535,0,1,0\n",
+        );
+        for missing in [
+            "1,update,65535,0,0,0\n",
+            "2,slice_begin,65535,0,0,1\n",
+            "3,slice_end,65535,0,1,1\n",
+        ] {
+            let broken = rows.replace(missing, "");
+            assert!(read(&capture(&broken))
+                .unwrap()
+                .render()
+                .contains("capture_integrity=dropped_records"));
+            assert!(read(&capture(
+                &broken.replace("4,end,65535,0,1,0", "4,end,65535,0,0,0")
+            ))
+            .is_err());
+        }
+    }
+    #[test]
+    fn lifecycle_mode_reports_activation_without_inventing_visit_waits() {
+        let rows = concat!(
+            "0,mode,65535,0,2,0\n",
+            "1,register,1,1,0,12\n",
+            "2,enter,1,1,0,12\n",
+            "3,permission_on,1,1,0,28\n",
+            "5,online,1,1,0,0\n",
+            "8,client,1,1,0,0\n",
+            "10,end,65535,0,0,0\n",
+        );
+        let mut r = read(&capture(rows)).unwrap();
+        assert_eq!(r.samples["permission_to_online_us"][0].0, 2);
+        assert_eq!(r.samples["online_to_client_us"][0].0, 3);
+        assert!(r.waits.is_empty());
+        assert!(r.render().contains("mode=lifecycle"));
+        assert!(read(&capture(&rows.replace("8,client", "8,visit"))).is_err());
     }
     #[test]
     fn shared_samples_preserve_quantiles_and_worst_identity_for_both_populations() {

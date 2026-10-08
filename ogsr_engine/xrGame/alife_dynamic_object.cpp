@@ -142,7 +142,8 @@ struct DynamicSwitchOperations
     void clear_data() { object.client_data.clear(); }
     void report_rejection(bool distance) const
     {
-        alife_service_trace::event(distance ? "distance_rejected" : "permission_rejected", object.ID);
+        if (alife_service_trace::visits_enabled.load(std::memory_order_relaxed))
+            alife_service_trace::event(distance ? "distance_rejected" : "permission_rejected", object.ID);
 #ifdef DEBUG
         if (!object.client_data.empty())
         {

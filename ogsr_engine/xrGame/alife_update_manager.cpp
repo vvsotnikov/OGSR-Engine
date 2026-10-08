@@ -79,7 +79,8 @@ float CALifeUpdateManager::shedule_Scale()
 void CALifeUpdateManager::update_switch()
 {
     init_ef_storage();
-    if (alife_service_trace::enabled.load(std::memory_order_relaxed))
+    const bool trace = alife_service_trace::enabled.load(std::memory_order_relaxed);
+    if (trace)
     {
         alife_service_trace::record("clock", 65535, Device.dwTimeGlobal, Device.dwFrame);
         alife_service_trace::record("scheduler", 65535,
@@ -90,8 +91,7 @@ void CALifeUpdateManager::update_switch()
         alife_service_trace::record("update");
     }
 
-    const auto switch_slice = [this] {
-        const bool trace = alife_service_trace::enabled.load(std::memory_order_relaxed);
+    const auto switch_slice = [this, trace] {
         if (trace) alife_service_trace::record("slice_begin", 65535, 0, u32(graph().level().objects().size()));
         const u32 visited = graph().level().update(CSwitchPredicate(this));
         if (trace) alife_service_trace::record("slice_end", 65535, visited, u32(graph().level().objects().size()));

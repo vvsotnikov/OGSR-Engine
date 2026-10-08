@@ -5,6 +5,7 @@ param(
     [switch]$SaveSnapshot,
     [switch]$ServiceTrace,
     [switch]$ServiceSlices,
+    [switch]$ServiceLifecycle,
     [switch]$FrameTimes,
     [switch]$PrepareOnly,
     [ValidatePattern('^bin_[a-zA-Z0-9_]+$')][string]$Package = 'bin_whole_lifecycle',
@@ -17,7 +18,7 @@ param(
     [string]$SaveName = 'bar_center'
 )
 $ErrorActionPreference = 'Stop'
-if ($ServiceTrace -and $ServiceSlices) { throw 'Choose full service tracing or slice-only tracing, not both' }
+if (([int][bool]$ServiceTrace + [int][bool]$ServiceSlices + [int][bool]$ServiceLifecycle) -gt 1) { throw 'Choose one service recording mode' }
 . "$PSScriptRoot/ValidationLog.ps1"
 . "$PSScriptRoot/ValidationPackage.ps1"
 . "$PSScriptRoot/PolicyMessages.ps1"
@@ -43,6 +44,8 @@ $meta | Add-Member saveRequested ([bool]$SaveSnapshot)
 $meta.status = 'regular-prepared'
 if ($ServiceTrace) { $meta.arguments += ' -alife_service_trace' }
 if ($ServiceSlices) { $meta.arguments += ' -alife_service_slices' }
+if ($ServiceLifecycle) { $meta.arguments += ' -alife_service_lifecycle' }
+$meta | Add-Member serviceLifecycle ([bool]$ServiceLifecycle)
 $meta | Add-Member serviceSlices ([bool]$ServiceSlices)
 $meta | Add-Member serviceTrace ([bool]$ServiceTrace)
 $meta | Add-Member frameTimes ([bool]$FrameTimes)
