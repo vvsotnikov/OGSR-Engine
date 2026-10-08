@@ -31,7 +31,8 @@ experiment record. These results precede the settings-record deduplication;
 they are historical measurements, not a benchmark of subsequent recorder edits.
 Use [the measurement contract](alife-service.md) to capture and interpret new runs.
 
-Remaining work: [#17](https://github.com/vvsotnikov/OGSR-Engine/issues/17) calibrates
-observer cost and repeats the tracing on/off comparison;
+The [subsequent calibration](alife-service-2026-10-09.md) found substantial
+full-trace switching-throughput loss. These per-object intervals must not be used
+as untraced latency bounds.
 [#26](https://github.com/vvsotnikov/OGSR-Engine/issues/26) separates client queue
 waiting from construction before changing the activation policy.

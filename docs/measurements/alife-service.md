@@ -1,8 +1,10 @@
 # ALife service measurements
 
-Run an isolated Release scenario with `Run-RegularValidation.ps1 -ServiceTrace -FrameTimes`.
-Use `-ServiceSlices -FrameTimes` instead for low-rate slice-only calibration; the
-runner rejects combining the two modes. Omit both switches for the tracing-off control.
+For switching throughput, run an isolated Release scenario with
+`Run-RegularValidation.ps1 -ServiceSlices -FrameTimes`. Use `-ServiceTrace -FrameTimes`
+when individual object histories are needed; full tracing materially reduces the
+visits completed within the switching budget. The runner rejects combining the two
+modes. Omit both switches for the tracing-off frame-time control.
 Add `-Mode distance` or `-Mode whole-map`, `-Count 400` for density, and `-Eligibility`
 for controlled whole-map permission changes. Use `-Transitions` separately for map lifecycle.
 The runner records save/package hashes and configuration in `session.json`.
@@ -91,7 +93,11 @@ to acknowledge completion in session.json and retain the engine log.
 The recorder stores event-kind pointers until the writer drains them; call sites must
 use static-lifetime literals from the schema vocabulary. It never stores object pointers.
 
-The first matched Bar results are in [the 2026-10-08 report](alife-service-2026-10-08.md).
+The [observer calibration](alife-service-2026-10-09.md) compares both modes with
+tracing off. Full-mode per-object times describe the instrumented engine; do not
+scale them by the throughput ratio to claim untraced latencies. Slice totals cannot
+identify an individual object that is starved. The earlier
+[Bar results](alife-service-2026-10-08.md) have the same observer limitation.
 
 The offline reader streams input and stores each latency sample once for exact
 nearest-rank quantiles and worst-object identities across both summaries. Sample
