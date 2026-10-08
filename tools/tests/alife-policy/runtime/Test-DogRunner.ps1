@@ -25,12 +25,12 @@ foreach ($bad in @($log.Replace('[dog jump]', '[other]'), $log.Replace('power=0.
     try { Assert-DogJumpLog $bad default 0 } catch { $rejected = $true }
     if (!$rejected) { throw 'Accepted incomplete or incorrect jump evidence' }
 }
-foreach ($case in @('missing','empty','snork','pseudodog','chimera')) {
+foreach ($case in @('missing','empty','fallback','snork','pseudodog','chimera')) {
     $required = switch ($case) {
-        'snork' { 'stand_attack_2_1' }; 'pseudodog' { 'run_jamp_1' }; 'chimera' { 'jump_attack_1' }; default { 'jump_right_0' }
+        'fallback' { 'stand_attack_0' }; 'snork' { 'stand_attack_2_1' }; 'pseudodog' { 'run_jamp_1' }; 'chimera' { 'jump_attack_1' }; default { 'jump_right_0' }
     }
     $log = "Debug assertions: enabled`n[dog fixture] begin section=validation_jump_$case`nFATAL ERROR`nMissing attack parameters: section=validation_jump_$case animation=$required"
-    if ($case -in @('missing','empty')) {
+    if ($case -in @('missing','empty','fallback')) {
         foreach ($configuration in @('Debug','Release')) {
             $rejected = $false
             try { Assert-DogJumpLog $log $case 0 $configuration } catch { $rejected = $true }
@@ -38,6 +38,14 @@ foreach ($case in @('missing','empty','snork','pseudodog','chimera')) {
         }
         $log += '; set jump_attack_params_anim to a valid attack_params row'
     }
+    if ($case -in @('snork','pseudodog','chimera')) {
+        foreach ($configuration in @('Debug','Release')) {
+            $rejected = $false
+            try { Assert-DogJumpLog ($log + '; set jump_attack_params_anim to a valid attack_params row') $case 0 $configuration } catch { $rejected = $true }
+            if (!$rejected) { throw 'Accepted non-dog error with dog repair hint' }
+        }
+    }
+    Assert-DogJumpLog ($log.Replace('Missing attack parameters:', '[error]Description   : Missing attack parameters:')) $case 0
     Assert-DogJumpLog $log $case 0
     Assert-DogJumpLog ($log.Replace('Debug assertions: enabled','Debug assertions: disabled')) $case 0 Release
     $rejected = $false
@@ -61,7 +69,7 @@ try {
         ConvertTo-Json | Set-Content "$root/bin_fixture/build.json"
     $paths = @('gamedata/config/misc/items.ltx','seed/savedgames/bar_center.sav','seed/user_ogsr.ltx','fsgame.ltx')
     $before = @($paths | ForEach-Object { (Get-FileHash "$root/$_").Hash })
-    foreach ($case in @('default','explicit','override','damage','missing','empty','snork','pseudodog','chimera')) {
+    foreach ($case in @('default','explicit','override','damage','missing','empty','fallback','snork','pseudodog','chimera')) {
         $session = & "$PSScriptRoot/Run-DogJumpValidation.ps1" -InstallRoot $root -Package bin_fixture -SeedAppData seed -Case $case -PrepareOnly
         $meta = Get-Content "$session/session.json" -Raw | ConvertFrom-Json
         if ($meta.status -ne 'dog-prepared' -or $meta.case -ne $case -or !$meta.arguments.Contains('-dog_jump_probe') -or

@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory)][string]$InstallRoot,
     [Parameter(Mandatory)][ValidatePattern('^bin_[a-zA-Z0-9_]+$')][string]$Package,
-    [ValidateSet('default','explicit','override','damage','missing','empty','snork','pseudodog','chimera')][string]$Case = 'default',
+    [ValidateSet('default','explicit','override','damage','missing','empty','fallback','snork','pseudodog','chimera')][string]$Case = 'default',
     [ValidateSet('Debug','Release')][string]$Configuration = 'Debug',
     [string]$SeedAppData = 'seeds/bar-2026-10-03',
     [ValidateRange(1,86400)][int]$TimeoutSeconds = 240,
@@ -64,6 +64,10 @@ stand_attack_0 = 0.35,0.11,31,1,0.1,0,-0.5,0.5,-1,1,1.8
 [validation_jump_empty]:validation_jump_missing
 attack_params = validation_jump_empty_parameters
 [validation_jump_empty_parameters]
+[validation_jump_fallback]:validation_jump_default
+attack_params = validation_jump_fallback_parameters
+[validation_jump_fallback_parameters]
+stand_attack_1 = 0.35,0.11,31,1,0.1,0,-0.5,0.5,-1,1,1.8
 [validation_jump_snork]:snork_normal
 attack_params = validation_jump_missing_parameters
 [validation_jump_pseudodog]:pseudodog_normal

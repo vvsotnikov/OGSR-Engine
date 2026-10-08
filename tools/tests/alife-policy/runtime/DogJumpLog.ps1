@@ -8,17 +8,22 @@ function Assert-DogJumpLog([string]$Log, [string]$Case, [int]$ExitCode, [string]
     $required = switch ($Case) {
         'missing' { 'jump_right_0' }
         'empty' { 'jump_right_0' }
+        'fallback' { 'stand_attack_0' }
         'snork' { 'stand_attack_2_1' }
         'pseudodog' { 'run_jamp_1' }
         'chimera' { 'jump_attack_1' }
     }
     if ($required) {
         $expected = "Missing attack parameters: section=$section animation=$required"
-        if ($Case -in @('missing','empty')) {
+        if ($Case -in @('missing','empty','fallback')) {
             $expected += '; set jump_attack_params_anim to a valid attack_params row'
         }
+        $diagnostics = @($Log -split '\r?\n' | Where-Object { $_ -match '^(?:\[error\]Description\s*:\s*)?Missing attack parameters:' })
+        $expectedLine = @($diagnostics | Where-Object {
+            ($_ -replace '^\[error\]Description\s*:\s*', '').TrimEnd() -ceq $expected
+        })
         $fatal = $Log.IndexOf('FATAL ERROR')
-        if ($fatal -lt 0 -or !$Log.Contains($expected) -or
+        if ($fatal -lt 0 -or $expectedLine.Count -ne 1 -or $diagnostics.Count -ne 1 -or
             $Log -match "\[dog jump\] id=\d+ section=$section " -or $Log -match '\[dog fixture\] complete') {
             throw 'Expected attack-parameter rejection missing'
         }
