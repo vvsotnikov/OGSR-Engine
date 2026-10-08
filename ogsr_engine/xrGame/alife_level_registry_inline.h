@@ -7,6 +7,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #pragma once
+#include "alife_service_trace.h"
 
 #include "ai_space.h"
 
@@ -26,6 +27,7 @@ IC void CALifeLevelRegistry::add(CSE_ALifeDynamicObject* object)
     }
 #endif
     inherited::add(object->ID, object);
+    alife_service_trace::object("enter", object);
 }
 
 IC void CALifeLevelRegistry::remove(CSE_ALifeDynamicObject* object, bool no_assert)
@@ -36,6 +38,8 @@ IC void CALifeLevelRegistry::remove(CSE_ALifeDynamicObject* object, bool no_asse
         Msg("[LSS] removing object [%s][%d] from current level", object->name_replace(), object->ID);
     }
 #endif
+    if (alife_service_trace::enabled.load(std::memory_order_relaxed) && objects().find(object->ID) != objects().end())
+        alife_service_trace::event("leave", object->ID);
     inherited::remove(object->ID, no_assert);
 }
 

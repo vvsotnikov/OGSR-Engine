@@ -277,6 +277,17 @@ fn main_result() -> Result {
         .collect::<Vec<_>>()
         .as_slice()
     {
+        ["service-report", path] => {
+            let mut report = xtask::service_trace::read(&fs::read_to_string(path)?)?;
+            print!("{}", report.render());
+            if report.dropped != 0 {
+                return Err(
+                    "Service capture dropped events; do not use as complete latency evidence"
+                        .into(),
+                );
+            }
+            Ok(())
+        }
         ["install-hooks"] => install_hook(&root),
         ["reset-snapshot"] => {
             let _lock = lock()?;

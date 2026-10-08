@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include "alife_service_trace.h"
 #include "xrServer_Objects_ALife_All.h"
 #include "level.h"
 #include "game_cl_base.h"
@@ -138,6 +139,7 @@ void CLevel::g_sv_Spawn(CSE_Abstract* E)
     }
     else
     {
+        alife_service_trace::event("client", E->ID);
         client_spawn_manager().callback(O);
         // Msg			("--spawn--SPAWN: %f ms",1000.f*T.GetAsync());
         if ((E->s_flags.is(M_SPAWN_OBJECT_LOCAL)) && (E->s_flags.is(M_SPAWN_OBJECT_ASPLAYER)))

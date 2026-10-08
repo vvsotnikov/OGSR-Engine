@@ -3,6 +3,8 @@ param(
     [ValidateRange(0,400)][int]$Count = 0,
     [ValidateRange(0,10)][int]$BudgetMs = 0,
     [switch]$SaveSnapshot,
+    [switch]$ServiceTrace,
+    [switch]$FrameTimes,
     [switch]$PrepareOnly,
     [ValidatePattern('^bin_[a-zA-Z0-9_]+$')][string]$Package = 'bin_whole_lifecycle',
     [switch]$Transitions,
@@ -37,6 +39,9 @@ $meta | Add-Member extraRequested $Count
 $meta | Add-Member spawnBudgetMs $BudgetMs
 $meta | Add-Member saveRequested ([bool]$SaveSnapshot)
 $meta.status = 'regular-prepared'
+if ($ServiceTrace) { $meta.arguments += ' -alife_service_trace' }
+$meta | Add-Member serviceTrace ([bool]$ServiceTrace)
+$meta | Add-Member frameTimes ([bool]$FrameTimes)
 foreach ($name in @('SpawnQueue.lua','RegularDriver.lua','BarStressPositions.lua','Test-Eligibility.lua','TransitionDriver.lua','PolicyProbe.lua')) {
     Copy-Item "$PSScriptRoot/$name" "$session/appdata/$name"
 }
@@ -55,7 +60,8 @@ if ($VerifySession) {
 }
 $meta | Add-Member verifyIds $verifyIds
 $controlValue = if ($DistanceControl) { 'true' } else { 'false' }
-$config = "return {mode='$Mode', distance_control=$controlValue, count=$Count, budget_ms=$BudgetMs, save=$save, transitions=$transitionValue, eligibility=$eligibilityValue, verify_ids={$($verifyIds -join ',')}, positions=dofile(getFS():update_path(`"`$app_data_root`$`", `"BarStressPositions.lua`"))}"
+$frameValue = if ($FrameTimes) { 'true' } else { 'false' }
+$config = "return {frame_times=$frameValue,mode='$Mode', distance_control=$controlValue, count=$Count, budget_ms=$BudgetMs, save=$save, transitions=$transitionValue, eligibility=$eligibilityValue, verify_ids={$($verifyIds -join ',')}, positions=dofile(getFS():update_path(`"`$app_data_root`$`", `"BarStressPositions.lua`"))}"
 [IO.File]::WriteAllText("$session/appdata/regular-config.lua", $config, [Text.Encoding]::ASCII)
 $meta | ConvertTo-Json -Depth 8 | Set-Content $path -Encoding utf8
 if ($PrepareOnly) {

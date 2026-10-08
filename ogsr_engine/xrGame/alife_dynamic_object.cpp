@@ -7,6 +7,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
+#include "alife_service_trace.h"
 #include "alife_switch_policy.h"
 #include "xrServer_Objects_ALife.h"
 #include "alife_simulator.h"
@@ -141,6 +142,7 @@ struct DynamicSwitchOperations
     void clear_data() { object.client_data.clear(); }
     void report_rejection(bool distance) const
     {
+        alife_service_trace::event(distance ? "distance_rejected" : "permission_rejected", object.ID);
 #ifdef DEBUG
         if (!object.client_data.empty())
         {
@@ -151,7 +153,7 @@ struct DynamicSwitchOperations
         }
 #endif
     }
-    void switch_online() { object.alife().switch_online(&object); }
+    void switch_online() { alife_service_trace::event("eligible_observed", object.ID); object.alife().switch_online(&object); }
     void switch_offline() { object.alife().switch_offline(&object); }
 };
 }
