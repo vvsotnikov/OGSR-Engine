@@ -84,3 +84,11 @@ The offline reader retains samples for exact nearest-rank quantiles and worst-ob
 identities. Its memory use grows with capture length; the producer buffer bound does
 not apply to analysis. Frame recording likewise buffers the bounded runtime fixture's
 frames until completion; it is not an unlimited-duration frame recorder.
+
+The recorded `Device` frame/game-clock pair relies on engine synchronization, not
+the recorder mutex. `CRenderDevice::on_idle` calls `FrameMove` (which writes the pair)
+before submitting `seqParallel`, and waits for that worker and its child tasks before
+returning to the next frame. `CALifeUpdateManager::shedule_Update` queues subsequent
+MT updates there; the first update is synchronous. Loading draws increment the frame
+on the synchronous loading path, before a frame worker is submitted. Any future change
+to this ownership order must supply a synchronized clock snapshot to the recorder.

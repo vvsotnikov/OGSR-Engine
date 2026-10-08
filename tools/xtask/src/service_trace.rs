@@ -231,6 +231,7 @@ fn read_window(text: &str, window: Option<(u64, u64)>) -> Result<Report, String>
             }
             "enter" => {
                 if o.member.is_none() {
+                    o.rejection = "";
                     o.member = Some((now, r.updates));
                     o.flags = flags as u32;
                 }
@@ -271,6 +272,7 @@ fn read_window(text: &str, window: Option<(u64, u64)>) -> Result<Report, String>
             // adds no eligibility-wait measurement, so accept it without a metric.
             "eligible_observed" => {}
             "online" => {
+                o.rejection = "";
                 if let Some(start) = o.permission.take() {
                     if o.flags & 4 != 0 {
                         sample(&mut r, "creature_permission_to_online_us", now - start, key);
@@ -309,6 +311,7 @@ fn read_window(text: &str, window: Option<(u64, u64)>) -> Result<Report, String>
             }
             "leave" => {
                 censor(&mut r, key, o, now, "left_switch_registry");
+                o.rejection = "";
                 o.permission = None;
                 o.member = None;
                 o.last = None;
@@ -412,21 +415,79 @@ mod tests {
     }
     #[test]
     fn first_revisit_and_unfinished_waits() {
-        let mut r=read(&capture("0,register,1,1,0,12\n10,enter,1,1,0,12\n20,update,5,0,810,1\n30,visit,1,1,0,12\n40,update,5,0,810,1\n70,visit,1,1,0,12\n100,end,65535,0,0,0\n")).unwrap();
+        let mut r = read(&capture(concat!(
+            "0,register,1,1,0,12\n",
+            "10,enter,1,1,0,12\n",
+            "20,update,5,0,810,1\n",
+            "30,visit,1,1,0,12\n",
+            "40,update,5,0,810,1\n",
+            "70,visit,1,1,0,12\n",
+            "100,end,65535,0,0,0\n",
+        )))
+        .unwrap();
         assert_eq!(r.samples["first_visit_us"][0].0, 20);
         assert_eq!(r.samples["revisit_us"][0].0, 40);
         assert!(r.render().contains("revisit, 30, capture_end"));
     }
     #[test]
     fn never_visited_removal_reuse_and_map_leave() {
-        let r=read(&capture("0,register,2,1,0,12\n0,enter,2,1,0,12\n10,leave,2,1,0,0\n11,enter,2,1,0,12\n20,remove,2,1,0,0\n21,register,2,2,0,12\n22,enter,2,2,0,12\n30,end,65535,0,0,0\n")).unwrap();
+        let r = read(&capture(concat!(
+            "0,register,2,1,0,12\n",
+            "0,enter,2,1,0,12\n",
+            "10,leave,2,1,0,0\n",
+            "11,enter,2,1,0,12\n",
+            "20,remove,2,1,0,0\n",
+            "21,register,2,2,0,12\n",
+            "22,enter,2,2,0,12\n",
+            "30,end,65535,0,0,0\n",
+        )))
+        .unwrap();
         assert_eq!(r.waits.len(), 3);
         assert!(r.waits[0].contains("10, left_switch_registry"));
         assert!(r.waits[2].contains("2, 2, first_visit, 8, capture_end"));
     }
     #[test]
+    fn reentry_does_not_inherit_the_previous_membership_rejection() {
+        let r = read(&capture(concat!(
+            "0,register,1,1,0,44\n",
+            "1,enter,1,1,0,44\n",
+            "2,visit,1,1,0,44\n",
+            "3,permission_rejected,1,1,0,0\n",
+            "4,leave,1,1,0,0\n",
+            "10,enter,1,1,0,60\n",
+            "20,end,65535,0,0,0\n",
+        )))
+        .unwrap();
+        assert!(r.waits[0].contains("left_switch_registry, permission, 44"));
+        assert_eq!(r.waits[1], "1, 1, first_visit, 10, capture_end, , 60");
+    }
+    #[test]
+    fn successful_activation_clears_an_earlier_rejection() {
+        let r = read(&capture(concat!(
+            "0,register,1,1,0,44\n",
+            "1,enter,1,1,0,44\n",
+            "2,visit,1,1,0,44\n",
+            "3,permission_rejected,1,1,0,0\n",
+            "4,permission_on,1,1,0,60\n",
+            "5,online,1,1,0,0\n",
+            "6,client,1,1,0,0\n",
+            "10,end,65535,0,0,0\n",
+        )))
+        .unwrap();
+        assert_eq!(r.waits, ["1, 1, revisit, 8, capture_end, , 60"]);
+    }
+    #[test]
     fn activation_completion_and_censoring() {
-        let r=read(&capture("0,register,3,1,0,12\n10,eligible_observed,3,1,0,0\n12,online,3,1,0,0\n40,client,3,1,0,0\n50,offline,3,1,0,0\n60,online,3,1,0,0\n100,end,65535,0,0,0\n")).unwrap();
+        let r = read(&capture(concat!(
+            "0,register,3,1,0,12\n",
+            "10,eligible_observed,3,1,0,0\n",
+            "12,online,3,1,0,0\n",
+            "40,client,3,1,0,0\n",
+            "50,offline,3,1,0,0\n",
+            "60,online,3,1,0,0\n",
+            "100,end,65535,0,0,0\n",
+        )))
+        .unwrap();
         assert!(!r.samples.contains_key("observed_to_online_us"));
         assert_eq!(r.samples["online_to_client_us"][0].0, 28);
         assert!(r.waits[0].contains("online_to_client, 40, capture_end"));
@@ -445,7 +506,19 @@ mod tests {
     }
     #[test]
     fn permission_trigger_and_revocation_are_not_observation_latency() {
-        let r=read(&capture("0,register,1,1,0,60\n1,permission_on,1,1,0,60\n2,permission_on,1,1,0,60\n10,eligible_observed,1,1,0,0\n12,online,1,1,0,0\n14,client,1,1,0,0\n20,offline,1,1,0,0\n21,permission_on,1,1,0,60\n30,permission_off,1,1,0,44\n40,end,65535,0,0,0\n")).unwrap();
+        let r = read(&capture(concat!(
+            "0,register,1,1,0,60\n",
+            "1,permission_on,1,1,0,60\n",
+            "2,permission_on,1,1,0,60\n",
+            "10,eligible_observed,1,1,0,0\n",
+            "12,online,1,1,0,0\n",
+            "14,client,1,1,0,0\n",
+            "20,offline,1,1,0,0\n",
+            "21,permission_on,1,1,0,60\n",
+            "30,permission_off,1,1,0,44\n",
+            "40,end,65535,0,0,0\n",
+        )))
+        .unwrap();
         assert_eq!(r.samples["permission_to_online_us"][0].0, 11);
         assert!(!r.samples.contains_key("observed_to_online_us"));
         assert!(r.waits[0].contains("permission_to_online, 9, permission_revoked"));
@@ -458,13 +531,31 @@ mod tests {
         assert_eq!(r.unmatched, 1);
     }
     #[test]
-    fn clock_includes_pause_and_reload_has_separate_identity() {
-        let data = capture(
-            "0,register,1,1,0,0\n1,enter,1,1,0,0\n1000001,visit,1,1,0,0\n1000002,end,65535,0,0,0\n",
+    fn wall_clock_gaps_and_independent_capture_state() {
+        let first = capture(concat!(
+            "0,register,1,1,0,0\n",
+            "1,enter,1,1,0,0\n",
+            "2,clock,65535,0,100,1\n",
+            "1000000,clock,65535,0,100,1\n",
+            "1000001,visit,1,1,0,0\n",
+            "1000002,end,65535,0,0,0\n",
+        ));
+        // Latency uses monotonic wall time even when the recorded game clock
+        // does not advance. This models data, not the engine's pause mechanism.
+        assert_eq!(
+            read(&first).unwrap().samples["first_visit_us"][0].0,
+            1000000
         );
-        for _ in 0..2 {
-            assert_eq!(read(&data).unwrap().samples["first_visit_us"][0].0, 1000000);
-        }
+        let second = capture(concat!(
+            "0,register,1,1,0,0\n",
+            "1,enter,1,1,0,0\n",
+            "8,visit,1,1,0,0\n",
+            "9,end,65535,0,0,0\n",
+        ));
+        // The clock and ID incarnation can start again in another file.
+        let r = read(&second).unwrap();
+        assert_eq!(r.samples["first_visit_us"][0].0, 7);
+        assert!(!r.samples.contains_key("revisit_us"));
     }
 }
 
@@ -573,7 +664,21 @@ mod window_tests {
     use super::*;
     #[test]
     fn warmed_window_preserves_old_unfinished_waits_and_excludes_loading_samples() {
-        let text="ogsr-service,1\nus,kind,id,generation,value,flags\n0,register,1,1,0,12\n1,enter,1,1,0,12\n2,visit,1,1,0,12\n3,register,2,1,0,12\n4,enter,2,1,0,12\n10,clock,65535,0,100,10\n11,visit,1,1,0,12\n20,clock,65535,0,110,11\n21,visit,1,1,0,12\n30,clock,65535,0,120,12\n40,end,65535,10,0,0\n";
+        let text = concat!(
+            "ogsr-service,1\n",
+            "us,kind,id,generation,value,flags\n",
+            "0,register,1,1,0,12\n",
+            "1,enter,1,1,0,12\n",
+            "2,visit,1,1,0,12\n",
+            "3,register,2,1,0,12\n",
+            "4,enter,2,1,0,12\n",
+            "10,clock,65535,0,100,10\n",
+            "11,visit,1,1,0,12\n",
+            "20,clock,65535,0,110,11\n",
+            "21,visit,1,1,0,12\n",
+            "30,clock,65535,0,120,12\n",
+            "40,end,65535,10,0,0\n",
+        );
         let r = read_warmed(
             text,
             "frame,game_ms,stage,wall_ms\n10,100,4,10\n11,110,4,10\n",
@@ -588,7 +693,13 @@ mod window_tests {
     }
     #[test]
     fn mismatched_frame_capture_is_rejected() {
-        let text="ogsr-service,1\nus,kind,id,generation,value,flags\n0,clock,65535,0,100,10\n10,clock,65535,0,110,11\n20,end,65535,2,0,0\n";
+        let text = concat!(
+            "ogsr-service,1\n",
+            "us,kind,id,generation,value,flags\n",
+            "0,clock,65535,0,100,10\n",
+            "10,clock,65535,0,110,11\n",
+            "20,end,65535,2,0,0\n",
+        );
         assert!(read_warmed(
             text,
             "frame,game_ms,stage,wall_ms\n10,101,4,10\n11,111,4,10\n"

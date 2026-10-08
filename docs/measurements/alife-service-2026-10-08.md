@@ -65,8 +65,9 @@ that frame cost. Revisit samples are pooled events, so frequently serviced objec
 contribute more samples; worst IDs and unfinished waits are retained separately.
 
 No creature awaited its first evaluation at the warmed boundary. There were 529
-unfinished creature revisits in each whole-map capture and 539 in each distance
-capture at the boundary. These are ordinary right-censored waits, not automatically
+unfinished creature revisits at `window_end` in each whole-map capture and 539 in
+each distance capture. Distance runs also have five earlier terminated revisit waits
+within the window, making 544 rows in that category in total. These are ordinary right-censored waits, not automatically
 starvation. Counts, maxima, IDs and termination reasons are in
 [unfinished.csv](alife-service-2026-10-08/unfinished.csv); completed metrics, including
 full loading/creation windows, are in [metrics.csv](alife-service-2026-10-08/metrics.csv).
@@ -88,6 +89,14 @@ Frames 12705–12708 took 29.441, 34.161, 32.923 and 51.563 ms. The
 neighboring frame/clock rows. This shows a wall-time delay despite a four-update gap;
 it does not attribute the slow frames to switching, rendering, tracing or the OS.
 The engine log records no save in that interval. Another frame reached 52.007 ms.
+
+Before the warmed window, every run had a 264.621–299.149-ms frame in the
+creation/settling stage. The fixture deliberately creates all 400 server objects
+in one callback (`BudgetMs=0`); the next recorded frame interval includes that burst.
+This is not a measured ordinary Bar-entry hitch or solely a client-construction cost.
+[All frame stages](alife-service-2026-10-08/frame-stages.csv) are published separately
+so warmed percentiles do not hide the artificial creation burst. Frame collection
+starts after application readiness; loading-screen frame costs are not measured.
 
 ## Activation and capture integrity
 
