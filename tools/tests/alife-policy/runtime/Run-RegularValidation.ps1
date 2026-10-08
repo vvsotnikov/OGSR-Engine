@@ -4,6 +4,7 @@ param(
     [ValidateRange(0,10)][int]$BudgetMs = 0,
     [switch]$SaveSnapshot,
     [switch]$ServiceTrace,
+    [switch]$ServiceSlices,
     [switch]$FrameTimes,
     [switch]$PrepareOnly,
     [ValidatePattern('^bin_[a-zA-Z0-9_]+$')][string]$Package = 'bin_whole_lifecycle',
@@ -16,6 +17,7 @@ param(
     [string]$SaveName = 'bar_center'
 )
 $ErrorActionPreference = 'Stop'
+if ($ServiceTrace -and $ServiceSlices) { throw 'Choose full service tracing or slice-only tracing, not both' }
 . "$PSScriptRoot/ValidationLog.ps1"
 . "$PSScriptRoot/ValidationPackage.ps1"
 . "$PSScriptRoot/PolicyMessages.ps1"
@@ -40,6 +42,8 @@ $meta | Add-Member spawnBudgetMs $BudgetMs
 $meta | Add-Member saveRequested ([bool]$SaveSnapshot)
 $meta.status = 'regular-prepared'
 if ($ServiceTrace) { $meta.arguments += ' -alife_service_trace' }
+if ($ServiceSlices) { $meta.arguments += ' -alife_service_slices' }
+$meta | Add-Member serviceSlices ([bool]$ServiceSlices)
 $meta | Add-Member serviceTrace ([bool]$ServiceTrace)
 $meta | Add-Member frameTimes ([bool]$FrameTimes)
 foreach ($name in @('SpawnQueue.lua','RegularDriver.lua','BarStressPositions.lua','Test-Eligibility.lua','TransitionDriver.lua','PolicyProbe.lua')) {

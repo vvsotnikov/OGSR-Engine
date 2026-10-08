@@ -1,6 +1,8 @@
 # ALife service measurements
 
 Run an isolated Release scenario with `Run-RegularValidation.ps1 -ServiceTrace -FrameTimes`.
+Use `-ServiceSlices -FrameTimes` instead for low-rate slice-only calibration; the
+runner rejects combining the two modes. Omit both switches for the tracing-off control.
 Add `-Mode distance` or `-Mode whole-map`, `-Count 400` for density, and `-Eligibility`
 for controlled whole-map permission changes. Use `-Transitions` separately for map lifecycle.
 The runner records save/package hashes and configuration in `session.json`.
@@ -11,6 +13,15 @@ for frame percentiles by scenario stage. Keep the original capture alongside the
 
 ## Interpretation
 
+- A `mode` row identifies full (`value=1`) or slice-only (`value=0`) recording.
+  Slice-only captures contain clocks, settings, updates and slice boundaries, with
+  no object events or inferred per-object waits. Older captures without a mode row
+  are reported as `legacy_full`.
+- `slice_begin` precedes the iterator call; `slice_end` follows it, using its existing
+  returned visit count (`value`). Their `flags` give registry sizes before/after.
+  Recording is outside the iterator's timed traversal. The measured span includes
+  recorder boundary overhead and possible descheduling; it is not pure CPU time.
+  Every update must have exactly one completed slice in a modern capture.
 - Registration creates a new incarnation of an engine ID. Identity is scoped to one
   capture file; it is not a persistent campaign identity. Reload/map travel creates
   a new capture, and unfinished waits in the old capture remain reported.
@@ -44,11 +55,15 @@ for frame percentiles by scenario stage. Keep the original capture alongside the
 
 ## Capture integrity and cost
 
-Collection is opt-in (`-alife_service_trace`), uses two fixed-capacity 65,536-event buffers,
+Collection is opt-in (`-alife_service_trace` or `-alife_service_slices`), uses two fixed-capacity 65,536-event buffers,
 then counts every dropped event if its writer cannot keep up. A writer thread formats
 and writes batches outside switching callbacks; no file I/O occurs inside the switching budget. Disabled event sites perform a gate check without
 clock reads, allocations or scans. Enabled sites serialize on a mutex; this cost is
-inside the engine's existing switching budget and must be measured with matched runs.
+inside the engine's existing switching budget in full mode. Slice-only mode retains
+only the cheap detail gates on object paths, with no object clocks, mutexes or
+snapshots. Both modes share slice-boundary recording outside that budget; the
+low-rate control is not literally uninstrumented. Compare its frame effects with
+tracing off, and its visits per slice with full tracing.
 The writer wakes at 4,096 queued events; smaller batches wait until that threshold
 or capture end. Final draining and the end record occur before simulator teardown. A crash has no
 completed export; never treat its absence as zero latency. The reader fails on missing

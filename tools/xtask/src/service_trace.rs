@@ -25,6 +25,7 @@ pub struct Report {
     window: Option<(u64, u64)>,
     collecting: bool,
     measured_updates: u64,
+    detail: Option<bool>,
     settings: std::collections::BTreeSet<(u16, i64, u32)>,
     schedules: std::collections::BTreeSet<(u64, u32)>,
     unmatched_kinds: BTreeMap<String, u64>,
@@ -110,6 +111,8 @@ fn read_window(reader: impl BufRead, window: Option<(u64, u64)>) -> Result<Repor
     let mut ended = false;
     let mut settings = None;
     let mut schedule = None;
+    let mut slice = None;
+    let mut completed_slices = 0;
     for (index, line) in lines.enumerate() {
         let line = line?;
         let f: Vec<_> = line.split(',').collect();
@@ -128,6 +131,9 @@ fn read_window(reader: impl BufRead, window: Option<(u64, u64)>) -> Result<Repor
         if !matches!(
             f[1],
             "register"
+                | "mode"
+                | "slice_begin"
+                | "slice_end"
                 | "clock"
                 | "update"
                 | "scheduler"
@@ -161,6 +167,9 @@ fn read_window(reader: impl BufRead, window: Option<(u64, u64)>) -> Result<Repor
         }
         r.collecting = window.is_none_or(|(start, end)| now >= start && now < end);
         if f[1] == "end" {
+            if slice.is_some() || (r.detail.is_some() && completed_slices != r.updates) {
+                return Err("Incomplete slice coverage".into());
+            }
             if generation != index as u64 {
                 return Err("Record count mismatch: missing or duplicated rows".into());
             }
@@ -177,6 +186,37 @@ fn read_window(reader: impl BufRead, window: Option<(u64, u64)>) -> Result<Repor
             }
             continue;
         }
+        if f[1] == "mode" {
+            if index != 0 || value > 1 {
+                return Err("Invalid trace mode".into());
+            }
+            r.detail = Some(value == 1);
+            continue;
+        }
+        if f[1] == "slice_begin" {
+            if r.updates != completed_slices + 1 {
+                return Err("Slice without a corresponding update".into());
+            }
+            if slice.replace((now, flags)).is_some() {
+                return Err("Overlapping slices".into());
+            }
+            continue;
+        }
+        if f[1] == "slice_end" {
+            let (start, population) = slice.take().ok_or("Slice end without beginning")?;
+            completed_slices += 1;
+            sample(&mut r, "slice_wall_us", now - start, (65535, 0), false);
+            sample(&mut r, "slice_visits", value, (65535, 0), false);
+            sample(
+                &mut r,
+                "slice_population_before",
+                population,
+                (65535, 0),
+                false,
+            );
+            sample(&mut r, "slice_population_after", flags, (65535, 0), false);
+            continue;
+        }
         if f[1] == "scheduler" {
             schedule = Some((value, flags as u32));
             continue;
@@ -191,6 +231,9 @@ fn read_window(reader: impl BufRead, window: Option<(u64, u64)>) -> Result<Repor
             continue;
         }
         if f[1] == "update" {
+            if r.detail.is_some() && r.updates != completed_slices {
+                return Err("Incomplete slice coverage".into());
+            }
             if r.collecting {
                 if let Some(settings) = settings {
                     r.settings.insert(settings);
@@ -202,6 +245,9 @@ fn read_window(reader: impl BufRead, window: Option<(u64, u64)>) -> Result<Repor
             }
             r.updates += 1;
             continue;
+        }
+        if r.detail == Some(false) {
+            return Err("Object event in slice-only capture".into());
         }
         if closed {
             continue;
@@ -360,6 +406,16 @@ impl Report {
                 "dropped_records"
             }
         );
+        writeln!(
+            out,
+            "mode={}",
+            match self.detail {
+                Some(true) => "full",
+                Some(false) => "slices",
+                None => "legacy_full",
+            }
+        )
+        .unwrap();
         if let Some((start, end)) = self.window {
             writeln!(
                 out,
@@ -431,6 +487,39 @@ impl Report {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn slice_only_reports_counts_without_inventing_object_waits() {
+        let text = capture(concat!(
+            "0,mode,65535,0,0,0\n",
+            "1,update,65535,0,0,0\n",
+            "2,slice_begin,65535,0,0,40\n",
+            "812,slice_end,65535,0,7,41\n",
+            "900,end,65535,0,0,0\n",
+        ));
+        let mut r = read(&text).unwrap();
+        assert_eq!(r.samples["slice_wall_us"][0].0, 810);
+        assert_eq!(r.samples["slice_visits"][0].0, 7);
+        assert_eq!(r.samples["slice_population_before"][0].0, 40);
+        assert_eq!(r.samples["slice_population_after"][0].0, 41);
+        assert!(r.waits.is_empty());
+        assert_eq!(r.unmatched, 0);
+        assert!(r.render().contains("mode=slices"));
+        assert!(read(&text.replace("812,slice_end", "812,slice_begin")).is_err());
+        assert!(read(&text.replace("1,update", "1,register")).is_err());
+        assert!(read(&text.replace("2,slice_begin,65535,0,0,40\n", "")).is_err());
+    }
+    #[test]
+    fn modern_capture_requires_a_slice_for_each_update() {
+        let text = capture(concat!(
+            "0,mode,65535,0,1,0\n",
+            "1,update,65535,0,0,0\n",
+            "2,end,65535,0,0,0\n",
+        ));
+        assert_eq!(
+            read(&text).err().as_deref(),
+            Some("Incomplete slice coverage")
+        );
+    }
     #[test]
     fn shared_samples_preserve_quantiles_and_worst_identity_for_both_populations() {
         let mut r = Report {

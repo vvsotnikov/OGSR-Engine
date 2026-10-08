@@ -14,6 +14,7 @@
 namespace alife_service_trace
 {
 std::atomic<bool> enabled{false};
+std::atomic<bool> detail_enabled{false};
 namespace
 {
 using Clock = std::chrono::steady_clock;
@@ -36,7 +37,8 @@ std::uint64_t now() { return std::chrono::duration_cast<std::chrono::microsecond
 }
 void begin()
 {
-    if (!strstr(Core.Params, "-alife_service_trace")) return;
+    const bool detail = strstr(Core.Params, "-alife_service_trace") != nullptr;
+    if (!detail && !strstr(Core.Params, "-alife_service_slices")) return;
     std::lock_guard<std::mutex> guard(mutex);
     R_ASSERT(!enabled.load());
     last_settings.reset();
@@ -56,6 +58,7 @@ void begin()
     writer->w_printf("ogsr-service,1\n");
     writer->w_printf("us,kind,id,generation,value,flags\n");
     epoch = Clock::now();
+    events.push_back({0, 0, detail ? 1u : 0u, "mode", 0, 65535});
     worker = std::thread([] {
         std::vector<Event> batch;
         batch.reserve(capacity);
@@ -81,6 +84,7 @@ void begin()
         }
     });
     enabled.store(true, std::memory_order_release);
+    detail_enabled.store(detail, std::memory_order_release);
 }
 void record(const char* kind, std::uint16_t id, std::uint64_t value, std::uint32_t flags, Cache cache)
 {
@@ -100,7 +104,7 @@ void record(const char* kind, std::uint16_t id, std::uint64_t value, std::uint32
 }
 void object(const char* kind, const CSE_ALifeDynamicObject* object)
 {
-    if (!enabled.load(std::memory_order_relaxed)) return;
+    if (!detail_enabled.load(std::memory_order_relaxed)) return;
     // Snapshot only side-effect-free object fields. Permission evaluation remains in production policy.
     const auto* creature = smart_cast<const CSE_ALifeCreatureAbstract*>(object);
     const std::uint32_t flags = (object->m_bOnline ? 1u : 0u) | (object->ID_Parent != 65535 ? 2u : 0u) |
@@ -114,6 +118,7 @@ void end()
     std::uint64_t stop;
     {
         std::lock_guard<std::mutex> guard(mutex);
+        detail_enabled.store(false, std::memory_order_release);
         if (!enabled.exchange(false)) return;
         stop = now();
         stopping = true;
