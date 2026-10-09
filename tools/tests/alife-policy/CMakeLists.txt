@@ -32,3 +32,5 @@ add_test(NAME policy-group-preparation COMMAND "${POWERSHELL}" -NoProfile -File 
 add_test(NAME policy-particle-preparation COMMAND "${POWERSHELL}" -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/runtime/Test-ParticleRunner.ps1")
 
 add_test(NAME policy-dog-preparation COMMAND "${POWERSHELL}" -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/runtime/Test-DogRunner.ps1")
+
+add_test(NAME policy-npc-trip-preparation COMMAND "${POWERSHELL}" -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/runtime/Test-NpcTripRunner.ps1")

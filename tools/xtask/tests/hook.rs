@@ -70,6 +70,10 @@ impl Fixture {
             &source.join("tools/xtask/src"),
             &root.join("tools/xtask/src"),
         );
+        copy_sources(
+            &source.join("ogsr_engine/npc_sim"),
+            &root.join("ogsr_engine/npc_sim"),
+        );
         fs::write(root.join(".gitignore"), "/target/\n/linked/\n").unwrap();
         fs::create_dir_all(root.join("tools/tests/fixture")).unwrap();
         fs::write(root.join("tools/tests/fixture/CMakeLists.txt"), format!(

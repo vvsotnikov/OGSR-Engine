@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <NpcSimRoot>$(MSBuildThisFileDirectory)</NpcSimRoot>
+    <NpcSimProfile Condition="'$(Configuration)' == 'Debug'">debug</NpcSimProfile>
+    <NpcSimProfile Condition="'$(Configuration)' != 'Debug'">release</NpcSimProfile>
+    <NpcSimReleaseArg Condition="'$(Configuration)' != 'Debug'">--release</NpcSimReleaseArg>
+    <NpcSimTargetDir>$(NpcSimRoot)target\npc_sim\$(Configuration)</NpcSimTargetDir>
+    <NpcSimLibrary>$(NpcSimTargetDir)\x86_64-pc-windows-msvc\$(NpcSimProfile)\npc_sim.lib</NpcSimLibrary>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <Link>
+      <AdditionalDependencies>$(NpcSimLibrary);userenv.lib;ws2_32.lib;bcrypt.lib;ntdll.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <!-- Rust's static CRT directive names libcmt; the Debug executable owns
+           CRT selection. No allocation is freed across the C ABI boundary. -->
+      <IgnoreSpecificDefaultLibraries Condition="'$(Configuration)' == 'Debug'">libcmt.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+    </Link>
+  </ItemDefinitionGroup>
+  <Target Name="BuildNpcSimulation" BeforeTargets="Link">
+    <Error Condition="'$(Platform)' != 'x64'" Text="NPC simulation requires the x64 MSVC target." />
+    <Exec WorkingDirectory="$(NpcSimRoot)" Command="cargo rustc --locked --package npc_sim --lib $(NpcSimReleaseArg) --target x86_64-pc-windows-msvc --target-dir &quot;$(NpcSimTargetDir)&quot; -- -C target-feature=+crt-static" />
+  </Target>
+</Project>

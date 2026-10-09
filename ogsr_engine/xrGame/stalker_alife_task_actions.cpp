@@ -7,6 +7,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
+#include "npc_simulation.h"
 #include "stalker_alife_task_actions.h"
 #include "ai/stalker/ai_stalker.h"
 #include "ai/trader/ai_trader.h"
@@ -92,6 +93,8 @@ void CStalkerActionSolveZonePuzzle::initialize()
 void CStalkerActionSolveZonePuzzle::finalize()
 {
     inherited::finalize();
+    if (ai().get_alife() && ai().alife().initialized() && !ai().alife().is_unloading())
+        ai().alife().npc_simulation().update_online(object(), true);
 
     //	object().movement().set_desired_position	(0);
 
@@ -161,6 +164,7 @@ void CStalkerActionSolveZonePuzzle::execute()
 #endif
 #endif
 #endif
+    if (ai().get_alife()) ai().alife().npc_simulation().update_online(object());
 }
 
 //////////////////////////////////////////////////////////////////////////

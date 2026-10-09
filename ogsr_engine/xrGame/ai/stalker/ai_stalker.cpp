@@ -7,6 +7,8 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
+#include "npc_simulation.h"
+#include "alife_simulator.h"
 #include "ai_stalker.h"
 #include "../ai_monsters_misc.h"
 #include "../../weapon.h"
@@ -704,7 +706,10 @@ void CAI_Stalker::shedule_Update(u32 DT)
         m_fTimeUpdateDelta = dt;
         Device.Statistic->AI_Think.Begin();
         if (GetScriptControl())
+        {
+            if (ai().get_alife()) ai().alife().npc_simulation().update_online(*this, true);
             ProcessScripts();
+        }
         else
 #ifdef DEBUG
             if (Device.dwFrame > (spawn_time() + g_AI_inactive_time))

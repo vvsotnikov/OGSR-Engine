@@ -15,6 +15,7 @@
 #include "script_game_object.h"
 #include "gameobject.h"
 #include "level.h"
+#include "npc_simulation.h"
 
 CScriptBinder::CScriptBinder() { init(); }
 
@@ -50,6 +51,9 @@ void CScriptBinder::reload(LPCSTR section)
     if (!pSettings->line_exist(section, "script_binding"))
         return;
 
+    // Explicit planner-owned NPCs use native ordinary activity instead of a
+    // second Lua task owner. Combat/danger remain in the native stalker planner.
+    if (CNpcSimulation::configured(section)) return;
     auto script_func_name = pSettings->r_string(section, "script_binding");
     luabind::functor<void> lua_function;
     if (!ai().script_engine().functor(script_func_name, lua_function))

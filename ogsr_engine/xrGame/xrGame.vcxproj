@@ -521,6 +521,7 @@
     <ClInclude Include="alife_monster_patrol_path_manager_inline.h" />
     <ClInclude Include="alife_online_offline_group_brain.h" />
     <ClInclude Include="alife_online_offline_group_brain_inline.h" />
+    <ClInclude Include="npc_simulation.h" />
     <ClInclude Include="alife_simulator_base.h" />
     <ClInclude Include="alife_simulator_base_inline.h" />
     <ClInclude Include="alife_simulator_header.h" />
@@ -1644,6 +1645,7 @@
     <ClCompile Include="alife_smart_zone.cpp" />
     <ClCompile Include="alife_trader.cpp" />
     <ClCompile Include="alife_trader_abstract.cpp" />
+    <ClCompile Include="npc_simulation.cpp" />
     <ClCompile Include="alife_simulator_base.cpp" />
     <ClCompile Include="alife_simulator_base2.cpp" />
     <ClCompile Include="alife_simulator_header.cpp" />

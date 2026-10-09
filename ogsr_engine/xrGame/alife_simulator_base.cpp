@@ -7,6 +7,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
+#include "npc_simulation.h"
 #include "alife_service_trace.h"
 #include "alife_simulator_base.h"
 #include "alife_simulator_header.h"
@@ -38,6 +39,7 @@ CALifeSimulatorBase::CALifeSimulatorBase(xrServer* server, LPCSTR section)
     m_smart_terrains = nullptr;
     m_groups = nullptr;
     m_registry_container = nullptr;
+    m_npc_simulation = nullptr;
     m_can_register_objects = true;
     m_unloading = false;
 }
@@ -60,6 +62,7 @@ void CALifeSimulatorBase::unload()
     xr_delete(m_smart_terrains);
     xr_delete(m_groups);
     xr_delete(m_registry_container);
+    xr_delete(m_npc_simulation);
     m_initialized = false;
     m_unloading = false;
 }
@@ -77,6 +80,7 @@ void CALifeSimulatorBase::reload(LPCSTR section)
     m_smart_terrains = xr_new<CALifeSmartTerrainRegistry>();
     m_groups = xr_new<CALifeGroupRegistry>();
     m_registry_container = xr_new<CALifeRegistryContainer>();
+    m_npc_simulation = xr_new<CNpcSimulation>(*this);
     m_initialized = true;
 }
 
