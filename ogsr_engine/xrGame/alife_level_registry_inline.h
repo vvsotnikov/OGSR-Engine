@@ -26,6 +26,7 @@ IC void CALifeLevelRegistry::add(CSE_ALifeDynamicObject* object)
         Msg("[LSS] adding object [%s][%d] to current level", object->name_replace(), object->ID);
     }
 #endif
+    object->m_representation.invalidate();
     inherited::add(object->ID, object);
     alife_service_trace::object("enter", object);
 }
@@ -40,6 +41,7 @@ IC void CALifeLevelRegistry::remove(CSE_ALifeDynamicObject* object, bool no_asse
 #endif
     if (alife_service_trace::detail_enabled.load(std::memory_order_relaxed) && objects().find(object->ID) != objects().end())
         alife_service_trace::event("leave", object->ID);
+    object->m_representation.invalidate();
     inherited::remove(object->ID, no_assert);
 }
 

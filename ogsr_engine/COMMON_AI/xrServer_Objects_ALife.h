@@ -10,6 +10,7 @@
 
 #include "xrServer_Objects.h"
 #include "alife_space.h"
+#include "alife_representation_state.h"
 #include "game_graph_space.h"
 
 #pragma warning(push)
@@ -106,6 +107,7 @@ CSE_ALifeObject(LPCSTR caSection);
 virtual ~CSE_ALifeObject();
 virtual bool used_ai_locations() const;
 virtual bool can_save() const;
+alife_representation::State m_representation;
 virtual bool can_switch_online() const;
 virtual bool can_switch_offline() const;
 virtual bool interactive() const;

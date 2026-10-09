@@ -28,6 +28,7 @@ return function(position, now)
             phase = 1
         end
         local object = assert(alife():object(id), "Eligibility NPC disappeared")
+        assert(object.representation_reuses == 0, "Scripted NPC skipped compatibility reconciliation")
         local client = level.object_by_id(id) ~= nil
         local step = (phase - 1) % 5 + 1
         local expected = step == 2 or step == 3 or step == 5

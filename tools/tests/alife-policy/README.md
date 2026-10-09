@@ -28,6 +28,23 @@ effects only for the object types used by each scenario. `-Eligibility` exercise
 simulator permission setters and direct mutation of the exposed object flags, then an inventory item
 through attach, detach, offline, online and destruction.
 
+Whole-map representation decisions can be reused only for unattached, online
+objects of the exact native `CSE_ALifeItem` type. Subclasses, scripted objects,
+offline objects and distance mode remain on periodic reconciliation. Maintenance
+and location synchronization still run on every visit. This does not remove the
+registry walk or introduce a separate simulation thread.
+
+Invalidation belongs to the server object's lifetime, not its reusable ID, and is
+not saved. Permission setters, registration, representation, ownership and map
+membership changes invalidate it. Raw Lua flag writes bypass setters, so every
+maintenance visit also compares the flags before reusing a decision. Extending
+this to other types requires accounting for all inputs to their virtual queries
+and side effects of their switching methods.
+
+`-Eligibility` and `-DistanceControl` also check actual native item decision/reuse
+counters through ownership and permission changes. The latter verifies that
+distance mode continues evaluating; scripted NPCs must never reuse decisions.
+
 Scheduler maintenance precedes permission queries, which can change during
 maintenance. Rejected activation reports its reason before clearing saved client
 data. Attached objects follow their parent rather than independent switching

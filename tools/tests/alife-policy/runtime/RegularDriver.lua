@@ -19,7 +19,7 @@ return function(cfg)
     local far_limit = alife():switch_distance() * (1 + factor) + 10
     local far_samples = 0
     local eligibility = cfg.eligibility and dofile(path("Test-Eligibility.lua"))(cfg.positions[1], now)
-    local ownership = cfg.eligibility and dofile(path("Test-Ownership.lua"))(now)
+    local ownership = (cfg.eligibility or cfg.distance_control) and dofile(path("Test-Ownership.lua"))(now, distance_mode)
     local populations = assert(io.open(path("regular-population.csv"), "w"))
     populations:write("game_ms,stage,created,retained,online,client,living\n")
     local jobs = {}

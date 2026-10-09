@@ -2655,6 +2655,9 @@
     <ClInclude Include="alife_simulator_inline.h">
       <Filter>AI\ALife</Filter>
     </ClInclude>
+    <ClInclude Include="..\COMMON_AI\alife_representation_state.h">
+      <Filter>AI\ALife</Filter>
+    </ClInclude>
     <ClInclude Include="..\COMMON_AI\alife_space.h">
       <Filter>AI\ALife</Filter>
     </ClInclude>

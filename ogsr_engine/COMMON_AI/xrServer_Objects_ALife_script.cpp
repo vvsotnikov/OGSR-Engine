@@ -43,6 +43,9 @@ void CSE_ALifeGraphPoint::script_register(lua_State* L) { module(L)[luabind_clas
 
 Flags32& get_flags_ref(CSE_ALifeObject* sobj) { return sobj->m_flags; }
 
+u32 representation_decisions(CSE_ALifeObject* object) { return object->m_representation.decisions; }
+u32 representation_reuses(CSE_ALifeObject* object) { return object->m_representation.reuses; }
+
 void cse_obj_set_position(CSE_ALifeObject* o, const Fvector& pos) { o->position().set(pos); }
 
 template <typename T>
@@ -67,6 +70,8 @@ void CSE_ALifeObject::script_register(lua_State* L)
                   .def_readwrite("m_game_vertex_id", &CSE_ALifeObject::m_tGraphID)
                   .def_readonly("m_story_id", &CSE_ALifeObject::m_story_id)
                   .property("m_flags", &get_flags_ref)
+                  .property("representation_decisions", &representation_decisions)
+                  .property("representation_reuses", &representation_reuses)
                   .property("level_id", &se_obj_level_id)
                   .property("level_name", &se_obj_level_name)
                   .property("is_alive", &se_obj_is_alive)

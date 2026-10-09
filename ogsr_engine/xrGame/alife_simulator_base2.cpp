@@ -22,6 +22,7 @@ using namespace ALife;
 
 void CALifeSimulatorBase::register_object(CSE_ALifeDynamicObject* object, bool add_object)
 {
+    object->m_representation.invalidate();
     object->on_before_register();
 
     if (add_object)
@@ -58,6 +59,7 @@ void CALifeSimulatorBase::register_object(CSE_ALifeDynamicObject* object, bool a
 
 void CALifeSimulatorBase::unregister_object(CSE_ALifeDynamicObject* object, bool alife_query)
 {
+    object->m_representation.invalidate();
     object->on_unregister();
 
     CSE_ALifeInventoryItem* item = smart_cast<CSE_ALifeInventoryItem*>(object);

@@ -21,13 +21,15 @@ struct Operations
 {
     bool initial_redundant = false, synchronized = true, is_online = false;
     bool flip_on_sync = false, flip_on_switch = false, redundant_after_switch = false;
-    bool evaluated = false, released = false;
+    bool evaluated = false, released = false, redundant_after_sync = false, synchronized_once = false;
     unsigned online_reads = 0;
+    bool decision_needed = true;
+    bool needs_representation_decision(bool online) { alive(); require(synchronized_once && online == is_online, "Decision before synchronization"); return decision_needed; }
     std::vector<std::string> calls;
     void alive() const { require(!released, "Object accessed after release"); }
-    bool redundant() { alive(); calls.push_back("redundant"); return evaluated ? redundant_after_switch : initial_redundant; }
+    bool redundant() { alive(); calls.push_back("redundant"); return (synchronized_once && redundant_after_sync) || (evaluated ? redundant_after_switch : initial_redundant); }
     void release() { alive(); calls.push_back("release"); released = true; }
-    bool synchronize_location() { alive(); calls.push_back("sync"); is_online ^= flip_on_sync; return synchronized; }
+    bool synchronize_location() { alive(); calls.push_back("sync"); is_online ^= flip_on_sync; synchronized_once = true; return synchronized; }
     bool online() { alive(); ++online_reads; return is_online; }
     void dispatch(const char* name) { alive(); calls.push_back(name); evaluated = true; is_online ^= flip_on_switch; }
     void try_switch_online() { dispatch("online"); }
@@ -87,6 +89,10 @@ int main()
             scenario("synchronization takes offline", op, {"redundant", "sync", "online", "redundant"}, 2, false, sampled);
             op = {}; op.flip_on_switch = true;
             scenario("switch changes state", op, {"redundant", "sync", "online", "redundant"}, 2, false, sampled);
+            op = {}; op.decision_needed = false;
+            scenario("unchanged representation still maintains lifecycle", op, {"redundant", "sync", "redundant"}, 2, false, sampled);
+            op = {}; op.decision_needed = false; op.redundant_after_sync = true;
+            scenario("release after skipped decision", op, {"redundant", "sync", "redundant", "release"}, 2, true, sampled);
             op = {}; op.redundant_after_switch = true;
             scenario("post-switch release", op, {"redundant", "sync", "online", "redundant", "release"}, 2, true, sampled);
         }
