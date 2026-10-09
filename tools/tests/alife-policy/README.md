@@ -25,7 +25,7 @@ real registry effects and client construction require native scenarios. The
 controlled-operation tests do not compile the engine adapters. Release and Tracy
 and full Debug builds compile those adapters; native scenarios exercise their
 effects only for the object types used by each scenario. `-Eligibility` exercises
-both simulator and direct-object permission setters, then an inventory item
+simulator permission setters and direct mutation of the exposed object flags, then an inventory item
 through attach, detach, offline, online and destruction.
 
 Scheduler maintenance precedes permission queries, which can change during

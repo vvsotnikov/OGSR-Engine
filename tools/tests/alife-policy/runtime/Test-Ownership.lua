@@ -10,8 +10,10 @@ return function(now)
             local actor = db.actor
             local item = assert(alife():create("bandage", actor:position(), actor:level_vertex_id(), actor:game_vertex_id(), actor:id()))
             id = item.id
-            item:can_switch_online(false)
-            item:can_switch_offline(true)
+            item = assert(alife():object(id)) -- create() returns the generic CSE_Abstract wrapper.
+            item.m_flags:set(2, false) -- flSwitchOnline
+            item.m_flags:set(4, true) -- flSwitchOffline
+            assert(not item.m_flags:test(2) and item.m_flags:test(4), "Inventory permission setters failed")
             advance()
         end
         local item, client = alife():object(id), level.object_by_id(id)
@@ -33,7 +35,7 @@ return function(now)
         if stable and now() - stable >= 4000 then
             log1(string.format("[regular] ownership_phase=%d id=%d", phase, id))
             if phase == 1 then db.actor:drop_item(client)
-            elseif phase == 2 then item:can_switch_online(true)
+            elseif phase == 2 then item.m_flags:set(2, true)
             elseif phase == 3 then alife():release(item, true)
             else log1("[regular] ownership_passed") end
             advance()

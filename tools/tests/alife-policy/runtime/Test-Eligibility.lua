@@ -8,9 +8,14 @@ return function(position, now)
             alife():set_switch_offline(id, offline)
         else
             local object = assert(alife():object(id))
-            object:can_switch_online(online)
-            object:can_switch_offline(offline)
+            -- can_switch_* resolves to virtual Lua queries on these objects.
+            -- Mutate the exposed flags directly, bypassing simulator setters.
+            object.m_flags:set(2, online) -- CSE_ALifeObject::flSwitchOnline
+            object.m_flags:set(4, offline) -- CSE_ALifeObject::flSwitchOffline
         end
+        local object = assert(alife():object(id))
+        assert(object.m_flags:test(2) == online, "Online permission setter did not change flSwitchOnline")
+        assert(object.m_flags:test(4) == offline, "Offline permission setter did not change flSwitchOffline")
         deadline, stable_since = now() + 20000, nil
     end
     return function()
