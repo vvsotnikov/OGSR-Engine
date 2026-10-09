@@ -7,6 +7,8 @@ pub struct Source {
     // Knowledge changes only after an attempted visit, own pickup, or explicit news.
     pub failure: FailureReason,
     retry_ms: u32,
+    // Dense ranks keep observation recency bounded without a lifetime counter.
+    learned_order: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -58,6 +60,7 @@ impl Agent {
                 physical: plan.remembered_item,
                 failure: FailureReason::None,
                 retry_ms: 0,
+                learned_order: 0,
             }],
             selected: Some(0),
             command: plan.command,
@@ -88,11 +91,11 @@ impl Agent {
             .iter()
             .enumerate()
             .filter(|(i, _)| Some(*i) != self.selected)
-            .min_by_key(|(i, source)| {
+            .min_by_key(|(_, source)| {
                 (
                     source.failure == FailureReason::None,
                     source.retry_ms == 0,
-                    *i,
+                    source.learned_order,
                 )
             })
             .map(|(i, _)| i)
@@ -109,11 +112,12 @@ impl Agent {
         {
             return false;
         }
-        let source = Source {
+        let mut source = Source {
             navigation,
             physical,
             failure: FailureReason::None,
             retry_ms: 0,
+            learned_order: self.sources.len() as u32,
         };
         let replace_trip = self.selected == Some(index)
             && self
@@ -131,6 +135,13 @@ impl Agent {
         if index == self.sources.len() {
             self.sources.push(source);
         } else {
+            let old_order = self.sources[index].learned_order;
+            for existing in &mut self.sources {
+                if existing.learned_order > old_order {
+                    existing.learned_order -= 1;
+                }
+            }
+            source.learned_order = self.sources.len() as u32 - 1;
             self.sources[index] = source;
         }
         if replace_trip {
@@ -311,7 +322,7 @@ impl Agent {
     pub fn save(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(b"NPCG");
-        put(&mut bytes, 2);
+        put(&mut bytes, 3);
         bytes.extend_from_slice(&self.identity.to_le_bytes());
         bytes.extend_from_slice(&self.command.to_le_bytes());
         put_location(&mut bytes, self.home);
@@ -330,6 +341,7 @@ impl Agent {
             put_location(&mut bytes, source.physical);
             put(&mut bytes, source.failure as u32);
             put(&mut bytes, source.retry_ms);
+            put(&mut bytes, source.learned_order);
         }
         if let Some(trip) = &self.trip {
             bytes.extend(trip.save());
@@ -342,7 +354,11 @@ impl Agent {
             return Plan::load(bytes).map(Self::assigned);
         }
         let mut r = Reader(bytes);
-        if r.take::<4>()? != *b"NPCG" || r.u32()? != 2 {
+        if r.take::<4>()? != *b"NPCG" {
+            return None;
+        }
+        let version = r.u32()?;
+        if version != 2 && version != 3 {
             return None;
         }
         let identity = u64::from_le_bytes(r.take()?);
@@ -366,7 +382,8 @@ impl Agent {
         agent.dead = flags & 4 != 0;
         agent.interrupted = flags & 8 != 0;
         agent.return_retry_ms = return_retry_ms;
-        for _ in 0..count {
+        let mut ranks = [false; Self::MAX_SOURCES];
+        for index in 0..count {
             let navigation = r.location()?;
             let physical = r.location()?;
             let failure = match r.u32()? {
@@ -383,6 +400,11 @@ impl Agent {
                 _ => return None,
             };
             let retry_ms = r.u32()?;
+            let learned_order = if version == 3 { r.u32()? } else { index as u32 };
+            if learned_order as usize >= count || ranks[learned_order as usize] {
+                return None;
+            }
+            ranks[learned_order as usize] = true;
             if !navigation.valid()
                 || !physical.spatially_valid()
                 || navigation.level != home.level
@@ -396,6 +418,7 @@ impl Agent {
                 physical,
                 failure,
                 retry_ms,
+                learned_order,
             });
         }
         if selected != u32::MAX {

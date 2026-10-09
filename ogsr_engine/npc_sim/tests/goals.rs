@@ -94,6 +94,14 @@ fn full_memory_can_accept_news_without_false_failure_or_active_binding_replaceme
     let slot = a.available_source_slot().unwrap();
     assert_eq!(slot, 1);
     assert!(a.remember(slot, point(20.), point(20.)));
+    let second_slot = a.available_source_slot().unwrap();
+    assert_eq!(second_slot, 2);
+    assert!(a.remember(second_slot, point(30.), point(30.)));
+    assert_eq!(a.sources()[slot].navigation, point(20.));
+    assert!(a.remember(3, point(40.), point(40.)));
+    assert_eq!(a.available_source_slot(), Some(4));
+    a = Agent::load(&a.save()).unwrap();
+    assert_eq!(a.available_source_slot(), Some(4));
     assert_eq!(a.status().source, Some(0));
     assert!(a.sources().iter().all(|s| s.failure == FailureReason::None));
     let mut o = observation(0.);
@@ -338,4 +346,23 @@ fn truncated_snapshots_and_invalid_memory_are_rejected_without_panics() {
     assert!(!a.remember(0, invalid, point(10.)));
     assert!(!a.remember(3, point(10.), point(10.)));
     assert_eq!(a.save(), saved);
+}
+
+#[test]
+fn source_recency_migrates_and_rejects_duplicate_or_out_of_range_ranks() {
+    let a = agent();
+    let saved = a.save();
+    // NPCG v2 has the same header but omits the final rank word of each source.
+    let mut previous = saved[..64].to_vec();
+    previous[4..8].copy_from_slice(&2u32.to_le_bytes());
+    for source in saved[64..].chunks_exact(60) {
+        previous.extend_from_slice(&source[..56]);
+    }
+    assert_eq!(Agent::load(&previous).unwrap(), a);
+    let mut duplicate = saved.clone();
+    duplicate[64 + 60 + 56..64 + 60 + 60].copy_from_slice(&0u32.to_le_bytes());
+    assert!(Agent::load(&duplicate).is_none());
+    let mut outside = saved;
+    outside[64 + 56..64 + 60].copy_from_slice(&2u32.to_le_bytes());
+    assert!(Agent::load(&outside).is_none());
 }
