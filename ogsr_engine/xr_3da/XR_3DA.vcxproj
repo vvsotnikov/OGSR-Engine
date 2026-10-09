@@ -413,6 +413,7 @@
     <Exec Command='copy /Y "$(WindowsSDKDir)Debuggers\$(PlatformShortName)\dbghelp.dll" "$(OutDir)dbghelp.dll"' />
   </Target>
   <Import Project="BuildInfo.targets" />
+  <Import Project="..\..\NpcSim.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
   <ProjectExtensions>

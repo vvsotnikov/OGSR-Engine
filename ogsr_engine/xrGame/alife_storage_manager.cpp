@@ -11,6 +11,7 @@
 #include <zstd.h>
 
 #include "alife_storage_manager.h"
+#include "npc_simulation.h"
 #include "alife_simulator_header.h"
 #include "alife_time_manager.h"
 #include "alife_spawn_registry.h"
@@ -64,6 +65,7 @@ void CALifeStorageManager::save(LPCSTR save_name, bool update_name)
         registry().save(stream);
 
         g_ScriptVars.save(stream);
+        npc_simulation().save(stream);
 
         source_count = stream.tell();
         const void* source_data = stream.pointer();
@@ -119,6 +121,7 @@ void CALifeStorageManager::load(void* buffer, const u32& buffer_size, LPCSTR fil
     registry().load(source);
 
     g_ScriptVars.load(source);
+    npc_simulation().load(source);
 
     can_register_objects(true);
 

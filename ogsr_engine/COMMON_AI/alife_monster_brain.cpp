@@ -13,6 +13,7 @@
 
 #ifdef XRGAME_EXPORTS
 #include "alife_monster_movement_manager.h"
+#include "npc_simulation.h"
 #include "alife_monster_detail_path_manager.h"
 #include "alife_monster_patrol_path_manager.h"
 #include "ai_space.h"
@@ -44,6 +45,7 @@ CALifeMonsterBrain::CALifeMonsterBrain(object_type* object)
 
 #ifdef XRGAME_EXPORTS
     m_movement_manager = xr_new<CALifeMonsterMovementManager>(object);
+    m_uses_npc_planner = CNpcSimulation::configured(object->name());
 #endif
 
 #ifdef XRGAME_EXPORTS
@@ -102,6 +104,8 @@ void CALifeMonsterBrain::process_task()
 
 void CALifeMonsterBrain::select_task(const bool forced)
 {
+    // Task ownership starts at spawn, before a concrete trip is enrolled.
+    if (m_uses_npc_planner) return;
     if (object().m_smart_terrain_id != 0xffff)
         return;
 
@@ -151,6 +155,8 @@ void CALifeMonsterBrain::update(const bool forced)
 	}
 #endif
 
+    if (auto simulation = CNpcSimulation::active())
+        if (simulation->update_offline(&object())) return;
     select_task(forced);
 
     if (object().m_smart_terrain_id != 0xffff)

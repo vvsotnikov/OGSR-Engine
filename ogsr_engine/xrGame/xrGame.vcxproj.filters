@@ -2709,6 +2709,9 @@
     <ClInclude Include="alife_online_offline_group_brain_inline.h">
       <Filter>AI\ALife\interaction_manager\server_entities\online_offline_group\brain</Filter>
     </ClInclude>
+    <ClInclude Include="npc_simulation.h">
+      <Filter>AI\ALife\simulator_base</Filter>
+    </ClInclude>
     <ClInclude Include="alife_simulator_base.h">
       <Filter>AI\ALife\simulator_base</Filter>
     </ClInclude>
@@ -6378,6 +6381,9 @@
     </ClCompile>
     <ClCompile Include="alife_trader_abstract.cpp">
       <Filter>AI\ALife\interaction_manager\server_entities\trader_abstract</Filter>
+    </ClCompile>
+    <ClCompile Include="npc_simulation.cpp">
+      <Filter>AI\ALife\simulator_base</Filter>
     </ClCompile>
     <ClCompile Include="alife_simulator_base.cpp">
       <Filter>AI\ALife\simulator_base</Filter>

@@ -25,6 +25,7 @@ class CALifeStoryRegistry;
 class CALifeSmartTerrainRegistry;
 class CALifeGroupRegistry;
 class CALifeRegistryContainer;
+class CNpcSimulation;
 
 class CSE_Abstract;
 class CSE_ALifeObject;
@@ -46,6 +47,7 @@ protected:
     CALifeSmartTerrainRegistry* m_smart_terrains;
     CALifeGroupRegistry* m_groups;
     CALifeRegistryContainer* m_registry_container;
+    CNpcSimulation* m_npc_simulation;
     bool m_initialized;
     shared_str* m_server_command_line;
     bool m_can_register_objects;
@@ -69,6 +71,7 @@ public:
     IC CALifeScheduleRegistry& scheduled();
     IC CALifeTimeManager& time_manager();
     IC CALifeRegistryContainer& registry() const;
+    CNpcSimulation& npc_simulation() const { return *m_npc_simulation; }
 
 public:
     CALifeSimulatorBase(xrServer* server, LPCSTR section);

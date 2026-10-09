@@ -7,6 +7,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
+#include "npc_simulation.h"
 #include "alife_simulator.h"
 #include "ai_space.h"
 #include "alife_object_registry.h"
@@ -43,6 +44,15 @@ LPCSTR _INVALID_STORY_ID = "INVALID_STORY_ID";
 LPCSTR _INVALID_SPAWN_STORY_ID = "INVALID_SPAWN_STORY_ID";
 STORY_PAIRS story_ids;
 SPAWN_STORY_PAIRS spawn_story_ids;
+
+bool start_supply_trip(CALifeSimulator* simulator, u16 npc, u16 supply)
+{
+    return simulator->initialized() && !simulator->is_unloading() && simulator->npc_simulation().enroll(npc, supply);
+}
+int supply_trip_phase(CALifeSimulator* simulator, u16 npc)
+{
+    return simulator->initialized() && !simulator->is_unloading() ? simulator->npc_simulation().phase(npc) : -1;
+}
 
 CALifeSimulator* alife() { return (const_cast<CALifeSimulator*>(ai().get_alife())); }
 
@@ -404,6 +414,8 @@ void CALifeSimulator::script_register(lua_State* L)
                   .def("level_id", &get_level_id_by_name)
                   .def("level_name", &get_level_name)
                   .def("objects", &alife_objects, return_stl_pair_iterator)
+                  .def("start_supply_trip", &start_supply_trip)
+                  .def("supply_trip_phase", &supply_trip_phase)
                   .def("object", (CSE_ALifeDynamicObject * (*)(const CALifeSimulator*, ALife::_OBJECT_ID))(alife_object))
                   .def("object", (CSE_ALifeDynamicObject * (*)(const CALifeSimulator*, LPCSTR))(alife_object))
                   .def("object", (CSE_ALifeDynamicObject * (*)(const CALifeSimulator*, ALife::_OBJECT_ID, bool))(alife_object))

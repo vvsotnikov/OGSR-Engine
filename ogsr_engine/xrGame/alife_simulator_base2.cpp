@@ -8,6 +8,7 @@
 
 #include "stdafx.h"
 #include "alife_simulator_base.h"
+#include "npc_simulation.h"
 #include "relation_registry.h"
 #include "alife_registry_wrappers.h"
 #include "xrServer_Objects_ALife_Items.h"
@@ -58,6 +59,7 @@ void CALifeSimulatorBase::register_object(CSE_ALifeDynamicObject* object, bool a
 
 void CALifeSimulatorBase::unregister_object(CSE_ALifeDynamicObject* object, bool alife_query)
 {
+    if (m_npc_simulation) m_npc_simulation->remove(object);
     object->on_unregister();
 
     CSE_ALifeInventoryItem* item = smart_cast<CSE_ALifeInventoryItem*>(object);
@@ -87,7 +89,10 @@ void CALifeSimulatorBase::on_death(CSE_Abstract* killed, CSE_Abstract* killer)
 
     CSE_ALifeCreatureAbstract* creature = smart_cast<CSE_ALifeCreatureAbstract*>(killed);
     if (creature)
+    {
+        if (m_npc_simulation) m_npc_simulation->died(creature);
         creature->on_death(killer);
+    }
 
     GROUP_MEMBER* member = smart_cast<GROUP_MEMBER*>(killed);
     if (!member)

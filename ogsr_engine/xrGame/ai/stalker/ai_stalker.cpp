@@ -7,7 +7,9 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
+#include "alife_simulator.h"
 #include "ai_stalker.h"
+#include "npc_simulation.h"
 #include "../ai_monsters_misc.h"
 #include "../../weapon.h"
 #include "../../hit.h"
@@ -419,6 +421,16 @@ BOOL CAI_Stalker::net_Spawn(CSE_Abstract* DC)
 
     m_pPhysics_support->in_NetSpawn(e);
 
+    // The dedicated planner section has no legacy Lua dialog state.
+    if (CNpcSimulation::configured(cNameSect().c_str()))
+    {
+        DisableTalk();
+        DisableTrade();
+    }
+    // No ordinary-activity action has executed in this representation yet.
+    // Combat may be selected first, without an ALife action to finalize.
+    if (auto simulation = CNpcSimulation::active()) simulation->update_online(*this, true);
+
     return (TRUE);
 }
 
@@ -704,7 +716,10 @@ void CAI_Stalker::shedule_Update(u32 DT)
         m_fTimeUpdateDelta = dt;
         Device.Statistic->AI_Think.Begin();
         if (GetScriptControl())
+        {
+            if (auto simulation = CNpcSimulation::active()) simulation->update_online(*this, true);
             ProcessScripts();
+        }
         else
 #ifdef DEBUG
             if (Device.dwFrame > (spawn_time() + g_AI_inactive_time))
