@@ -19,6 +19,7 @@ return function(cfg)
     local far_limit = alife():switch_distance() * (1 + factor) + 10
     local far_samples = 0
     local eligibility = cfg.eligibility and dofile(path("Test-Eligibility.lua"))(cfg.positions[1], now)
+    local ownership = cfg.eligibility and dofile(path("Test-Ownership.lua"))(now)
     local populations = assert(io.open(path("regular-population.csv"), "w"))
     populations:write("game_ms,stage,created,retained,online,client,living\n")
     local jobs = {}
@@ -42,6 +43,7 @@ return function(cfg)
         assert(not d:is_paused(), "Paused actor")
         assert(db.actor:alive(), "Dead actor")
         if eligibility and not eligibility() then return end
+        if ownership and not ownership() then return end
         local time = now()
         if cfg.frame_times and previous_time then frames[#frames+1] = {d.frame, d:time_global(), stage, time-previous_time} end
         previous_time = time

@@ -1,4 +1,4 @@
-#include "alife_switch_policy.h"
+#include "alife_switch_lifecycle.h"
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -21,7 +21,7 @@ struct Operations
     void verify_online_member(float) const {}
     void verify_offline_member(float) const {}
     // Execute the same dynamic policy used by the inherited engine method.
-    void dynamic_online() { ++attempts; alife_switch_policy::dynamic_online(*this); }
+    void dynamic_online() { ++attempts; alife_switch_lifecycle::dynamic_online(*this); }
     bool schedulable() const { return false; }
     bool needs_update() const { throw std::runtime_error("Unexpected schedule access"); }
     bool scheduled() const { throw std::runtime_error("Unexpected schedule access"); }

@@ -1,6 +1,8 @@
 local function dofile(path) return assert(loadfile(path))() end
 tostring = function(value) assert(type(value) == "boolean"); return value and "true" or "false" end
 local root = assert(...)
+assert(loadfile(root .. "/Test-Eligibility.lua"))
+assert(loadfile(root .. "/Test-Ownership.lua"))
 assert(loadfile(root .. "/GroupDriver.lua"))
 assert(loadfile(root .. "/ParticlePoolDriver.lua"))
 assert(loadfile(root .. "/DogJumpDriver.lua"))

@@ -1,4 +1,4 @@
-#include "alife_switch_policy.h"
+#include "alife_switch_lifecycle.h"
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -10,7 +10,8 @@ struct Operations
     bool allow_online = true, allow_offline = true, distance = true, keep = false, flip = false;
     bool online = false, data = true;
     float separation = 0;
-    unsigned distance_reads = 0;
+    unsigned distance_reads = 0, rejections = 0;
+    bool distance_rejection = false;
     bool schedulable() const { return has_schedule; }
     bool needs_update() { if (flip) allow_online = !allow_online; return need_update; }
     bool scheduled() const { return is_scheduled; }
@@ -25,9 +26,20 @@ struct Operations
     float offline_limit() const { return 200; }
     bool keep_data() const { return keep; }
     void clear_data() { data = false; }
-    void report_rejection(bool) {}
+    void report_rejection(bool distance) { ++rejections; distance_rejection = distance; }
     void switch_online() { online = true; }
     void switch_offline() { online = false; }
+};
+// Deliberately offers no registry, client-data or transition operations.
+struct Queries
+{
+    Operations& op;
+    bool can_online() const { return op.can_online(); }
+    bool can_offline() const { return op.can_offline(); }
+    bool distance_mode() const { return op.distance_mode(); }
+    float actor_distance() const { return op.actor_distance(); }
+    float online_limit() const { return op.online_limit(); }
+    float offline_limit() const { return op.offline_limit(); }
 };
 void require(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
 int main()
@@ -51,12 +63,31 @@ int main()
                         : allowed && (!op.allow_offline || !op.distance || !(separation > 150));
                     const bool expected_schedule = !online && op.has_schedule ? op.need_update : op.is_scheduled;
                     const bool expected_data = op.data && (online || expected_online || op.keep);
-                    if (online) alife_switch_policy::dynamic_offline(op);
-                    else alife_switch_policy::dynamic_online(op);
+                    if (online) alife_switch_lifecycle::dynamic_offline(op);
+                    else alife_switch_lifecycle::dynamic_online(op);
                     require(op.online == expected_online, "Incorrect online state");
                     require(op.is_scheduled == expected_schedule, "Incorrect scheduler membership");
                     require(op.allow_online == allowed, "Permission not refreshed after maintenance");
                     require(op.data == expected_data, "Incorrect saved client data retention");
+                    const bool rejected = !online && !expected_online;
+                    require(op.rejections == unsigned(rejected), "Incorrect rejection reporting");
+                    require(op.distance_rejection == (rejected && allowed), "Incorrect rejection reason");
+                    const unsigned reads = online
+                        ? unsigned(op.allow_offline && allowed && op.distance)
+                        : unsigned(allowed && op.allow_offline && op.distance);
+                    require(op.distance_reads == reads, "Distance queried out of permission order");
+                    Queries queries{op};
+                    const auto decision = online ? alife_switch_policy::dynamic_offline(queries)
+                                                 : alife_switch_policy::dynamic_online(queries);
+                    using alife_switch_policy::Action;
+                    using alife_switch_policy::Rejection;
+                    const auto action = online ? (expected_online ? Action::keep : Action::deactivate)
+                                               : (expected_online ? Action::activate : Action::keep);
+                    const auto reason = online
+                        ? (!op.allow_offline ? Rejection::permission
+                           : action != Action::keep || !op.distance ? Rejection::none : Rejection::distance)
+                        : (expected_online ? Rejection::none : allowed ? Rejection::distance : Rejection::permission);
+                    require(decision.action == action && decision.rejection == reason, "Incorrect query-only decision");
                     ++cases;
                 }
     }

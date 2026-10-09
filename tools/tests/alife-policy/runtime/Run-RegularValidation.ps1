@@ -49,7 +49,7 @@ $meta | Add-Member serviceLifecycle ([bool]$ServiceLifecycle)
 $meta | Add-Member serviceSlices ([bool]$ServiceSlices)
 $meta | Add-Member serviceTrace ([bool]$ServiceTrace)
 $meta | Add-Member frameTimes ([bool]$FrameTimes)
-foreach ($name in @('SpawnQueue.lua','RegularDriver.lua','BarStressPositions.lua','Test-Eligibility.lua','TransitionDriver.lua','PolicyProbe.lua')) {
+foreach ($name in @('SpawnQueue.lua','RegularDriver.lua','BarStressPositions.lua','Test-Eligibility.lua','Test-Ownership.lua','TransitionDriver.lua','PolicyProbe.lua')) {
     Copy-Item "$PSScriptRoot/$name" "$session/appdata/$name"
 }
 $save = if ($SaveSnapshot) { 'true' } else { 'false' }
@@ -106,7 +106,7 @@ try {
         return
     }
     if ($verifyIds.Count -and $log -notmatch "\[regular\] verified_restored count=$($verifyIds.Count)\b") { throw 'Restored population not verified' }
-    if ($Eligibility -and $log -notmatch '\[regular\] eligibility_passed') { throw 'Eligibility test incomplete' }
+    if ($Eligibility -and ($log -notmatch '\[regular\] eligibility_passed' -or $log -notmatch '\[regular\] ownership_passed')) { throw 'Eligibility/ownership test incomplete' }
     if ($game.ExitCode -ne 0 -or $log -match '\[regular\] FAILED' -or $log -notmatch '\[regular\] measure_end') { throw 'Regular validation failed or incomplete' }
     if ($log -notmatch "\[regular\] create_end count=$Count ") { throw 'Missing creation/activation evidence' }
     if ($SaveSnapshot -and ($log -notmatch 'Game regular_validation\.sav is successfully saved' -or !(Test-Path "$session/appdata/savedgames/regular_validation.sav"))) { throw 'Save not acknowledged' }

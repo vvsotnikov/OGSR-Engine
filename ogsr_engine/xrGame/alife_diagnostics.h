@@ -4,56 +4,22 @@
 
 namespace alife_diagnostics
 {
-// This header also owns the always-used per-object switch lifecycle and update
-// ordering. Only timing and reporting are optional; disabling diagnostics must
-// not bypass reconciliation or scheduled updates.
-// Operations supplies the real object's lifecycle in the engine and controlled
-// operations in tests. release() invalidates the object: never access it after
-// that call. Read online() after synchronization, which may change its state.
-template <class Timer, class Operations>
-void reconcile_object(bool sampled, double (&stages)[4], Operations& operations)
+// Optional observer; lifecycle ordering is owned by alife_switch_lifecycle.
+template <class Timer>
+class ReconciliationTiming
 {
-    const auto before = [&]() {
-        if (operations.redundant())
-        {
-            operations.release();
-            return false;
-        }
-        return operations.synchronize_location();
-    };
-    const auto evaluate = [&]() {
-        if (operations.online())
-            operations.try_switch_offline();
-        else
-            operations.try_switch_online();
-    };
-    const auto after = [&]() {
-        if (operations.redundant())
-            operations.release();
-    };
-
-    if (!sampled)
-    {
-        if (!before())
-            return;
-        evaluate();
-        after();
-        return;
-    }
     Timer timer;
-    timer.Start();
-    const bool ready = before();
-    const double before_end = timer.GetElapsed_sec() * 1000.0;
-    stages[0] += before_end;
-    if (!ready)
-        return;
-    const unsigned phase = operations.online() ? 1 : 2;
-    evaluate();
-    const double dispatch_end = timer.GetElapsed_sec() * 1000.0;
-    stages[phase] += dispatch_end - before_end;
-    after();
-    stages[3] += timer.GetElapsed_sec() * 1000.0 - dispatch_end;
-}
+    double (&stages)[4];
+    double previous = 0;
+public:
+    explicit ReconciliationTiming(double (&values)[4]) : stages(values) { timer.Start(); }
+    void finished(unsigned phase)
+    {
+        const double elapsed = timer.GetElapsed_sec() * 1000.0;
+        stages[phase] += elapsed - previous;
+        previous = elapsed;
+    }
+};
 
 struct Reconciliation
 {

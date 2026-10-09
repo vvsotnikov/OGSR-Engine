@@ -2,52 +2,36 @@
 
 namespace alife_switch_policy
 {
-// These are production switching sequences, shared by the engine and tests.
-// Operations bind engine objects/registries without transferring their ownership.
-// Distance comparisons deliberately keep their original > and <= forms: they
-// are not complements for NaN. Whole-map mode must not evaluate distance at all.
-template <class Operations>
-void dynamic_online(Operations& op)
+enum class Action { keep, activate, deactivate };
+enum class Rejection { none, permission, distance };
+struct Decision
 {
-    if (op.schedulable())
-    {
-        if (!op.needs_update())
-        {
-            if (op.scheduled()) op.unschedule();
-        }
-        else if (!op.scheduled()) op.schedule();
-    }
-    if (!op.can_online())
-    {
-        op.report_rejection(false);
-        if (!op.keep_data()) op.clear_data();
-        return;
-    }
-    if (!op.can_offline())
-    {
-        op.switch_online();
-        return;
-    }
+    Action action;
+    Rejection rejection;
+};
+
+// Query only: callers own maintenance and transition side effects. Preserve
+// virtual permission precedence and lazy distance reads; > and <= are not
+// complements for NaN. Whole-map mode must never query distance.
+template <class Queries>
+Decision dynamic_online(Queries& op)
+{
+    if (!op.can_online()) return {Action::keep, Rejection::permission};
+    if (!op.can_offline()) return {Action::activate, Rejection::none};
     if (op.distance_mode() && (op.actor_distance() > op.online_limit()))
-    {
-        op.report_rejection(true);
-        if (!op.keep_data()) op.clear_data();
-        return;
-    }
-    op.switch_online();
+        return {Action::keep, Rejection::distance};
+    return {Action::activate, Rejection::none};
 }
 
-template <class Operations>
-void dynamic_offline(Operations& op)
+template <class Queries>
+Decision dynamic_offline(Queries& op)
 {
-    if (!op.can_offline()) return;
-    if (!op.can_online())
-    {
-        op.switch_offline();
-        return;
-    }
-    if (!op.distance_mode() || (op.actor_distance() <= op.offline_limit())) return;
-    op.switch_offline();
+    if (!op.can_offline()) return {Action::keep, Rejection::permission};
+    if (!op.can_online()) return {Action::deactivate, Rejection::none};
+    if (!op.distance_mode()) return {Action::keep, Rejection::none};
+    if (op.actor_distance() <= op.offline_limit())
+        return {Action::keep, Rejection::distance};
+    return {Action::deactivate, Rejection::none};
 }
 
 template <class Operations>
