@@ -195,10 +195,14 @@ bool CNpcSimulation::update_online(CAI_Stalker& client, bool interrupted)
         if (ai().level_graph().level_id() == decision.level && ai().level_graph().valid_vertex_id(decision.level_vertex))
         {
             const Fvector destination = Fvector().set(decision.position[0], decision.position[1], decision.position[2]);
-            if (client.ai_location().game_vertex_id() != decision.game_vertex && client.Position().distance_to_sqr(destination) > 64.f)
+            // Keep an issued approach through detours across graph regions.
+            // Interruption, representation changes and new commands rebuild it.
+            if (entry->online_path_command != decision.command &&
+                client.ai_location().game_vertex_id() != decision.game_vertex && client.Position().distance_to_sqr(destination) > 64.f)
             {
                 // Native graph legs bound level-path searches on long routes.
                 // Random branching would overwrite this explicit destination.
+                // Owned NPCs never return to autonomous wandering in this lifetime.
                 client.movement().game_selector().set_selection_type(eSelectionTypeMask);
                 client.movement().set_desired_position(nullptr);
                 client.movement().set_path_type(MovementManager::ePathTypeGamePath);
