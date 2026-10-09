@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory)][string]$InstallRoot,
     [Parameter(Mandatory)][ValidatePattern('^bin_[a-zA-Z0-9_]+$')][string]$Package,
     [ValidateSet('Release','Debug')][string]$Configuration = 'Debug',
-    [ValidateSet('basic','interrupt','offline','switch','missing','death','mismatch','natural','elevated','boundary','far','moved','spawn-combat','save','resume','fallback','goal-cycle','goal-combat','goal-switch','goal-competition','goal-save','goal-resume','goal-wait-save','goal-wait-resume')][string]$Scenario = 'basic',
+    [ValidateSet('basic','interrupt','offline','switch','missing','death','mismatch','natural','elevated','boundary','far','moved','spawn-combat','save','resume','fallback','goal-cycle','goal-displaced','goal-combat','goal-switch','goal-competition','goal-save','goal-resume','goal-wait-save','goal-wait-resume')][string]$Scenario = 'basic',
     [ValidateSet('whole-map','distance')][string]$Mode = 'whole-map',
     [string]$ResumeSession = '',
     [switch]$GoalOffline,
@@ -86,6 +86,8 @@ try {
     if ($Scenario -in @('interrupt','spawn-combat','goal-combat') -and ($log -notmatch '\[npc fixture\] combat_observed' -or $log -notmatch '\[npc trip\].*interrupted=1')) { throw 'Missing real planner interruption' }
     if ($Scenario -eq 'goal-switch' -and ($log -notmatch '\[npc goal fixture\] observed_offline' -or $log -notmatch '\[npc goal fixture\] returned_online')) { throw 'Missing goal representation round trip' }
     if ($Scenario -eq 'moved' -and $log -notmatch '\[npc trip\].*phase=4 reason=2') { throw 'Missing SupplyMoved failure reason' }
+    if ($Scenario -eq 'goal-combat' -and $log -notmatch '\[npc goal fixture\] gift_owned_during_combat') { throw 'Gift was not observed during combat' }
+    if ($Scenario -eq 'goal-displaced' -and $log -notmatch '\[npc goal fixture\] returned_after_displacement') { throw 'Missing return after displacement' }
     $meta.status = 'npc-completed'
     Write-Output "COMPLETE npc scenario=$Scenario session=$session"
 } catch {

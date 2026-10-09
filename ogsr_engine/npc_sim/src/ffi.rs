@@ -207,6 +207,13 @@ pub unsafe extern "C" fn npc_agent_remember(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn npc_agent_available_source_slot(plan: *const Agent) -> u32 {
+    unsafe { plan.as_ref() }
+        .and_then(Agent::available_source_slot)
+        .map_or(u32::MAX, |i| i as u32)
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn npc_agent_source_count(plan: *const Agent) -> usize {
     unsafe { plan.as_ref() }.map_or(0, |p| p.sources().len())
 }
@@ -269,6 +276,7 @@ mod tests {
             let agent = npc_agent_create_goal(19, &home);
             assert!(!agent.is_null());
             assert!(npc_agent_remember(agent, 0, &source, &source));
+            assert_eq!(npc_agent_available_source_slot(agent), 1);
             assert!(!npc_agent_remember(agent, 2, &source, &source));
             let size = npc_agent_save(agent, std::ptr::null_mut(), 0);
             let mut bytes = vec![0; size];

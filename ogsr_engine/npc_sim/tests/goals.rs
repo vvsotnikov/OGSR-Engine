@@ -58,6 +58,51 @@ fn initially_stocked_npc_does_not_go_collect() {
 }
 
 #[test]
+fn a_stocked_npc_returns_home_after_post_completion_combat_displacement() {
+    let mut a = agent();
+    assert_eq!(a.step(observation(0.), 1).decision.phase, Phase::Complete);
+    let mut o = observation(40.);
+    o.interrupted = true;
+    assert_eq!(a.step(o, 1).decision.action, Action::Wait);
+    let mut a = Agent::load(&a.save()).unwrap();
+    o.interrupted = false;
+    let returning = a.step(o, 1);
+    assert_eq!(returning.decision.action, Action::Travel(point(0.)));
+    assert_eq!(a.step(observation(0.), 1).decision.phase, Phase::Complete);
+}
+
+#[test]
+fn a_gift_at_the_source_trip_deadline_does_not_delay_the_untried_home_route() {
+    let mut a = agent();
+    a.step(observation(0.), 0);
+    let mut o = observation(4.);
+    o.elapsed_ms = 1_800_000;
+    assert_eq!(a.step(o, 1).decision.action, Action::Travel(point(0.)));
+}
+
+#[test]
+fn long_lived_agents_reuse_exhausted_memory_without_rebinding_the_active_source() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    for i in 0..Agent::MAX_SOURCES * 3 {
+        let slot = a
+            .available_source_slot()
+            .expect("Exhausted memories must be reusable");
+        assert!(a.remember(slot, point(10.), point(10.)));
+        let mut o = observation(0.);
+        a.step(o, 0);
+        assert_eq!(a.status().source, Some(slot));
+        assert_ne!(a.available_source_slot(), Some(slot));
+        o.current = point(10.);
+        o.supply = Supply::Missing;
+        assert_eq!(a.step(o, 0).decision.phase, Phase::Waiting);
+        if i % Agent::MAX_SOURCES == 0 {
+            a = Agent::load(&a.save()).unwrap();
+        }
+    }
+    assert_eq!(a.sources().len(), Agent::MAX_SOURCES);
+}
+
+#[test]
 fn source_loss_is_learned_on_arrival_and_old_facts_do_not_poison_next_source() {
     let mut a = agent();
     a.step(observation(0.), 0);

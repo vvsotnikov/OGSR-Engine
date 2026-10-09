@@ -148,10 +148,12 @@ bool CNpcSimulation::remember(u16 npc_id, u16 supply_id)
     if (!entry || !supply || supply->m_tClassID != CLSID_IITEM_BANDAGE ||
         supply->ID_Parent != u16(-1) || !navigable_here(*supply)) return false;
     const auto found = std::find(entry->supplies.begin(), entry->supplies.end(), supply);
-    const auto index = u32(found - entry->supplies.begin());
+    const auto index = found == entry->supplies.end() ? npc_agent_available_source_slot(entry->plan) : u32(found - entry->supplies.begin());
+    if (index == u32(-1)) return false;
     const auto navigation = navigation_location(*supply), physical = location(*supply);
     if (!npc_agent_remember(entry->plan, index, &navigation, &physical)) return false;
-    if (found == entry->supplies.end()) entry->supplies.push_back(supply);
+    if (index == entry->supplies.size()) entry->supplies.push_back(supply);
+    else entry->supplies[index] = supply;
     return true;
 }
 

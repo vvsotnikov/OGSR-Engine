@@ -77,6 +77,19 @@ impl Agent {
     pub fn is_medical(&self) -> bool {
         self.medical_goal
     }
+    pub fn available_source_slot(&self) -> Option<usize> {
+        if !self.medical_goal {
+            return None;
+        }
+        if self.sources.len() < Self::MAX_SOURCES {
+            return Some(self.sources.len());
+        }
+        self.sources
+            .iter()
+            .enumerate()
+            .find(|(i, source)| Some(*i) != self.selected && source.failure != FailureReason::None)
+            .map(|(i, _)| i)
+    }
     // The caller supplies new information, not a periodic world-state refresh.
     pub fn remember(&mut self, index: usize, navigation: Location, physical: Location) -> bool {
         if !self.medical_goal
@@ -213,6 +226,11 @@ impl Agent {
             }
             let terminal = matches!(trip.phase, Phase::Complete | Phase::Failed);
             let pursuing_source = matches!(trip.phase, Phase::Outbound | Phase::Collecting);
+            let returning = trip.phase == Phase::Returning;
+            let completed_away = trip.phase == Phase::Complete
+                && !o.interrupted
+                && o.current.spatially_valid()
+                && !o.current.near(self.home, 1.5);
             let mut decision = trip.decision();
             if !terminal {
                 decision = trip.step_with_goal(o, stocked);
@@ -231,11 +249,12 @@ impl Agent {
                     }
                 }
             }
-            if failed && stocked && !terminal {
+            if failed && stocked && returning {
                 self.return_retry_ms = Self::RETRY_MS;
             }
             if (failed && (!stocked || self.return_retry_ms == 0))
                 || (terminal && inventory_changed)
+                || completed_away
             {
                 self.trip = None;
                 self.selected = None;

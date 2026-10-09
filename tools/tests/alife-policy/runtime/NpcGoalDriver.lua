@@ -4,6 +4,7 @@ return function(cfg)
     local stage, started, sampled, finished = cfg.stage or 1, nil, nil, false
     local sent, attacked, fought, released, waited
     local switching, switched
+    local displaced, returned_after_displacement
     local home
     local function object(id) return id and alife():object(id) end
     local function path(name) return getFS():update_path("$app_data_root$",name) end
@@ -80,6 +81,7 @@ return function(cfg)
         local client = level.object_by_id(npc)
         local here = client and client:position() or server.position
         local phase = alife():supply_trip_phase(npc)
+        if displaced and phase == 2 then returned_after_displacement = true end
         assert(phase ~= 4 and phase ~= 5,"Goal failed/died")
         if cfg.offline then assert(not server.online,"Offline test activated NPC") end
         if not sampled or now-sampled > 1000 then
@@ -109,12 +111,14 @@ return function(cfg)
                     stimulus.direction = vector():set(1,0,0); client:hit(stimulus)
                 end
                 if client:best_enemy() then fought = true end
-                if not fought then return end
+                if not fought or not client:best_enemy() then return end
             end
             if transfer(gift,npc) then stage,sent = 2,nil; log1("[npc goal fixture] gift_sent") end
         end
         if attacked and not released and now-attacked > 70000 then
             assert(fought)
+            assert(object(gift).parent_id == npc,"Gift was not received during combat")
+            log1("[npc goal fixture] gift_owned_during_combat")
             client:set_enemy_callback(function() return false end)
             client:set_relation(game_object.neutral,db.actor)
             released = true; log1("[npc fixture] combat_observed")
@@ -139,6 +143,21 @@ return function(cfg)
             if cfg.scenario == "goal-save" and (phase == 2 or phase == 3) then save(); return end
             if phase == 3 and (not attacked or released) then
                 assert(object(first).parent_id == 65535 and object(second).parent_id == 65535,"Collected despite gift satisfying need")
+                if cfg.scenario == "goal-displaced" then
+                    if not displaced then
+                        local node = level.vertex_in_direction(34548,vector():set(1,0,0),4)
+                        local point = level.vertex_position(node)
+                        assert(point:distance_to(home) > 2)
+                        if cfg.offline then alife():teleport_object(npc,point,node,cross_table():vertex(node):game_vertex_id())
+                        else client:set_npc_position(point,true) end
+                        displaced = true
+                        return
+                    end
+                    if not returned_after_displacement then return end
+                    assert(here:distance_to(home) <= 1.6,"Stocked NPC did not return after displacement")
+                    log1("[npc goal fixture] returned_after_displacement")
+                    complete(); return
+                end
                 if cfg.scenario == "goal-combat" then
                     assert(fought and here:distance_to(home) <= 1.6,"Combat did not resume the satisfied goal")
                     complete(); return
