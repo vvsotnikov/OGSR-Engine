@@ -22,6 +22,7 @@ pub struct Output {
     phase: u32,
     interrupted: u32,
     action: u32,
+    reason: u32,
     game_vertex: u32,
     level_vertex: u32,
     level: u32,
@@ -34,6 +35,7 @@ impl From<crate::Decision> for Output {
             identity: decision.identity,
             command: decision.command,
             phase: decision.phase as u32,
+            reason: decision.reason as u32,
             interrupted: u32::from(decision.interrupted),
             ..Self::default()
         };

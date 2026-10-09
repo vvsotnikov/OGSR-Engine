@@ -427,6 +427,9 @@ BOOL CAI_Stalker::net_Spawn(CSE_Abstract* DC)
         DisableTalk();
         DisableTrade();
     }
+    // No ordinary-activity action has executed in this representation yet.
+    // Combat may be selected first, without an ALife action to finalize.
+    if (auto simulation = CNpcSimulation::active()) simulation->update_online(*this, true);
 
     return (TRUE);
 }

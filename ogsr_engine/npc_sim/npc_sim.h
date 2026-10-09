@@ -21,6 +21,7 @@ struct NpcDecision
     std::uint64_t identity, command;
     std::uint32_t phase; // outbound=0, collecting=1, returning=2, complete=3, failed=4, dead=5
     std::uint32_t interrupted, action; // wait=0, travel=1, collect=2
+    std::uint32_t reason; // Rust FailureReason; zero unless failed
     std::uint32_t game_vertex, level_vertex, level;
     float position[3];
 };

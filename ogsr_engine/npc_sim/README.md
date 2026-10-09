@@ -5,7 +5,9 @@ host reports world facts and elapsed time, projects navigation positions through
 the engine, and executes movement/ownership commands. Remote supply facts are
 consumed only at the remembered destination; own inventory is always observable.
 The saved destination is a navigation point; the remembered physical item
-position is stored separately. Knowing the item is still there does not imply
+position is stored separately. Online observations use the live client position;
+the server item position may lag physics. Knowing the item is still there does not
+imply
 that the NPC is close enough to collect it.
 A different game vertex on the same level does not prevent arrival.
 
@@ -38,10 +40,19 @@ charges it, including the first observation after either pause. Elapsed time
 belongs to the interval before an observation, so its preceding interruption /
 readiness state is saved too. Movement in any direction counts as progress;
 offline graph-edge distance counts even while the server position is unchanged.
-Sixty active seconds without movement ends travel. A representation mismatch or
-unknown item position has its own five-minute active waiting bound. Fixed switch
+A transient failed path build is retried; sixty active seconds without movement
+or with a persistently failed path ends travel. A separate thirty-minute active
+trip deadline bounds oscillation even across phase changes. Failure reasons are
+returned and saved for diagnosis and future replanning. A representation mismatch
+or
+unknown item/NPC position has its own five-minute active waiting bound. Fixed
+switch
 permissions can make a trip impossible; they do not turn a temporary mismatch
 into immediate failure. Absolute engine clock values are never persisted.
+
+Online spawning marks the plan interrupted before ordinary activity can run,
+because combat can be selected without any previous ordinary action to finalize.
+Representation changes also invalidate elapsed host time.
 
 Calls on each plan must be serialized. The adapter runs in the existing game /
 ALife update phases; it does not add a worker. Allocation never crosses ownership:

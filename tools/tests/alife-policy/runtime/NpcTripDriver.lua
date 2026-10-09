@@ -3,7 +3,7 @@
 return function(cfg)
     local npc_id, supply_id = cfg.npc, cfg.supply
     local started, sample, moved, saved, finished, attacked, fought, released_enemy
-    local switching, switched, removed, killed
+    local switching, switched, removed, killed, pushed, relocated
     local saw_online, saw_offline, mismatch_started, mismatch_released, elevated
     -- Navigable anchor in the installed vanilla Bar geometry, shared with the seed.
     local home_node, source_node = 34548, nil
@@ -29,6 +29,18 @@ return function(cfg)
                     if distance > best and (cfg.scenario ~= "boundary" or cross_table():vertex(candidate):game_vertex_id() ~= home_graph) then source_node, best = candidate, distance end
                 end
             end
+            if cfg.scenario == "far" then
+                source_node, best = nil, 30
+                local graph = game_graph()
+                local map = graph:vertex(home_graph):level_id()
+                for id=0,graph:vertex_count()-1 do
+                    local vertex = graph:vertex(id)
+                    if vertex:level_id() == map and graph:accessible(id) then
+                        local distance = home:distance_to(vertex:level_point())
+                        if distance > best and distance <= 60 then source_node, best = vertex:level_vertex_id(), distance end
+                    end
+                end
+            end
             assert(source_node, "No clear supply-trip route")
             if not npc_id then
                 local source = level.vertex_position(source_node)
@@ -51,14 +63,14 @@ return function(cfg)
             end
             log1(string.format("[npc fixture] start scenario=%s npc=%d supply=%d",cfg.scenario,npc_id,supply_id))
         end
-        assert(now-started < 240000, "Trip timed out")
+        assert(now-started < (cfg.scenario == "far" and 600000 or 240000), "Trip timed out")
         local server = assert(alife():object(npc_id), "NPC missing")
         local supply = alife():object(supply_id)
         assert(supply or cfg.scenario == "missing", "Supply missing")
         local client = level.object_by_id(npc_id)
         local phase = alife():supply_trip_phase(npc_id)
-        if (cfg.scenario == "missing" and phase == 4) or (cfg.scenario == "death" and phase == 5) then
-            assert((removed and not supply) or (killed and not client:alive()), "Missing terminal cause")
+        if ((cfg.scenario == "missing" or cfg.scenario == "moved") and phase == 4) or (cfg.scenario == "death" and phase == 5) then
+            assert((removed and not supply) or (relocated and supply.parent_id == 65535) or (killed and not client:alive()), "Missing terminal cause")
             log1("[npc fixture] complete scenario=" .. cfg.scenario)
             finished = true
             get_console():execute("quit")
@@ -93,11 +105,27 @@ return function(cfg)
                 elevated = true
             end
         end
+        if cfg.scenario == "moved" then
+            local item = level.object_by_id(supply_id)
+            if item and item:get_physics_shell() then
+                if not pushed then
+                    local shell = item:get_physics_shell()
+                    shell:Enable()
+                    item:set_const_force(vector():set(0,1,0), shell:get_element_by_order(0):get_mass()*40, 1000)
+                    pushed = true
+                end
+                if not relocated and item:position():distance_to(supply.position) > 1.5 then
+                    item:get_physics_shell():freeze()
+                    relocated = true
+                    log1("[npc fixture] live_item_displaced")
+                end
+            end
+        end
         local here = client and client:position() or server.position
         if here:distance_to(home) > 2 then moved = true end
         if not sample or now-sample >= 1000 then
             sample = now
-            log1(string.format("[npc fixture] sample phase=%d online=%s distance_home=%.3f parent=%d",phase,tostring(server.online),here:distance_to(home),supply and supply.parent_id or 65535))
+            log1(string.format("[npc fixture] sample phase=%d online=%s distance_home=%.3f parent=%d graph=%d",phase,tostring(server.online),here:distance_to(home),supply and supply.parent_id or 65535,client and client:game_vertex_id() or server.m_game_vertex_id))
         end
         if cfg.scenario == "missing" and moved and not removed then
             alife():release(supply,true)
@@ -126,8 +154,8 @@ return function(cfg)
             get_console():execute("quit")
             return
         end
-        if cfg.scenario == "interrupt" and client then
-            if moved and not attacked then
+        if (cfg.scenario == "interrupt" or cfg.scenario == "spawn-combat") and client then
+            if (moved or cfg.scenario == "spawn-combat") and not attacked then
                 attacked = now
                 db.actor:set_actor_position(vector():set(home.x,home.y+1.1,home.z))
                 client:set_goodwill(-10000,db.actor)
@@ -153,11 +181,11 @@ return function(cfg)
             end
             if cfg.scenario == "mismatch" then assert(mismatch_released, "Mixed pickup was not exercised") end
             if cfg.scenario == "elevated" then assert(elevated, "Missing elevated supply") end
-            assert(cfg.scenario ~= "missing" and cfg.scenario ~= "death", "Unexpected successful trip")
+            assert(cfg.scenario ~= "missing" and cfg.scenario ~= "moved" and cfg.scenario ~= "death", "Unexpected successful trip")
             assert(moved or cfg.scenario == "resume", "NPC never left home")
             assert(supply.parent_id == npc_id, "Completed without owning supply")
             assert(here:distance_to(home) <= 1.6, "Completed away from home")
-            if cfg.scenario == "interrupt" then assert(fought and released_enemy, "No completed combat interruption") end
+            if cfg.scenario == "interrupt" or cfg.scenario == "spawn-combat" then assert(fought and released_enemy, "No completed combat interruption") end
             if cfg.scenario == "switch" then assert(switched and server.online and client, "Missing representation round trip") end
             if cfg.scenario == "offline" then assert(not server.online and not client, "Offline scenario went online") end
             log1("[npc fixture] complete scenario=" .. cfg.scenario)

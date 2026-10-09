@@ -14,10 +14,12 @@
 #include "restricted_object.h"
 #include "movement_manager_space.h"
 #include "level_path_manager.h"
+#include "game_location_selector.h"
 #include "ai_space.h"
 #include "level.h"
 #include "game_graph.h"
 #include "level_graph.h"
+#include "game_level_cross_table.h"
 #include "xrMessages.h"
 
 namespace
@@ -26,14 +28,27 @@ constexpr u32 planner_chunk = 0x4e504331; // NPC1; optional root chunk, independ
 NpcLocation location(const CSE_ALifeDynamicObject& object)
 {
     const u32 level = ai().game_graph().valid_vertex_id(object.m_tGraphID) ? ai().game_graph().vertex(object.m_tGraphID)->level_id() : u32(-1);
-    return {object.m_tGraphID, object.m_tNodeID, level, {object.o_Position.x, object.o_Position.y, object.o_Position.z}};
+    NpcLocation result{object.m_tGraphID, object.m_tNodeID, level, {object.o_Position.x, object.o_Position.y, object.o_Position.z}};
+    if (object.m_bOnline)
+    {
+        if (auto client = smart_cast<CGameObject*>(Level().Objects.net_Find(object.ID)))
+        {
+            const auto& point = client->Position();
+            result.level = ai().level_graph().level_id();
+            result.position[0] = point.x; result.position[1] = point.y; result.position[2] = point.z;
+        }
+        else result.level = u32(-1);
+    }
+    return result;
 }
 NpcLocation navigation_location(const CSE_ALifeDynamicObject& object)
 {
     auto result = location(object);
-    Fvector point = object.o_Position;
-    if (!ai().level_graph().inside(object.m_tNodeID, point)) point = ai().level_graph().vertex_position(object.m_tNodeID);
-    point.y = ai().level_graph().vertex_plane_y(object.m_tNodeID, point.x, point.z);
+    Fvector point = Fvector().set(result.position[0], result.position[1], result.position[2]);
+    result.level_vertex = ai().level_graph().vertex_id(object.m_tNodeID, point);
+    result.game_vertex = ai().cross_table().vertex(result.level_vertex).game_vertex_id();
+    if (!ai().level_graph().inside(result.level_vertex, point)) point = ai().level_graph().vertex_position(result.level_vertex);
+    point.y = ai().level_graph().vertex_plane_y(result.level_vertex, point.x, point.z);
     result.position[0] = point.x; result.position[1] = point.y; result.position[2] = point.z;
     return result;
 }
@@ -97,8 +112,11 @@ bool CNpcSimulation::enroll(u16 npc_id, u16 supply_id)
         ai().game_graph().vertex(npc->m_tGraphID)->level_id() != m_alife.graph().level().level_id() ||
         ai().game_graph().vertex(supply->m_tGraphID)->level_id() != m_alife.graph().level().level_id() ||
         !ai().level_graph().valid_vertex_id(npc->m_tNodeID) || !ai().level_graph().valid_vertex_id(supply->m_tNodeID)) return false;
+    const auto npc_position = location(*npc), remembered_item = location(*supply);
+    for (const auto& point : {npc_position, remembered_item})
+        if (point.level != ai().level_graph().level_id() ||
+            !ai().level_graph().valid_vertex_position(Fvector().set(point.position[0], point.position[1], point.position[2]))) return false;
     const auto home = navigation_location(*npc), source = navigation_location(*supply);
-    const auto remembered_item = location(*supply);
     NpcPlan* plan = npc_plan_create(m_next_identity, &home, &source, &remembered_item);
     if (!plan) return false;
     Msg("[npc trip] enroll identity=%llu npc=%u supply=%u", m_next_identity, npc_id, supply_id);
@@ -123,7 +141,8 @@ NpcDecision CNpcSimulation::observe(Entry& entry, const Fvector& here, u32 graph
     input.alive = alive;
     input.path_blocked = blocked;
     input.pickup_pending = entry.pickup_command == before.command;
-    input.elapsed_ms = entry.observed ? Device.dwTimeGlobal - entry.last_observation : 0;
+    input.elapsed_ms = entry.observed && entry.was_online == entry.npc->m_bOnline ? Device.dwTimeGlobal - entry.last_observation : 0;
+    entry.was_online = entry.npc->m_bOnline;
     entry.observed = true;
     entry.last_observation = Device.dwTimeGlobal;
     if (entry.supply)
@@ -136,8 +155,8 @@ NpcDecision CNpcSimulation::observe(Entry& entry, const Fvector& here, u32 graph
     // at the remembered destination and owns arrival, waiting and failure policy.
     R_ASSERT(npc_plan_step(entry.plan, &input, &after));
     if (before.phase != after.phase || entry.interrupted != interrupted)
-        Msg("[npc trip] identity=%llu npc=%u command=%llu phase=%u interrupted=%u online=%u", after.identity,
-            entry.npc->ID, after.command, after.phase, after.interrupted, u32(entry.npc->m_bOnline));
+        Msg("[npc trip] identity=%llu npc=%u command=%llu phase=%u reason=%u interrupted=%u online=%u", after.identity,
+            entry.npc->ID, after.command, after.phase, after.reason, after.interrupted, u32(entry.npc->m_bOnline));
     entry.interrupted = interrupted;
     return after;
 }
@@ -175,15 +194,31 @@ bool CNpcSimulation::update_online(CAI_Stalker& client, bool interrupted)
         client.movement().set_movement_type(MonsterSpace::eMovementTypeWalk);
         if (ai().level_graph().level_id() == decision.level && ai().level_graph().valid_vertex_id(decision.level_vertex))
         {
-            if (entry->online_path_command != decision.command) client.movement().level_path().reset();
-            client.movement().set_path_type(MovementManager::ePathTypeLevelPath);
-            client.movement().set_nearest_accessible_position(
-                Fvector().set(decision.position[0], decision.position[1], decision.position[2]), decision.level_vertex);
-            entry->online_path_command = decision.command;
+            const Fvector destination = Fvector().set(decision.position[0], decision.position[1], decision.position[2]);
+            if (client.ai_location().game_vertex_id() != decision.game_vertex && client.Position().distance_to_sqr(destination) > 64.f)
+            {
+                // Native graph legs bound level-path searches on long routes.
+                // Random branching would overwrite this explicit destination.
+                client.movement().game_selector().set_selection_type(eSelectionTypeMask);
+                client.movement().set_desired_position(nullptr);
+                client.movement().set_path_type(MovementManager::ePathTypeGamePath);
+                client.movement().set_game_dest_vertex(GameGraph::_GRAPH_ID(decision.game_vertex));
+                entry->online_path_command = 0;
+            }
+            else
+            {
+                // Close final approach also works across a game-vertex boundary.
+                if (entry->online_path_command != decision.command) client.movement().level_path().reset();
+                client.movement().set_path_type(MovementManager::ePathTypeLevelPath);
+                client.movement().set_nearest_accessible_position(destination, decision.level_vertex);
+                entry->online_path_command = decision.command;
+            }
         }
         else
         {
-            observe(*entry, client.Position(), client.ai_location().game_vertex_id(), false, true, true);
+            // A restored or externally teleported NPC may no longer be on the
+            // plan's level. Do not pass that level's node into this level graph;
+            // the stationary timeout bounds this unsupported execution.
             client.movement().set_movement_type(MonsterSpace::eMovementTypeStand);
         }
     }

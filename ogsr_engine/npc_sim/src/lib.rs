@@ -44,6 +44,20 @@ pub enum Phase {
 }
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FailureReason {
+    None = 0,
+    SupplyUnavailable = 1,
+    SupplyMoved = 2,
+    LostSupply = 3,
+    TravelStalled = 4,
+    PickupTimedOut = 5,
+    RepresentationUnavailable = 6,
+    PositionUnknown = 7,
+    TripDeadline = 8,
+    CounterExhausted = 9,
+}
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Supply {
     Missing = 0,
     Free = 1,
@@ -74,6 +88,7 @@ pub struct Decision {
     pub identity: u64,
     pub command: u64,
     pub phase: Phase,
+    pub reason: FailureReason,
     pub interrupted: bool,
     pub action: Action,
 }
@@ -92,10 +107,14 @@ pub struct Plan {
     edge_distance: f32,
     unavailable_ms: u32,
     representation_ready: bool,
+    location_valid: bool,
+    active_ms: u32,
+    reason: FailureReason,
 }
 const TRAVEL_STALL_MS: u32 = 60_000;
 const PICKUP_TIMEOUT_MS: u32 = 5_000;
 const UNAVAILABLE_TIMEOUT_MS: u32 = 300_000;
+const TRIP_DEADLINE_MS: u32 = 1_800_000;
 impl Plan {
     pub fn new(
         identity: u64,
@@ -123,6 +142,9 @@ impl Plan {
                 edge_distance: 0.0,
                 unavailable_ms: 0,
                 representation_ready: true,
+                location_valid: true,
+                active_ms: 0,
+                reason: FailureReason::None,
             })
     }
     fn transition(&mut self, phase: Phase) {
@@ -132,11 +154,19 @@ impl Plan {
                 self.phase = phase;
             } else {
                 self.phase = Phase::Failed;
+                self.reason = FailureReason::CounterExhausted;
+            }
+            if self.phase != Phase::Failed {
+                self.reason = FailureReason::None;
             }
             self.stalled_ms = 0;
             self.pickup_ms = 0;
             self.unavailable_ms = 0;
         }
+    }
+    fn fail(&mut self, reason: FailureReason) {
+        self.transition(Phase::Failed);
+        self.reason = reason;
     }
     pub fn step(&mut self, mut o: Observation) -> Decision {
         // elapsed_ms describes the interval *before* this observation. Combat
@@ -145,8 +175,11 @@ impl Plan {
             o.edge_distance = 0.0;
         }
         let unknown_item = o.supply == Supply::Free && !o.supply_location.spatially_valid();
-        let resumed = self.interrupted && !o.interrupted;
-        let elapsed = if self.interrupted || o.interrupted {
+        let current_valid = o.current.spatially_valid();
+        let was_valid = self.location_valid;
+        let resumed =
+            (self.interrupted && !o.interrupted) || (!self.location_valid && current_valid);
+        let elapsed = if self.interrupted || o.interrupted || (!was_valid && current_valid) {
             0
         } else {
             o.elapsed_ms
@@ -156,8 +189,9 @@ impl Plan {
         } else {
             0
         };
+        self.location_valid = current_valid;
         self.interrupted = o.interrupted;
-        self.representation_ready = o.representation_ready && !unknown_item;
+        self.representation_ready = o.representation_ready && !unknown_item && current_valid;
         if resumed && o.current.spatially_valid() {
             self.stalled_ms = 0;
             self.progress_anchor = o.current;
@@ -169,10 +203,25 @@ impl Plan {
         if !o.alive {
             self.transition(Phase::Dead);
         } else if !terminal {
-            if !o.current.spatially_valid() {
-                self.transition(Phase::Failed);
+            self.active_ms = self.active_ms.saturating_add(elapsed).min(TRIP_DEADLINE_MS);
+            if self.active_ms >= TRIP_DEADLINE_MS {
+                self.fail(FailureReason::TripDeadline);
+                return self.decision();
+            }
+            if !current_valid {
+                let unknown_elapsed = if was_valid { 0 } else { elapsed };
+                self.unavailable_ms = self
+                    .unavailable_ms
+                    .saturating_add(unknown_elapsed)
+                    .min(UNAVAILABLE_TIMEOUT_MS);
+                if self.unavailable_ms >= UNAVAILABLE_TIMEOUT_MS {
+                    self.fail(FailureReason::PositionUnknown);
+                }
+                let mut decision = self.decision();
+                decision.action = Action::Wait;
+                return decision;
             } else if self.phase == Phase::Returning && o.supply != Supply::Owned {
-                self.transition(Phase::Failed);
+                self.fail(FailureReason::LostSupply);
             } else if o.supply == Supply::Owned {
                 self.transition(Phase::Returning);
                 if o.current.near(self.home, 1.5) {
@@ -182,9 +231,10 @@ impl Plan {
                 self.transition(Phase::Outbound);
             } else if unknown_item {
                 self.transition(Phase::Collecting);
-            } else if o.supply != Supply::Free || !self.remembered_item.near(o.supply_location, 1.0)
-            {
-                self.transition(Phase::Failed);
+            } else if o.supply != Supply::Free {
+                self.fail(FailureReason::SupplyUnavailable);
+            } else if !self.remembered_item.near(o.supply_location, 1.0) {
+                self.fail(FailureReason::SupplyMoved);
             } else if !o.current.near(o.supply_location, 2.5) {
                 // The item is still where remembered, but the NPC must approach
                 // the navigation point more closely before it can reach it.
@@ -204,6 +254,7 @@ impl Plan {
         };
         match decision.action {
             Action::Travel(_) => {
+                self.unavailable_ms = 0;
                 // Count actual movement in any direction (detours included).
                 // Offline positions change only at graph vertices, so also use
                 // the engine's distance walked within the current edge.
@@ -211,10 +262,11 @@ impl Plan {
                     && self.edge_distance.is_finite()
                     && o.current.game_vertex == self.progress_anchor.game_vertex
                     && o.edge_distance - self.edge_distance >= 0.25;
-                if self.phase != previous_phase
-                    || o.current.level != self.progress_anchor.level
-                    || o.current.distance(self.progress_anchor) >= 0.25
-                    || edge_progress
+                if !o.path_blocked
+                    && (self.phase != previous_phase
+                        || o.current.level != self.progress_anchor.level
+                        || o.current.distance(self.progress_anchor) >= 0.25
+                        || edge_progress)
                 {
                     self.progress_anchor = o.current;
                     self.edge_distance = o.edge_distance;
@@ -225,8 +277,8 @@ impl Plan {
                     }
                     self.stalled_ms = self.stalled_ms.saturating_add(elapsed).min(TRAVEL_STALL_MS);
                 }
-                if o.path_blocked || self.stalled_ms >= TRAVEL_STALL_MS {
-                    self.transition(Phase::Failed);
+                if self.stalled_ms >= TRAVEL_STALL_MS {
+                    self.fail(FailureReason::TravelStalled);
                     decision = self.decision();
                 }
             }
@@ -238,7 +290,7 @@ impl Plan {
                         .min(UNAVAILABLE_TIMEOUT_MS);
                     decision.action = Action::Wait;
                     if self.unavailable_ms >= UNAVAILABLE_TIMEOUT_MS {
-                        self.transition(Phase::Failed);
+                        self.fail(FailureReason::RepresentationUnavailable);
                         decision = self.decision();
                     }
                 } else {
@@ -250,7 +302,7 @@ impl Plan {
                             .min(PICKUP_TIMEOUT_MS);
                         decision.action = Action::Wait;
                         if self.pickup_ms >= PICKUP_TIMEOUT_MS {
-                            self.transition(Phase::Failed);
+                            self.fail(FailureReason::PickupTimedOut);
                             decision = self.decision();
                         }
                     } else {
@@ -269,6 +321,7 @@ impl Plan {
             identity: self.identity,
             command: self.command,
             phase: self.phase,
+            reason: self.reason,
             interrupted: self.interrupted,
             action: if self.interrupted {
                 Action::Wait
@@ -282,10 +335,10 @@ impl Plan {
             },
         }
     }
-    pub const SNAPSHOT_SIZE: usize = 140;
+    pub const SNAPSHOT_SIZE: usize = 148;
     pub fn save(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(Self::SNAPSHOT_SIZE);
-        bytes.extend_from_slice(&3u32.to_le_bytes());
+        bytes.extend_from_slice(&4u32.to_le_bytes());
         bytes.extend_from_slice(&self.identity.to_le_bytes());
         bytes.extend_from_slice(&self.command.to_le_bytes());
         for location in [
@@ -306,8 +359,12 @@ impl Plan {
             self.stalled_ms,
             self.pickup_ms,
             self.unavailable_ms,
-            u32::from(self.interrupted) | (u32::from(self.representation_ready) << 1),
+            u32::from(self.interrupted)
+                | (u32::from(self.representation_ready) << 1)
+                | (u32::from(self.location_valid) << 2),
             self.edge_distance.to_bits(),
+            self.active_ms,
+            self.reason as u32,
         ] {
             bytes.extend_from_slice(&value.to_le_bytes());
         }
@@ -323,7 +380,7 @@ impl Plan {
             *cursor += N;
             value
         }
-        if u32::from_le_bytes(read(bytes, &mut cursor)) != 3 {
+        if u32::from_le_bytes(read(bytes, &mut cursor)) != 4 {
             return None;
         }
         let identity = u64::from_le_bytes(read(bytes, &mut cursor));
@@ -352,11 +409,27 @@ impl Plan {
         let unavailable_ms = u32::from_le_bytes(read(bytes, &mut cursor));
         let flags = u32::from_le_bytes(read(bytes, &mut cursor));
         let edge_distance = f32::from_le_bytes(read(bytes, &mut cursor));
+        let active_ms = u32::from_le_bytes(read(bytes, &mut cursor));
+        let reason = match u32::from_le_bytes(read(bytes, &mut cursor)) {
+            0 => FailureReason::None,
+            1 => FailureReason::SupplyUnavailable,
+            2 => FailureReason::SupplyMoved,
+            3 => FailureReason::LostSupply,
+            4 => FailureReason::TravelStalled,
+            5 => FailureReason::PickupTimedOut,
+            6 => FailureReason::RepresentationUnavailable,
+            7 => FailureReason::PositionUnknown,
+            8 => FailureReason::TripDeadline,
+            9 => FailureReason::CounterExhausted,
+            _ => return None,
+        };
         if command == 0
             || stalled_ms > TRAVEL_STALL_MS
             || pickup_ms > PICKUP_TIMEOUT_MS
             || unavailable_ms > UNAVAILABLE_TIMEOUT_MS
-            || flags > 3
+            || flags > 7
+            || active_ms > TRIP_DEADLINE_MS
+            || (phase == Phase::Failed) != (reason != FailureReason::None)
             || !progress_anchor.spatially_valid()
             || !edge_distance.is_finite()
             || edge_distance < 0.0
@@ -373,6 +446,9 @@ impl Plan {
         plan.representation_ready = flags & 2 != 0;
         plan.progress_anchor = progress_anchor;
         plan.edge_distance = edge_distance;
+        plan.location_valid = flags & 4 != 0;
+        plan.active_ms = active_ms;
+        plan.reason = reason;
         Some(plan)
     }
 }

@@ -1,4 +1,4 @@
-use npc_sim::{Action, Location, Observation, Phase, Plan, Supply};
+use npc_sim::{Action, FailureReason, Location, Observation, Phase, Plan, Supply};
 const HOME: Location = Location {
     game_vertex: 1,
     level_vertex: 10,
@@ -312,6 +312,7 @@ fn loss_blocked_path_and_death_terminate_without_fabricating_success() {
     for event in [
         Observation {
             path_blocked: true,
+            elapsed_ms: 60_000,
             ..observation()
         },
         Observation {
@@ -340,7 +341,7 @@ fn malformed_snapshots_are_rejected() {
     let mut extra = snapshot.clone();
     extra.push(0);
     assert!(Plan::load(&extra).is_none());
-    for offset in [0, 4, 12, 20, 28, 116, 120, 124, 128, 132, 136] {
+    for offset in [0, 4, 12, 20, 28, 116, 120, 124, 128, 132, 136, 140, 144] {
         let mut invalid = snapshot.clone();
         match offset {
             4 | 12 => invalid[offset..offset + 8].fill(0),
@@ -578,8 +579,114 @@ fn invalid_navigation_ids_on_physical_facts_do_not_crash_or_invent_missing_items
             },
             ..observation()
         })
+        .action,
+        Action::Wait
+    );
+    assert!(Plan::load(&p.save()).is_some());
+}
+
+#[test]
+fn transient_failed_path_build_can_recover() {
+    let mut p = plan();
+    assert_eq!(
+        p.step(Observation {
+            path_blocked: true,
+            elapsed_ms: 10_000,
+            ..observation()
+        })
+        .phase,
+        Phase::Outbound
+    );
+    assert_eq!(
+        p.step(Observation {
+            current: Location {
+                position: [1., 0., 0.],
+                ..HOME
+            },
+            elapsed_ms: 55_000,
+            ..observation()
+        })
+        .phase,
+        Phase::Outbound
+    );
+    let failed = p.step(Observation {
+        path_blocked: true,
+        elapsed_ms: 60_000,
+        ..observation()
+    });
+    assert_eq!(failed.reason, FailureReason::TravelStalled);
+    assert_eq!(
+        Plan::load(&p.save()).unwrap().decision().reason,
+        failed.reason
+    );
+}
+#[test]
+fn invalid_current_facts_wait_and_recover_but_not_forever() {
+    let unknown = Observation {
+        current: Location {
+            level: u32::MAX,
+            ..HOME
+        },
+        ..observation()
+    };
+    let mut p = plan();
+    assert_eq!(p.step(unknown).action, Action::Wait);
+    let mut p = Plan::load(&p.save()).unwrap();
+    assert_eq!(
+        p.step(Observation {
+            elapsed_ms: 120_000,
+            ..observation()
+        })
+        .phase,
+        Phase::Outbound
+    );
+    p.step(unknown);
+    assert_eq!(
+        p.step(Observation {
+            elapsed_ms: 300_000,
+            ..unknown
+        })
+        .reason,
+        FailureReason::PositionUnknown
+    );
+}
+#[test]
+fn total_active_deadline_bounds_livelock_across_phase_changes_and_reload() {
+    let mut p = plan();
+    for i in 0..179 {
+        let o = if i % 2 == 0 {
+            at_source()
+        } else {
+            observation()
+        };
+        assert_ne!(
+            p.step(Observation {
+                elapsed_ms: 10_000,
+                ..o
+            })
+            .phase,
+            Phase::Failed
+        );
+        p = Plan::load(&p.save()).unwrap();
+    }
+    p.step(Observation {
+        interrupted: true,
+        ..observation()
+    });
+    assert_ne!(
+        p.step(Observation {
+            elapsed_ms: 1_800_000,
+            ..observation()
+        })
         .phase,
         Phase::Failed
     );
-    assert!(Plan::load(&p.save()).is_some());
+    assert_eq!(
+        p.step(Observation {
+            elapsed_ms: 10_000,
+            ..observation()
+        })
+        .reason,
+        FailureReason::TripDeadline
+    );
 }

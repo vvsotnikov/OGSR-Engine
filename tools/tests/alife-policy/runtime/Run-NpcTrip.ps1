@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory)][string]$InstallRoot,
     [Parameter(Mandatory)][ValidatePattern('^bin_[a-zA-Z0-9_]+$')][string]$Package,
     [ValidateSet('Release','Debug')][string]$Configuration = 'Debug',
-    [ValidateSet('basic','interrupt','offline','switch','missing','death','mismatch','natural','elevated','boundary','save','resume','fallback')][string]$Scenario = 'basic',
+    [ValidateSet('basic','interrupt','offline','switch','missing','death','mismatch','natural','elevated','boundary','far','moved','spawn-combat','save','resume','fallback')][string]$Scenario = 'basic',
     [ValidateSet('whole-map','distance')][string]$Mode = 'whole-map',
     [string]$ResumeSession = '',
     [switch]$PrepareOnly
@@ -65,7 +65,7 @@ try {
     $meta.status = 'npc-running'
     $meta | Add-Member gamePid $game.Id
     Write-Output "START npc scenario=$Scenario session=$session pid=$($game.Id)"
-    $deadline = (Get-Date).AddSeconds(360)
+    $deadline = (Get-Date).AddSeconds($(if ($Scenario -eq 'far') { 720 } else { 360 }))
     while (!$game.WaitForExit(2000)) { if ((Get-Date) -gt $deadline) { throw 'NPC validation timed out' } }
     $logs = @(Get-ChildItem "$session/appdata/logs" -Filter '*.log')
     if ($logs.Count -ne 1) { throw 'Expected one log' }
@@ -77,7 +77,8 @@ try {
         if ($log -notmatch '\[npc fixture\] saved_pending' -or $log -notmatch 'Game npc_trip_pending\.sav is successfully saved' -or !(Test-Path "$session/appdata/savedgames/npc_trip_pending.sav")) { throw 'Pending trip save was not acknowledged' }
     } elseif ($log -notmatch "\[npc fixture\] complete scenario=$Scenario\b") { throw 'Missing completed trip' }
     if ($Scenario -eq 'resume' -and $log -notmatch '\[npc trip\] restore identity=') { throw 'Missing native planner restore' }
-    if ($Scenario -eq 'interrupt' -and ($log -notmatch '\[npc fixture\] combat_observed' -or $log -notmatch '\[npc trip\].*interrupted=1')) { throw 'Missing real planner interruption' }
+    if ($Scenario -in @('interrupt','spawn-combat') -and ($log -notmatch '\[npc fixture\] combat_observed' -or $log -notmatch '\[npc trip\].*interrupted=1')) { throw 'Missing real planner interruption' }
+    if ($Scenario -eq 'moved' -and $log -notmatch '\[npc trip\].*phase=4 reason=2') { throw 'Missing SupplyMoved failure reason' }
     $meta.status = 'npc-completed'
     Write-Output "COMPLETE npc scenario=$Scenario session=$session"
 } catch {

@@ -21,6 +21,7 @@ class CNpcSimulation
         u64 online_path_command = 0;
         u32 last_observation = 0;
         bool observed = false;
+        bool was_online = false;
         bool interrupted = false;
     };
     CALifeSimulatorBase& m_alife;
