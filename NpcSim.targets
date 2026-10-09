@@ -16,7 +16,10 @@
       <IgnoreSpecificDefaultLibraries Condition="'$(Configuration)' == 'Debug'">libcmt.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
     </Link>
   </ItemDefinitionGroup>
-  <Target Name="BuildNpcSimulation" BeforeTargets="Link">
+  <Target Name="BuildNpcSimulation" BeforeTargets="CollectBuildInfoInputs;Link">
+    <ItemGroup>
+      <BuildInfoInput Include="$(NpcSimLibrary)" />
+    </ItemGroup>
     <Error Condition="'$(Platform)' != 'x64'" Text="NPC simulation requires the x64 MSVC target." />
     <Exec WorkingDirectory="$(NpcSimRoot)" Command="cargo rustc --locked --package npc_sim --lib $(NpcSimReleaseArg) --target x86_64-pc-windows-msvc --target-dir &quot;$(NpcSimTargetDir)&quot; -- -C target-feature=+crt-static" />
   </Target>
