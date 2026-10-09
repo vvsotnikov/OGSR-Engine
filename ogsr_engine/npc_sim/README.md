@@ -47,3 +47,10 @@ Adding observation facts does not itself require a save-format change. Changing
 persisted goal state does require a versioned loader. Bounded source memory may
 forget old information to accept new observations, but cannot replace the active
 trip binding; forgetting a source does not mean learning that its item is gone.
+
+Command numbers span the NPC lifetime, including replacement activities. The
+engine latches movement and asynchronous pickup by command, so restarting an
+activity's counter could mistake old execution state for a new request.
+Activity reports retain the state before advancement: a newly failed return
+arms a retry delay, while observing that same terminal failure again must not
+restart its delay.
