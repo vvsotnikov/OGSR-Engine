@@ -5,6 +5,7 @@ return function(cfg)
     local state = {phase=1}
     if file then file:close(); state=dofile(state_file) end
     local started, since, sent, released = nil,nil,false,false
+    local bridge, bridge_since, bridge_position = nil,nil,nil
     local function next_phase()
         state.phase=state.phase+1
         local output=assert(io.open(state_file,"w"))
@@ -34,6 +35,12 @@ return function(cfg)
                 end
                 state.npc=spawn("npc_trip_stalker",34548)
                 state.item=spawn("bandage",level.vertex_in_direction(34548,vector():set(1,0,0),20))
+                local query=npc_sim_bridge.script_control
+                npc_sim_bridge.script_control=nil
+                assert(not alife():start_supply_goal(state.npc),"Enrolled without ownership bridge")
+                npc_sim_bridge.script_control=function() return 99 end
+                assert(not alife():start_supply_goal(state.npc),"Enrolled with invalid ownership tag")
+                npc_sim_bridge.script_control=query
                 assert(alife():start_supply_goal(state.npc))
                 assert(alife():remember_supply(state.npc,state.item))
             end
@@ -47,6 +54,17 @@ return function(cfg)
             if not since then
                 if client:position():distance_to(level.vertex_position(34548)) < 2 then return end
                 assert(not db.storage[state.npc].active_section)
+                if not bridge_since then
+                    bridge=npc_sim_bridge.script_control
+                    npc_sim_bridge.script_control=nil
+                    bridge_since,bridge_position=now,client:position()
+                    get_console():execute("save npc_control_missing_bridge")
+                    return
+                end
+                assert(client:position():distance_to(bridge_position) < 1,"Missing bridge allowed goal movement")
+                if now-bridge_since < 4000 then return end
+                npc_sim_bridge.script_control=bridge
+                log1("[npc control] missing_bridge_paused_and_saved")
                 xr_logic.pstor_store(client,"npc_control_quest",42)
                 assert(xr_logic.switch_to_section(client,db.storage[state.npc],"remark@hold"))
                 since=now

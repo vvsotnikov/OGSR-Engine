@@ -30,13 +30,34 @@ extern u16 script_server_object_version();
 namespace
 {
 constexpr u32 planner_chunk = 0x4e504331; // NPC1; optional root chunk, independent of legacy registry order.
-NpcScriptControl script_control(u16 id)
+bool read_script_control(u16 id, NpcScriptControl& control)
 {
     luabind::functor<u32> query;
-    R_ASSERT2(ai().script_engine().functor("npc_sim_bridge.script_control", query), "NPC planner requires npc_sim_bridge.script");
-    const u32 value = query(id);
-    R_ASSERT(value <= u32(NpcScriptControl::Owned));
-    return NpcScriptControl(value);
+    if (ai().script_engine().functor("npc_sim_bridge.script_control", query))
+    {
+        const u32 value = query(id);
+        if (value <= u32(NpcScriptControl::Owned))
+        {
+            control = NpcScriptControl(value);
+            return true;
+        }
+    }
+    // A missing ownership report cannot authorize movement. Keep saves usable
+    // and diagnose once rather than flooding the log on every NPC/frame.
+    static bool reported = false;
+    if (!reported)
+    {
+        Msg("! [npc trip] npc_sim_bridge.script_control missing or invalid; enrollment rejected and existing goals paused until it is repaired");
+        reported = true;
+    }
+    control = NpcScriptControl::Owned;
+    return false;
+}
+NpcScriptControl script_control(u16 id)
+{
+    NpcScriptControl control;
+    read_script_control(id, control);
+    return control;
 }
 NpcLocation location(const CSE_ALifeDynamicObject& object)
 {
@@ -131,6 +152,8 @@ bool CNpcSimulation::enroll(u16 npc_id, u16 supply_id, bool medical_goal)
         auto client = smart_cast<CAI_Stalker*>(Level().Objects.net_Find(npc_id));
         if (!client || client->GetScriptControl()) return false;
     }
+    NpcScriptControl control;
+    if (!read_script_control(npc_id, control)) return false;
     if (!navigable_here(*npc)) return false;
     if (!medical_goal && (!supply || !smart_cast<CSE_ALifeInventoryItem*>(supply) ||
         supply->ID_Parent != u16(-1) || !navigable_here(*supply))) return false;
@@ -313,14 +336,19 @@ void CNpcSimulation::before_offline(CSE_ALifeDynamicObject* object)
 {
     auto entry = find(smart_cast<CSE_ALifeMonsterAbstract*>(object));
     if (!entry) return;
+    // A save-time copy may predate subsequent online script changes. Never
+    // reuse it if the current client cannot supply a fresh offline snapshot.
+    entry->binder_data.clear();
     auto client = smart_cast<CAI_Stalker*>(Level().Objects.net_Find(object->ID));
     if (!client || client->getDestroy()) return;
     NET_Packet packet;
+    // The save wrapper captures the Lua bytes and ownership in this entry.
     client->CScriptBinder::save(packet);
 }
 
 void CNpcSimulation::capture_binder(u16 id, const u8* data, u32 size)
 {
+    if (m_entries.empty()) return;
     auto entry = find(smart_cast<CSE_ALifeMonsterAbstract*>(objects().object(id, true)));
     if (!entry) return;
     // ClientSave also reaches this path before a level-change autosave, where

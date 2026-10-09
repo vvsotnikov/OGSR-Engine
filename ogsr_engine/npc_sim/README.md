@@ -6,19 +6,22 @@ only while ordinary A-Life owns execution. The Lua bridge reports persistent
 ownership from xr_logic's active section, not from a selected action ID: meet,
 combat and state transitions alone must not strand an offline goal. Custom
 binders with a different activity model must adapt that bridge. Uninitialized
-binders report no observation, not a release.
+binders report no observation, not a release. A missing bridge or invalid control
+tag rejects enrollment and pauses existing goals conservatively; it must not
+turn an unknown owner into permission to act or prevent saving the game.
 
 A persistent script section cannot finish offline because Lua schemes do not
 execute there. Its ownership survives saves and representation changes until
 the script releases the section (`active = nil`). Planner-compatible ordinary
 logic must therefore have no active section; a standing `walker` or `remark`
-job deliberately retains control, even when it has nothing to do. Temporary reactions end at the representation
-boundary; they do not claim persistent script ownership.
+job deliberately retains control, even when it has nothing to do. Temporary
+reactions end at the representation boundary; they do not claim persistent script ownership.
 
 Opt-in still requires a dedicated section and excludes story/group/smart-terrain
-assignments. The shipped smart-terrain registration goes through the native brain selector,
-which excludes planner sections before enrollment. Custom scripts must respect
-that same ownership boundary. Only enrolled NPCs retain binder snapshots.
+assignments. The shipped smart-terrain registration goes through the native
+brain selector, which excludes planner sections before enrollment. Its Lua
+spawn-time gulag setup reads that same native ID; it does not independently
+assign a job. Custom scripts must respect that ownership boundary. Only enrolled NPCs retain binder snapshots.
 The separate NPC save chunk retains that Lua payload without retaining native
 client memory, conditions or inventory-owner state, which can become stale while
 offline. It is consumed before binder net_spawn, where the saved scheme is
