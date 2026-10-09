@@ -1,7 +1,8 @@
 # Engine builds
 
 Build `Engine.sln` with Visual Studio 2022 C++ tools and the provisioned third-party
-dependencies. Use a short checkout path such as `D:\src\OGSR-Engine`: generated
+dependencies and Rust/Cargo with the `x86_64-pc-windows-msvc` target. Every
+engine build compiles and statically links the NPC simulation crate. Use a short checkout path such as `D:\src\OGSR-Engine`: generated
 FidelityFX header names can exceed MSVC's path limit in nested checkouts.
 Local validation and the commit/merge hooks also require Python 3, alongside
 Rust/Cargo, CMake and PowerShell. CMake must be able to find the interpreter for
@@ -31,13 +32,20 @@ project diff to ensure shared settings still apply to both.
 Debug executables now live in `bin_x64_debug` instead of `bin_x64`. Update Debug
 launch commands and executable-directory links to use that directory.
 
-Library and intermediate paths are under `ogsr_engine`. Visual Studio and
+The table lists C++ outputs. Cargo uses `target/npc_sim/<Configuration>` with a
+separate cache for each engine variant; MSBuild Clean removes that variant's
+Cargo output. Rust unit tests use the normal workspace `target` cache.
+
+Library and intermediate paths in the table are under `ogsr_engine`. Visual Studio and
 command-line builds use these same directories. Uninstrumented third-party release
 libraries are shared by both release variants; engine libraries never fall back
 to another variant. LuaJIT is compiled from source in a private workspace under
 each configuration's intermediate directory, including its generated headers,
 objects and compiler PDB. Debug uses the Debug CRT; both release variants use
-the Release CRT. Previously provisioned LuaJIT libraries are not consumed.
+the Release CRT. Rust requests the static CRT; its `libcmt` directive is suppressed
+for Debug so the executable resolves those calls against `libcmtd`. The ABI never
+transfers allocation ownership: Rust frees plans, and C++ owns its buffers.
+Previously provisioned LuaJIT libraries are not consumed.
 
 The executable's generated version header lives in its intermediate directory.
 MSBuild refreshes it when executable sources/resources, input libraries, its

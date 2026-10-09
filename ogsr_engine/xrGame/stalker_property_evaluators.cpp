@@ -7,8 +7,8 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
-#include "npc_simulation.h"
 #include "stalker_property_evaluators.h"
+#include "npc_simulation.h"
 #include "ai/stalker/ai_stalker.h"
 #include "stalker_decision_space.h"
 #include "script_game_object.h"
@@ -61,7 +61,8 @@ CStalkerPropertyEvaluatorItems::CStalkerPropertyEvaluatorItems(CAI_Stalker* obje
 
 _value_type CStalkerPropertyEvaluatorItems::evaluate()
 {
-    if (ai().get_alife() && ai().alife().npc_simulation().owns(m_object->ID())) return false;
+    if (auto simulation = CNpcSimulation::active())
+        if (simulation->owns(m_object->ID())) return false;
     return (!!m_object->memory().item().selected());
 }
 
@@ -253,7 +254,8 @@ _value_type CStalkerPropertyEvaluatorSmartTerrainTask::evaluate()
 
     CSE_ALifeHumanAbstract* stalker = smart_cast<CSE_ALifeHumanAbstract*>(ai().alife().objects().object(m_object->ID()));
     VERIFY(stalker);
-    if (ai().alife().npc_simulation().owns(stalker)) return false;
+    if (auto simulation = CNpcSimulation::active())
+        if (simulation->owns(stalker)) return false;
     stalker->brain().select_task();
     return (stalker->m_smart_terrain_id != 0xffff);
 }

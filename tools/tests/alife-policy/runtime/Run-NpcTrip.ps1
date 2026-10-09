@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory)][string]$InstallRoot,
     [Parameter(Mandatory)][ValidatePattern('^bin_[a-zA-Z0-9_]+$')][string]$Package,
     [ValidateSet('Release','Debug')][string]$Configuration = 'Debug',
-    [ValidateSet('basic','interrupt','offline','switch','missing','death','save','resume')][string]$Scenario = 'basic',
+    [ValidateSet('basic','interrupt','offline','switch','missing','death','mismatch','natural','elevated','boundary','save','resume','fallback')][string]$Scenario = 'basic',
+    [ValidateSet('whole-map','distance')][string]$Mode = 'whole-map',
     [string]$ResumeSession = '',
     [switch]$PrepareOnly
 )
@@ -11,11 +12,12 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/ValidationLog.ps1"
 . "$PSScriptRoot/PolicyMessages.ps1"
 $InstallRoot = (Resolve-Path $InstallRoot).Path
+if ($Scenario -eq 'natural' -and $Mode -ne 'distance') { throw 'Natural switching requires distance mode' }
 $engine = Join-Path $InstallRoot "$Package/xrEngine.exe"
 $build = Read-ValidationPackage $engine -Configuration $Configuration
 $seed = 'seeds/bar-2026-10-03'
 $save = 'bar_center'
-if ($Scenario -eq 'resume') {
+if ($Scenario -in @('resume','fallback')) {
     if (!$ResumeSession) { throw 'Resume requires the completed save scenario' }
     $previous = Get-Content "$ResumeSession/session.json" -Raw | ConvertFrom-Json
     if ($previous.status -ne 'npc-completed' -or $previous.scenario -ne 'save') { throw 'Invalid resume source' }
@@ -25,7 +27,7 @@ if ($Scenario -eq 'resume') {
     $seed = Join-Path $resumePath.Substring($prefix.Length) appdata
     $save = 'npc_trip_pending'
 } elseif ($ResumeSession) { throw 'ResumeSession applies only to resume' }
-$session = & "$PSScriptRoot/Prepare-Session.ps1" -InstallRoot $InstallRoot -Package $Package -Mode whole-map -SeedAppData $seed -SaveName $save
+$session = & "$PSScriptRoot/Prepare-Session.ps1" -InstallRoot $InstallRoot -Package $Package -Mode $Mode -SeedAppData $seed -SaveName $save
 $meta = Get-Content "$session/session.json" -Raw | ConvertFrom-Json
 $meta | Add-Member build $build
 $meta | Add-Member scenario $Scenario
@@ -36,17 +38,21 @@ Get-ChildItem $InstallRoot -Filter 'gamedata.db*' -File | ForEach-Object {
 }
 $config = "$runtime/gamedata/config/misc/items.ltx"
 if ((Get-Content $config -Raw).Contains('[npc_trip_stalker]')) { throw 'Fixture section already exists' }
-Add-Content $config "`n[npc_trip_stalker]:stalker`nnpc_planner = supply_trip`n" -Encoding ascii
+Add-Content $config "`n[npc_trip_stalker]:stalker" -Encoding ascii
+if ($Scenario -ne 'fallback') { Add-Content $config 'npc_planner = supply_trip' -Encoding ascii }
+if ($Scenario -eq 'elevated') { Add-Content $config "`n[npc_trip_elevated_bandage]:bandage`nuse_ai_locations = false" -Encoding ascii }
 $fs = @(Get-Content "$session/fsgame.ltx")
 $lines = @(0..($fs.Count-1) | Where-Object { $fs[$_] -match '^\s*\$app_data_root\$\s*=' })
 if ($lines.Count -ne 1) { throw 'Expected one appdata root' }
 $fs[$lines[0]] = '$app_data_root$ = true| false| ' + ("$session/appdata/" -replace '/', '\')
 $fs | Set-Content "$session/fsgame.ltx" -Encoding ascii
-$meta.arguments = '-fsltx ..\fsgame.ltx -alife_whole_map' + " -start server($save/single/alife/load) client(localhost)"
+$meta.arguments = '-fsltx ..\fsgame.ltx'
+if ($Mode -eq 'whole-map') { $meta.arguments += ' -alife_whole_map' }
+$meta.arguments += " -start server($save/single/alife/load) client(localhost)"
 $luaConfig = "return {scenario='$Scenario'}"
-if ($Scenario -eq 'resume') {
+if ($Scenario -in @('resume','fallback')) {
     Copy-Item "$ResumeSession/appdata/npc-trip-ids.lua" "$session/appdata/npc-trip-ids.lua"
-    $luaConfig = "local ids=dofile(getFS():update_path(`"`$app_data_root`$`",`"npc-trip-ids.lua`")); ids.scenario='resume'; return ids"
+    $luaConfig = "local ids=dofile(getFS():update_path(`"`$app_data_root`$`",`"npc-trip-ids.lua`")); ids.scenario='$Scenario'; return ids"
 }
 Set-Content "$session/appdata/regular-config.lua" $luaConfig -Encoding ascii
 Copy-Item "$PSScriptRoot/NpcTripDriver.lua" "$session/appdata/RegularDriver.lua"
@@ -65,7 +71,7 @@ try {
     if ($logs.Count -ne 1) { throw 'Expected one log' }
     $log = [IO.File]::ReadAllText($logs[0].FullName)
     Assert-ValidationLogHealthy $log
-    Assert-PolicyMessages $log whole-map 1 $false
+    Assert-PolicyMessages $log $Mode 1 $false
     if ($game.ExitCode -ne 0 -or $log -match '\[npc fixture\] FAILED') { throw 'NPC scenario failed' }
     if ($Scenario -eq 'save') {
         if ($log -notmatch '\[npc fixture\] saved_pending' -or $log -notmatch 'Game npc_trip_pending\.sav is successfully saved' -or !(Test-Path "$session/appdata/savedgames/npc_trip_pending.sav")) { throw 'Pending trip save was not acknowledged' }

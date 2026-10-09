@@ -23,4 +23,7 @@
     <Error Condition="'$(Platform)' != 'x64'" Text="NPC simulation requires the x64 MSVC target." />
     <Exec WorkingDirectory="$(NpcSimRoot)" Command="cargo rustc --locked --package npc_sim --lib $(NpcSimReleaseArg) --target x86_64-pc-windows-msvc --target-dir &quot;$(NpcSimTargetDir)&quot; -- -C target-feature=+crt-static" />
   </Target>
+  <Target Name="CleanNpcSimulation" BeforeTargets="Clean">
+    <Exec WorkingDirectory="$(NpcSimRoot)" Command="cargo clean --manifest-path &quot;$(NpcSimRoot)Cargo.toml&quot; --target-dir &quot;$(NpcSimTargetDir)&quot;" />
+  </Target>
 </Project>

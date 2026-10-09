@@ -7,9 +7,9 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
-#include "npc_simulation.h"
 #include "alife_simulator.h"
 #include "ai_stalker.h"
+#include "npc_simulation.h"
 #include "../ai_monsters_misc.h"
 #include "../../weapon.h"
 #include "../../hit.h"
@@ -421,6 +421,13 @@ BOOL CAI_Stalker::net_Spawn(CSE_Abstract* DC)
 
     m_pPhysics_support->in_NetSpawn(e);
 
+    // The dedicated planner section has no legacy Lua dialog state.
+    if (CNpcSimulation::configured(cNameSect().c_str()))
+    {
+        DisableTalk();
+        DisableTrade();
+    }
+
     return (TRUE);
 }
 
@@ -707,7 +714,7 @@ void CAI_Stalker::shedule_Update(u32 DT)
         Device.Statistic->AI_Think.Begin();
         if (GetScriptControl())
         {
-            if (ai().get_alife()) ai().alife().npc_simulation().update_online(*this, true);
+            if (auto simulation = CNpcSimulation::active()) simulation->update_online(*this, true);
             ProcessScripts();
         }
         else

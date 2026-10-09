@@ -2,12 +2,15 @@ use crate::{Action, Location, Observation, Phase, Plan, Supply};
 
 #[repr(C)]
 pub struct Input {
-    at_source: u32,
-    at_home: u32,
+    current: Location,
+    supply_location: Location,
     supply: u32,
+    representation_ready: u32,
+    pickup_pending: u32,
+    path_blocked: u32,
+    elapsed_ms: u32,
     interrupted: u32,
     alive: u32,
-    execution_failed: u32,
 }
 
 #[repr(C)]
@@ -20,12 +23,12 @@ pub struct Output {
     action: u32,
     game_vertex: u32,
     level_vertex: u32,
+    level: u32,
     position: [f32; 3],
 }
 
-impl From<&Plan> for Output {
-    fn from(plan: &Plan) -> Self {
-        let decision = plan.decision();
+impl From<crate::Decision> for Output {
+    fn from(decision: crate::Decision) -> Self {
         let mut output = Self {
             identity: decision.identity,
             command: decision.command,
@@ -40,6 +43,7 @@ impl From<&Plan> for Output {
                 output.action = 1;
                 output.game_vertex = location.game_vertex;
                 output.level_vertex = location.level_vertex;
+                output.level = location.level;
                 output.position = location.position;
             }
         }
@@ -84,11 +88,11 @@ pub unsafe extern "C" fn npc_plan_step(
         return false;
     };
     if [
-        input.at_source,
-        input.at_home,
+        input.representation_ready,
+        input.pickup_pending,
+        input.path_blocked,
         input.interrupted,
         input.alive,
-        input.execution_failed,
     ]
     .iter()
     .any(|&x| x > 1)
@@ -96,21 +100,27 @@ pub unsafe extern "C" fn npc_plan_step(
         return false;
     }
     let supply = match input.supply {
-        0 => Supply::Unknown,
-        1 => Supply::Available,
+        0 => Supply::Missing,
+        1 => Supply::Free,
         2 => Supply::Owned,
-        3 => Supply::Unavailable,
+        3 => Supply::OtherOwner,
         _ => return false,
     };
-    plan.step(Observation {
-        at_source: input.at_source != 0,
-        at_home: input.at_home != 0,
+    if !input.current.valid() || (supply != Supply::Missing && !input.supply_location.valid()) {
+        return false;
+    }
+    let decision = plan.step(Observation {
+        current: input.current,
+        supply_location: input.supply_location,
         supply,
+        representation_ready: input.representation_ready != 0,
+        pickup_pending: input.pickup_pending != 0,
+        path_blocked: input.path_blocked != 0,
+        elapsed_ms: input.elapsed_ms,
         interrupted: input.interrupted != 0,
         alive: input.alive != 0,
-        execution_failed: input.execution_failed != 0,
     });
-    *output = Output::from(&*plan);
+    *output = Output::from(decision);
     true
 }
 
@@ -119,7 +129,7 @@ pub unsafe extern "C" fn npc_plan_status(plan: *const Plan, output: *mut Output)
     let (Some(plan), Some(output)) = (unsafe { plan.as_ref() }, unsafe { output.as_mut() }) else {
         return false;
     };
-    *output = Output::from(plan);
+    *output = Output::from(plan.decision());
     true
 }
 
@@ -151,9 +161,9 @@ pub unsafe extern "C" fn npc_plan_load(input: *const u8, length: usize) -> *mut 
         .map_or(std::ptr::null_mut(), |plan| Box::into_raw(Box::new(plan)))
 }
 
-const _: () = assert!(std::mem::size_of::<Location>() == 20);
-const _: () = assert!(std::mem::size_of::<Input>() == 24);
-const _: () = assert!(std::mem::size_of::<Output>() == 48);
+const _: () = assert!(std::mem::size_of::<Location>() == 24);
+const _: () = assert!(std::mem::size_of::<Input>() == 76);
+const _: () = assert!(std::mem::size_of::<Output>() == 56);
 const _: () = assert!(Phase::Dead as u32 == 5);
 
 #[no_mangle]
@@ -183,11 +193,13 @@ mod tests {
         let home = Location {
             game_vertex: 1,
             level_vertex: 2,
+            level: 0,
             position: [0.0; 3],
         };
         let source = Location {
             game_vertex: 1,
             level_vertex: 3,
+            level: 0,
             position: [10.0, 0.0, 0.0],
         };
         // Separate host buffers and uniquely owned plans obey the C ABI contract.
@@ -196,12 +208,15 @@ mod tests {
             assert!(!plan.is_null());
             let mut output = Output::default();
             let mut input = Input {
-                at_source: 1,
-                at_home: 0,
+                current: source,
+                supply_location: source,
                 supply: 1,
+                representation_ready: 1,
+                pickup_pending: 0,
+                path_blocked: 0,
+                elapsed_ms: 0,
                 interrupted: 0,
                 alive: 1,
-                execution_failed: 0,
             };
             assert!(npc_plan_step(plan, &input, &mut output));
             assert_eq!(output.phase, Phase::Collecting as u32);

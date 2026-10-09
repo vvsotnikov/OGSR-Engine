@@ -7,9 +7,9 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
-#include "npc_simulation.h"
 #include "alife_service_trace.h"
 #include "alife_simulator_base.h"
+#include "npc_simulation.h"
 #include "alife_simulator_header.h"
 #include "alife_time_manager.h"
 #include "alife_spawn_registry.h"

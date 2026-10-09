@@ -28,6 +28,7 @@ private:
     object_type* m_object;
     movement_manager_type* m_movement_manager;
     bool m_can_choose_alife_tasks;
+    bool m_uses_npc_planner = false;
 
 public:
     CSE_ALifeSmartZone* m_smart_terrain;

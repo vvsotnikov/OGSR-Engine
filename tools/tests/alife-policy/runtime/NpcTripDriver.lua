@@ -4,6 +4,8 @@ return function(cfg)
     local npc_id, supply_id = cfg.npc, cfg.supply
     local started, sample, moved, saved, finished, attacked, fought, released_enemy
     local switching, switched, removed, killed
+    local saw_online, saw_offline, mismatch_started, mismatch_released, elevated
+    -- Navigable anchor in the installed vanilla Bar geometry, shared with the seed.
     local home_node, source_node = 34548, nil
     local home
     local function path(name) return getFS():update_path("$app_data_root$", name) end
@@ -15,26 +17,36 @@ return function(cfg)
             assert(level.name() == "l05_bar", "Expected Bar")
             home = level.vertex_position(home_node)
             get_console():execute("g_god on")
+            level.disable_input()
+            db.actor:set_actor_position(vector():set(home.x,home.y+1.1,home.z))
+            if cfg.scenario == "natural" then alife():set_switch_distance(5) end
+            local home_graph = cross_table():vertex(home_node):game_vertex_id()
             local best = 6
             for _, direction in ipairs({{1,0},{-1,0},{0,1},{0,-1}}) do
-                local candidate = level.vertex_in_direction(home_node, vector():set(direction[1],0,direction[2]),20)
-                local distance = home:distance_to(level.vertex_position(candidate))
-                if distance > best then source_node, best = candidate, distance end
+                for _, length in ipairs(cfg.scenario == "boundary" and {20,40,60} or {20}) do
+                    local candidate = level.vertex_in_direction(home_node, vector():set(direction[1],0,direction[2]),length)
+                    local distance = home:distance_to(level.vertex_position(candidate))
+                    if distance > best and (cfg.scenario ~= "boundary" or cross_table():vertex(candidate):game_vertex_id() ~= home_graph) then source_node, best = candidate, distance end
+                end
             end
             assert(source_node, "No clear supply-trip route")
             if not npc_id then
                 local source = level.vertex_position(source_node)
-                supply_id = assert(alife():create("bandage", source, source_node, cross_table():vertex(source_node):game_vertex_id())).id
+                if cfg.scenario == "elevated" then source.y = source.y + 2 end
+                log1(string.format("[npc fixture] route home_graph=%d source_graph=%d",home_graph,cross_table():vertex(source_node):game_vertex_id()))
+                supply_id = assert(alife():create(cfg.scenario == "elevated" and "npc_trip_elevated_bandage" or "bandage", source, source_node, cross_table():vertex(source_node):game_vertex_id())).id
                 npc_id = assert(alife():create("npc_trip_stalker", home, home_node, cross_table():vertex(home_node):game_vertex_id())).id
                 assert(alife():start_supply_trip(npc_id,supply_id), "Planner enrolment rejected")
                 local file = assert(io.open(path("npc-trip-ids.lua"),"w"))
                 file:write(string.format("return {npc=%d,supply=%d}",npc_id,supply_id)); file:close()
+                if cfg.scenario == "mismatch" then alife():set_switch_online(supply_id,false) end
                 if cfg.scenario == "offline" then
                     alife():set_switch_online(npc_id,false)
                     alife():set_switch_online(supply_id,false)
                 end
             else
-                assert(alife():supply_trip_phase(npc_id) <= 2, "Restored trip is missing or already terminal")
+                local restored = alife():supply_trip_phase(npc_id)
+                assert((cfg.scenario == "fallback" and restored == -1) or (cfg.scenario == "resume" and restored >= 0 and restored <= 2), "Unexpected restored owner")
                 log1("[npc fixture] restored_pending")
             end
             log1(string.format("[npc fixture] start scenario=%s npc=%d supply=%d",cfg.scenario,npc_id,supply_id))
@@ -52,7 +64,35 @@ return function(cfg)
             get_console():execute("quit")
             return
         end
-        assert(phase <= 3, "Planner failed or NPC died: " .. phase)
+        if cfg.scenario == "fallback" then
+            assert(phase == -1, "Removed opt-in still owns the NPC")
+            if client and now-started > 3000 then
+                assert(client:is_talk_enabled(), "Ordinary dialog control was not restored")
+                log1("[npc fixture] complete scenario=fallback")
+                finished = true; get_console():execute("quit")
+            end
+            return
+        end
+        assert(phase >= 0 and phase <= 3, "Planner failed or NPC died: " .. phase)
+        if client then assert(not client:is_talk_enabled(), "Planner NPC exposes legacy dialogs") end
+        if server.online then saw_online = true elseif saw_online then saw_offline = true end
+        if cfg.scenario == "mismatch" and phase == 1 and not mismatch_released then
+            assert(server.online and not supply.online, "Expected mixed representation")
+            mismatch_started = mismatch_started or now
+            if now-mismatch_started > 6000 then
+                alife():set_switch_online(supply_id,true)
+                mismatch_released = true
+                log1("[npc fixture] mismatch_waited")
+            end
+        end
+        if cfg.scenario == "elevated" and not elevated then
+            local item = level.object_by_id(supply_id)
+            if item and item:get_physics_shell() then
+                item:get_physics_shell():freeze()
+                assert(item:position().y-level.vertex_position(source_node).y > 1.6, "Supply fell before elevated test")
+                elevated = true
+            end
+        end
         local here = client and client:position() or server.position
         if here:distance_to(home) > 2 then moved = true end
         if not sample or now-sample >= 1000 then
@@ -107,6 +147,12 @@ return function(cfg)
             end
         end
         if phase == 3 then
+            if cfg.scenario == "natural" then
+                assert(saw_online and saw_offline, "No natural representation transition")
+                if not client or not server.online then return end
+            end
+            if cfg.scenario == "mismatch" then assert(mismatch_released, "Mixed pickup was not exercised") end
+            if cfg.scenario == "elevated" then assert(elevated, "Missing elevated supply") end
             assert(cfg.scenario ~= "missing" and cfg.scenario ~= "death", "Unexpected successful trip")
             assert(moved or cfg.scenario == "resume", "NPC never left home")
             assert(supply.parent_id == npc_id, "Completed without owning supply")

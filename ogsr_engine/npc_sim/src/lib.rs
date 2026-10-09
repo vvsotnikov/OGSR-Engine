@@ -1,7 +1,5 @@
-//! Persistent supply-trip decisions. The host supplies observations and executes
-//! commands; this crate never moves an entity or changes an inventory itself.
+//! Persistent intentions and policy. The host reports facts and executes commands.
 #![deny(unsafe_op_in_unsafe_fn)]
-
 mod ffi;
 
 #[repr(C)]
@@ -9,17 +7,28 @@ mod ffi;
 pub struct Location {
     pub game_vertex: u32,
     pub level_vertex: u32,
+    pub level: u32,
     pub position: [f32; 3],
 }
-
 impl Location {
     fn valid(self) -> bool {
         self.game_vertex < u16::MAX.into()
             && self.level_vertex != u32::MAX
+            && self.level < u16::MAX.into()
             && self.position.iter().all(|x| x.is_finite())
     }
+    fn distance(self, other: Self) -> f32 {
+        self.position
+            .iter()
+            .zip(other.position)
+            .map(|(a, b)| (a - b) * (a - b))
+            .sum::<f32>()
+            .sqrt()
+    }
+    fn near(self, other: Self, radius: f32) -> bool {
+        self.level == other.level && self.distance(other) <= radius
+    }
 }
-
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Phase {
@@ -30,33 +39,32 @@ pub enum Phase {
     Failed = 4,
     Dead = 5,
 }
-
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Supply {
-    Unknown = 0,
-    Available = 1,
+    Missing = 0,
+    Free = 1,
     Owned = 2,
-    Unavailable = 3,
+    OtherOwner = 3,
 }
-
 #[derive(Clone, Copy, Debug)]
 pub struct Observation {
-    pub at_source: bool,
-    pub at_home: bool,
+    pub current: Location,
+    pub supply_location: Location,
     pub supply: Supply,
+    pub representation_ready: bool,
+    pub pickup_pending: bool,
+    pub path_blocked: bool,
+    pub elapsed_ms: u32,
     pub interrupted: bool,
     pub alive: bool,
-    pub execution_failed: bool,
 }
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Action {
     Wait,
     Travel(Location),
     Collect,
 }
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Decision {
     pub identity: u64,
@@ -65,7 +73,6 @@ pub struct Decision {
     pub interrupted: bool,
     pub action: Action,
 }
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct Plan {
     identity: u64,
@@ -74,61 +81,108 @@ pub struct Plan {
     source: Location,
     phase: Phase,
     interrupted: bool,
+    stalled_ms: u32,
+    pickup_ms: u32,
+    best_distance: f32,
 }
-
+const TRAVEL_STALL_MS: u32 = 60_000;
+const PICKUP_TIMEOUT_MS: u32 = 5_000;
 impl Plan {
     pub fn new(identity: u64, home: Location, source: Location) -> Option<Self> {
-        (identity != 0 && home.valid() && source.valid()).then_some(Self {
-            identity,
-            command: 1,
-            home,
-            source,
-            phase: Phase::Outbound,
-            interrupted: false,
-        })
+        (identity != 0 && home.valid() && source.valid() && home.level == source.level).then_some(
+            Self {
+                identity,
+                command: 1,
+                home,
+                source,
+                phase: Phase::Outbound,
+                interrupted: false,
+                stalled_ms: 0,
+                pickup_ms: 0,
+                best_distance: f32::MAX,
+            },
+        )
     }
-
     fn transition(&mut self, phase: Phase) {
         if self.phase != phase {
-            // Repeated observations do not create new commands. Being displaced
-            // before collection can return to travel, with a new command number.
-            match self.command.checked_add(1) {
-                Some(command) => {
-                    self.command = command;
-                    self.phase = phase;
-                }
-                None => self.phase = Phase::Failed,
+            if let Some(command) = self.command.checked_add(1) {
+                self.command = command;
+                self.phase = phase;
+            } else {
+                self.phase = Phase::Failed;
             }
+            self.stalled_ms = 0;
+            self.pickup_ms = 0;
+            self.best_distance = f32::MAX;
         }
     }
-
     pub fn step(&mut self, observation: Observation) -> Decision {
-        self.interrupted = observation.interrupted;
-        if !observation.alive {
+        let o = observation;
+        self.interrupted = o.interrupted;
+        if !o.alive {
             self.transition(Phase::Dead);
         } else if !matches!(self.phase, Phase::Complete | Phase::Failed | Phase::Dead) {
-            if observation.execution_failed
-                || (self.phase == Phase::Returning && observation.supply != Supply::Owned)
-            {
+            // Own inventory is always knowable. Remote supply facts are consumed
+            // only at the remembered destination, never to chase an unseen item.
+            if self.phase == Phase::Returning && o.supply != Supply::Owned {
                 self.transition(Phase::Failed);
-            } else if observation.supply == Supply::Owned {
+            } else if o.supply == Supply::Owned {
                 self.transition(Phase::Returning);
-                if observation.at_home {
+                if o.current.near(self.home, 1.5) {
                     self.transition(Phase::Complete);
                 }
-            } else if !observation.at_source {
+            } else if !o.current.near(self.source, 1.5) {
                 self.transition(Phase::Outbound);
+            } else if o.supply != Supply::Free || !o.current.near(o.supply_location, 2.5) {
+                self.transition(Phase::Failed);
             } else {
-                if observation.supply == Supply::Unavailable {
-                    self.transition(Phase::Failed);
-                } else if observation.supply == Supply::Available {
-                    self.transition(Phase::Collecting);
-                }
+                self.transition(Phase::Collecting);
             }
         }
-        self.decision()
+        let mut decision = self.decision();
+        if o.interrupted {
+            return decision;
+        }
+        match decision.action {
+            Action::Travel(target) => {
+                let distance = o.current.distance(target);
+                if distance + 0.25 < self.best_distance {
+                    self.best_distance = distance;
+                    self.stalled_ms = 0;
+                } else {
+                    self.stalled_ms = self
+                        .stalled_ms
+                        .saturating_add(o.elapsed_ms)
+                        .min(TRAVEL_STALL_MS);
+                }
+                if o.path_blocked || self.stalled_ms >= TRAVEL_STALL_MS {
+                    self.transition(Phase::Failed);
+                    decision = self.decision();
+                }
+            }
+            Action::Collect => {
+                if !o.representation_ready {
+                    decision.action = Action::Wait;
+                } else if o.pickup_pending {
+                    self.pickup_ms = self
+                        .pickup_ms
+                        .saturating_add(o.elapsed_ms)
+                        .min(PICKUP_TIMEOUT_MS);
+                    decision.action = Action::Wait;
+                    if self.pickup_ms >= PICKUP_TIMEOUT_MS {
+                        self.transition(Phase::Failed);
+                        decision = self.decision();
+                    }
+                } else {
+                    self.pickup_ms = 0;
+                }
+            }
+            Action::Wait => {}
+        }
+        decision
     }
-
+    // Status is not an executable command. Only step() incorporates the current
+    // representation, pending request and clock observations into its action.
     pub fn decision(&self) -> Decision {
         Decision {
             identity: self.identity,
@@ -147,28 +201,30 @@ impl Plan {
             },
         }
     }
-
-    // Fixed, versioned wire format: no Rust layouts, engine IDs, pointers or
-    // padding are persisted. The outer engine save binds identity to its objects.
-    pub const SNAPSHOT_SIZE: usize = 4 + 8 + 8 + 20 + 20 + 4 + 4;
-
+    pub const SNAPSHOT_SIZE: usize = 84;
     pub fn save(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(Self::SNAPSHOT_SIZE);
-        bytes.extend_from_slice(&1u32.to_le_bytes());
+        bytes.extend_from_slice(&2u32.to_le_bytes());
         bytes.extend_from_slice(&self.identity.to_le_bytes());
         bytes.extend_from_slice(&self.command.to_le_bytes());
         for location in [self.home, self.source] {
-            bytes.extend_from_slice(&location.game_vertex.to_le_bytes());
-            bytes.extend_from_slice(&location.level_vertex.to_le_bytes());
-            for coordinate in location.position {
-                bytes.extend_from_slice(&coordinate.to_le_bytes());
+            for value in [location.game_vertex, location.level_vertex, location.level] {
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+            for value in location.position {
+                bytes.extend_from_slice(&value.to_le_bytes());
             }
         }
-        bytes.extend_from_slice(&(self.phase as u32).to_le_bytes());
-        bytes.extend_from_slice(&u32::from(self.interrupted).to_le_bytes());
+        for value in [
+            self.phase as u32,
+            self.stalled_ms,
+            self.pickup_ms,
+            self.best_distance.to_bits(),
+        ] {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
         bytes
     }
-
     pub fn load(bytes: &[u8]) -> Option<Self> {
         if bytes.len() != Self::SNAPSHOT_SIZE {
             return None;
@@ -179,7 +235,7 @@ impl Plan {
             *cursor += N;
             value
         }
-        if u32::from_le_bytes(read(bytes, &mut cursor)) != 1 {
+        if u32::from_le_bytes(read(bytes, &mut cursor)) != 2 {
             return None;
         }
         let identity = u64::from_le_bytes(read(bytes, &mut cursor));
@@ -187,6 +243,7 @@ impl Plan {
         let mut location = || Location {
             game_vertex: u32::from_le_bytes(read(bytes, &mut cursor)),
             level_vertex: u32::from_le_bytes(read(bytes, &mut cursor)),
+            level: u32::from_le_bytes(read(bytes, &mut cursor)),
             position: std::array::from_fn(|_| f32::from_le_bytes(read(bytes, &mut cursor))),
         };
         let home = location();
@@ -200,18 +257,23 @@ impl Plan {
             5 => Phase::Dead,
             _ => return None,
         };
-        let interrupted = match u32::from_le_bytes(read(bytes, &mut cursor)) {
-            0 => false,
-            1 => true,
-            _ => return None,
-        };
-        if command == 0 {
+        let stalled_ms = u32::from_le_bytes(read(bytes, &mut cursor));
+        let pickup_ms = u32::from_le_bytes(read(bytes, &mut cursor));
+        let best_distance = f32::from_le_bytes(read(bytes, &mut cursor));
+        if command == 0
+            || stalled_ms > TRAVEL_STALL_MS
+            || pickup_ms > PICKUP_TIMEOUT_MS
+            || !best_distance.is_finite()
+            || best_distance < 0.0
+        {
             return None;
         }
         let mut plan = Self::new(identity, home, source)?;
         plan.command = command;
         plan.phase = phase;
-        plan.interrupted = interrupted;
+        plan.stalled_ms = stalled_ms;
+        plan.pickup_ms = pickup_ms;
+        plan.best_distance = best_distance;
         Some(plan)
     }
 }

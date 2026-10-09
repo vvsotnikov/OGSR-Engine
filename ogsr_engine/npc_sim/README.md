@@ -1,49 +1,49 @@
 # NPC intentions
 
-A plan belongs to a server NPC, not its temporary online object. The Rust core
-receives observations and returns travel/collect/wait decisions. It cannot
-access engine objects or mutate inventory. The C++ adapter executes through the
-existing movement managers and ownership operations; only observed ownership
-advances collection to the return journey.
+Rust owns arrival, knowledge use, pickup waiting and travel-failure policy. The
+host reports world facts and elapsed time, projects navigation positions through
+the engine, and executes movement/ownership commands. Remote supply facts are
+consumed only at the remembered destination; own inventory is always observable.
+The saved destination is a navigation point, distinct from the physical item.
+A different game vertex on the same level does not prevent arrival.
 
 `npc_planner = supply_trip` reserves a stalker section for this owner **from
-spawn**, before a trip exists. Its normal client Lua binder and smart-terrain
-selection are therefore disabled. Do not put this setting on campaign or generic
-stalker sections. Ordinary sections retain their existing behavior. Enrolment
-rejects story NPCs, group members, smart-terrain occupants and scripted control.
-A failed or finished trip remains owned and idle; it does not silently rejoin
-legacy jobs.
+spawn**, before a trip exists. Its entire client Lua binder and smart-terrain
+selection are disabled, including binder-driven callbacks. Legacy dialog/trade
+entry points are disabled too, because those scripts require binder state. Use a
+dedicated experimental section, not a campaign or generic stalker section.
+Ordinary sections retain their behavior. Enrolment rejects story NPCs, group
+members, smart-terrain occupants, scripted control and destinations outside the
+loaded level. Completed/failed trips remain owned and idle. Removing the opt-in
+between sessions discards the saved plan and restores ordinary NPC control;
+the native client save marks the absent Lua payload so a newly enabled binder
+initializes instead of reading nonexistent script state. Corrupt save records
+and dangling saved object references remain errors.
 
-Engine object IDs can change during representation switches. Runtime bindings
-use the server objects, while saves bind the Rust identity and intention to the
-IDs in that same save. Removing an object clears these bindings before its
-callbacks run. No Rust pointer or struct layout is serialized. Saves without the
-optional NPC chunk contain no enrolled plans. A saved plan requires its section
-to retain the opt-in setting; loading rejects a conflicting configuration instead
-of allowing both the Lua binder and Rust planner to control the same NPC.
+Engine IDs can change during representation switches. Runtime bindings use the
+server objects; saves bind durable identities to IDs from that same save and
+write plans in identity order. Removing an object clears bindings before its
+callbacks run. Rust layouts and pointers are never persisted. The outer save
+version describes engine bindings; the inner version describes Rust state.
+Saves without the optional chunk contain no enrolled plans.
 
-Calls on a plan must be serialized by the host. The core does not introduce a
-worker or alter the engine scheduler. Allocation never crosses ownership: Rust
-creates/destroys plans; the host owns observation, decision and save buffers.
+A command number identifies one phase execution. The host sends at most one
+pickup event for that command. Displacement creates a new command, permitting a
+retry; an already queued event can still complete and must be observed. After
+reload, pending network requests are reissued only if ownership is not already
+confirmed. Rust owns the timeout; neither combat nor a representation mismatch
+charges it. Travel progress and timeout state persist, while absolute engine
+clock values and the current interruption flag do not.
 
-The first behavior is an explicitly assigned trip to a known existing item, not
-a needs model or autonomous resource discovery. Remote item changes are not
-revealed until the NPC reaches the remembered destination. Mixed online/offline
-pickup is rejected, rather than forcing either object's representation or
-creating a replacement item. Combat and danger take priority through the native
-stalker planner; they interrupt execution without replacing the trip.
+Calls on each plan must be serialized. The adapter runs in the existing game /
+ALife update phases; it does not add a worker. Allocation never crosses ownership:
+Rust creates/destroys plans; C++ owns observation, decision and save buffers.
+Only `step` produces executable decisions; status queries are not commands.
 
-## Running the native check
-
-Use `tools/tests/alife-policy/runtime/Run-NpcTrip.ps1` with an existing validation
-installation and a package whose `build.json` matches its executable. Scenarios
-are `basic`, `interrupt`, `offline`, `switch`, `missing`, `death`, `save`, and
-`resume`; pass the
-completed save session as `-ResumeSession` for the last one. The runner creates a
-private configuration and appdata directory. Its Lua driver only sets up and
-observes the scenario: it never moves the NPC or awards the supply. The interruption
-case changes the actor's position and hostility to stimulate native combat.
-
-Rust tests run in the existing Cargo workspace and mandatory local validation.
-Native gameplay checks require the original game assets and an available input
-device; they are not replaced by the headless tests.
+The native runner is `tools/tests/alife-policy/runtime/Run-NpcTrip.ps1`. It uses a
+private configuration and appdata directory, original game assets, a matching
+`build.json` package and an available input device. Its Lua driver never moves
+the NPC or awards inventory. Test setup may change actor position/hostility,
+item representation or physics, or remove a resource. Use `-Mode distance` with
+`-Scenario natural` to exercise radius switching without permission overrides.
+Rust tests directly exercise the same core used by the game.

@@ -47,11 +47,11 @@ SPAWN_STORY_PAIRS spawn_story_ids;
 
 bool start_supply_trip(CALifeSimulator* simulator, u16 npc, u16 supply)
 {
-    return simulator->npc_simulation().enroll(npc, supply);
+    return simulator->initialized() && !simulator->is_unloading() && simulator->npc_simulation().enroll(npc, supply);
 }
-u32 supply_trip_phase(CALifeSimulator* simulator, u16 npc)
+int supply_trip_phase(CALifeSimulator* simulator, u16 npc)
 {
-    return simulator->npc_simulation().phase(npc);
+    return simulator->initialized() && !simulator->is_unloading() ? simulator->npc_simulation().phase(npc) : -1;
 }
 
 CALifeSimulator* alife() { return (const_cast<CALifeSimulator*>(ai().get_alife())); }
@@ -415,8 +415,8 @@ void CALifeSimulator::script_register(lua_State* L)
                   .def("level_name", &get_level_name)
                   .def("objects", &alife_objects, return_stl_pair_iterator)
                   .def("start_supply_trip", &start_supply_trip)
-            .def("supply_trip_phase", &supply_trip_phase)
-            .def("object", (CSE_ALifeDynamicObject * (*)(const CALifeSimulator*, ALife::_OBJECT_ID))(alife_object))
+                  .def("supply_trip_phase", &supply_trip_phase)
+                  .def("object", (CSE_ALifeDynamicObject * (*)(const CALifeSimulator*, ALife::_OBJECT_ID))(alife_object))
                   .def("object", (CSE_ALifeDynamicObject * (*)(const CALifeSimulator*, LPCSTR))(alife_object))
                   .def("object", (CSE_ALifeDynamicObject * (*)(const CALifeSimulator*, ALife::_OBJECT_ID, bool))(alife_object))
                   .def("is_unloading", &is_unloading)

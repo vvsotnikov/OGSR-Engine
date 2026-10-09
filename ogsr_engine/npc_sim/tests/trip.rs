@@ -1,152 +1,307 @@
 use npc_sim::{Action, Location, Observation, Phase, Plan, Supply};
-
 const HOME: Location = Location {
     game_vertex: 1,
     level_vertex: 10,
+    level: 0,
     position: [0., 0., 0.],
 };
 const SOURCE: Location = Location {
     game_vertex: 2,
     level_vertex: 20,
+    level: 0,
     position: [30., 0., 0.],
 };
 fn observation() -> Observation {
     Observation {
-        at_source: false,
-        at_home: false,
-        supply: Supply::Unknown,
+        current: HOME,
+        supply_location: SOURCE,
+        supply: Supply::Free,
+        representation_ready: true,
+        pickup_pending: false,
+        path_blocked: false,
+        elapsed_ms: 0,
         interrupted: false,
         alive: true,
-        execution_failed: false,
     }
 }
-
+fn at_source() -> Observation {
+    Observation {
+        current: SOURCE,
+        ..observation()
+    }
+}
+fn plan() -> Plan {
+    Plan::new(123, HOME, SOURCE).unwrap()
+}
 #[test]
-fn trip_waits_for_inventory_confirmation_and_survives_interruption() {
-    let mut plan = Plan::new(1234, HOME, SOURCE).unwrap();
-    let walking = plan.step(observation());
+fn trip_confirms_actual_ownership_and_resumes_after_interruption() {
+    let mut p = plan();
+    let walking = p.step(observation());
     assert_eq!(walking.action, Action::Travel(SOURCE));
-    let pause = plan.step(Observation {
+    let paused = p.step(Observation {
         interrupted: true,
+        elapsed_ms: 120_000,
         ..observation()
     });
-    assert_eq!(pause.action, Action::Wait);
-    assert_eq!(pause.command, walking.command);
-    let mut plan = Plan::load(&plan.save()).unwrap();
-    assert_eq!(plan.decision(), pause);
-    assert_eq!(plan.step(observation()), walking);
-    let at_source = Observation {
-        at_source: true,
-        supply: Supply::Available,
-        ..observation()
-    };
-    let collect = plan.step(at_source);
-    assert_eq!(collect.action, Action::Collect);
-    assert_eq!(plan.step(at_source), collect); // no optimistic inventory update
-    let returning = plan.step(Observation {
-        supply: Supply::Owned,
-        ..observation()
-    });
-    assert_eq!(returning.action, Action::Travel(HOME));
-    assert!(returning.command > collect.command);
+    assert_eq!(paused.action, Action::Wait);
+    assert_eq!(paused.command, walking.command);
+    let mut p = Plan::load(&p.save()).unwrap();
+    assert_eq!(p.step(observation()), walking);
+    assert_eq!(p.step(at_source()).action, Action::Collect);
     assert_eq!(
-        plan.step(Observation {
-            at_home: true,
+        p.step(Observation {
+            pickup_pending: true,
+            elapsed_ms: 100,
+            ..at_source()
+        })
+        .action,
+        Action::Wait
+    );
+    assert_eq!(
+        p.step(Observation {
+            supply: Supply::Owned,
+            ..at_source()
+        })
+        .action,
+        Action::Travel(HOME)
+    );
+    assert_eq!(
+        p.step(Observation {
             supply: Supply::Owned,
             ..observation()
         })
         .phase,
         Phase::Complete
     );
-    assert_eq!(plan.step(observation()).phase, Phase::Complete);
 }
-
 #[test]
-fn serialized_replay_matches_uninterrupted_decisions_at_every_boundary() {
-    let events = [
+fn serialized_replay_matches_every_observation_boundary() {
+    let observations = [
         observation(),
+        Observation {
+            elapsed_ms: 1000,
+            ..observation()
+        },
         Observation {
             interrupted: true,
             ..observation()
         },
-        observation(),
+        at_source(),
         Observation {
-            at_source: true,
-            supply: Supply::Available,
-            ..observation()
+            pickup_pending: true,
+            elapsed_ms: 300,
+            ..at_source()
         },
         Observation {
-            at_source: true,
+            representation_ready: false,
+            pickup_pending: true,
+            elapsed_ms: 60_000,
+            ..at_source()
+        },
+        Observation {
             supply: Supply::Owned,
-            interrupted: true,
-            ..observation()
+            ..at_source()
         },
         Observation {
-            supply: Supply::Owned,
-            ..observation()
-        },
-        Observation {
-            at_home: true,
             supply: Supply::Owned,
             ..observation()
         },
     ];
-    let mut baseline = Plan::new(42, HOME, SOURCE).unwrap();
-    let expected: Vec<_> = events.iter().map(|&e| baseline.step(e)).collect();
-    for boundary in 0..=events.len() {
-        let mut plan = Plan::new(42, HOME, SOURCE).unwrap();
-        for &event in &events[..boundary] {
-            plan.step(event);
-        }
-        let mut restored = Plan::load(&plan.save()).unwrap();
-        let actual: Vec<_> = events[boundary..]
-            .iter()
-            .map(|&e| restored.step(e))
-            .collect();
-        assert_eq!(actual, expected[boundary..]);
+    let mut original = plan();
+    let mut restored = plan();
+    for input in observations {
+        assert_eq!(original.step(input), restored.step(input));
+        restored = Plan::load(&restored.save()).unwrap();
     }
 }
-
 #[test]
-fn unavailable_supply_is_discovered_at_destination_not_omnisciently() {
-    let mut plan = Plan::new(1, HOME, SOURCE).unwrap();
+fn remote_world_facts_do_not_become_npc_knowledge() {
+    for supply in [Supply::Missing, Supply::OtherOwner, Supply::Free] {
+        let mut p = plan();
+        assert_eq!(
+            p.step(Observation {
+                supply,
+                ..observation()
+            })
+            .action,
+            Action::Travel(SOURCE)
+        );
+        if supply != Supply::Free {
+            assert_eq!(
+                p.step(Observation {
+                    supply,
+                    ..at_source()
+                })
+                .phase,
+                Phase::Failed
+            );
+        }
+    }
+}
+#[test]
+fn representation_mismatch_waits_without_starting_or_charging_pickup_timeout() {
+    let mut p = plan();
+    for _ in 0..3 {
+        assert_eq!(
+            p.step(Observation {
+                representation_ready: false,
+                elapsed_ms: 60_000,
+                ..at_source()
+            })
+            .action,
+            Action::Wait
+        );
+    }
+    assert_eq!(p.step(at_source()).action, Action::Collect);
     assert_eq!(
-        plan.step(Observation {
-            supply: Supply::Unavailable,
+        p.step(Observation {
+            representation_ready: false,
+            pickup_pending: true,
+            elapsed_ms: 60_000,
+            ..at_source()
+        })
+        .phase,
+        Phase::Collecting
+    );
+    assert_eq!(
+        p.step(Observation {
+            pickup_pending: true,
+            elapsed_ms: 100,
+            ..at_source()
+        })
+        .action,
+        Action::Wait
+    );
+    assert_eq!(
+        p.step(Observation {
+            supply: Supply::Owned,
+            ..at_source()
+        })
+        .phase,
+        Phase::Returning
+    );
+}
+#[test]
+fn displacement_changes_command_so_the_executor_can_retry() {
+    let mut p = plan();
+    let first = p.step(at_source());
+    let displaced = p.step(Observation {
+        pickup_pending: true,
+        ..observation()
+    });
+    assert_eq!(displaced.action, Action::Travel(SOURCE));
+    let retry = p.step(at_source());
+    assert_eq!(retry.action, Action::Collect);
+    assert!(retry.command > first.command);
+    // An already sent ownership event may complete even after displacement.
+    assert_eq!(
+        p.step(Observation {
+            supply: Supply::Owned,
             ..observation()
         })
         .phase,
-        Phase::Outbound
+        Phase::Complete
+    );
+}
+#[test]
+fn pickup_timeout_requires_an_uninterrupted_pending_request() {
+    let mut p = plan();
+    p.step(at_source());
+    p.step(Observation {
+        pickup_pending: true,
+        elapsed_ms: 4000,
+        ..at_source()
+    });
+    p.step(Observation {
+        pickup_pending: true,
+        interrupted: true,
+        elapsed_ms: 30_000,
+        ..at_source()
+    });
+    assert_eq!(
+        p.step(Observation {
+            pickup_pending: true,
+            elapsed_ms: 999,
+            ..at_source()
+        })
+        .phase,
+        Phase::Collecting
     );
     assert_eq!(
-        plan.step(Observation {
-            at_source: true,
-            supply: Supply::Unavailable,
-            ..observation()
+        p.step(Observation {
+            pickup_pending: true,
+            elapsed_ms: 1,
+            ..at_source()
         })
         .phase,
         Phase::Failed
     );
 }
-
 #[test]
-fn displacement_reissues_travel_without_collecting_remotely() {
-    let mut plan = Plan::new(1, HOME, SOURCE).unwrap();
-    let collect = plan.step(Observation {
-        at_source: true,
-        supply: Supply::Available,
+fn stalled_travel_is_bounded_and_timer_survives_reload() {
+    let mut p = plan();
+    p.step(observation());
+    p.step(Observation {
+        elapsed_ms: 20_000,
         ..observation()
     });
-    let displaced = plan.step(observation());
-    assert_eq!(displaced.action, Action::Travel(SOURCE));
-    assert!(displaced.command > collect.command);
+    let mut p = Plan::load(&p.save()).unwrap();
+    assert_eq!(
+        p.step(Observation {
+            elapsed_ms: 40_000,
+            ..observation()
+        })
+        .phase,
+        Phase::Failed
+    );
+    let mut moving = plan();
+    moving.step(observation());
+    moving.step(Observation {
+        elapsed_ms: 50_000,
+        ..observation()
+    });
+    let progressed = Location {
+        position: [1., 0., 0.],
+        ..HOME
+    };
+    assert_eq!(
+        moving
+            .step(Observation {
+                current: progressed,
+                elapsed_ms: 20_000,
+                ..observation()
+            })
+            .phase,
+        Phase::Outbound
+    );
 }
-
 #[test]
-fn loss_execution_failure_and_death_stop_the_trip() {
+fn graph_boundary_does_not_prevent_arrival_and_elevated_item_uses_ground_target() {
+    let mut p = plan();
+    let current = Location {
+        game_vertex: 1,
+        ..SOURCE
+    };
+    let item = Location {
+        position: [30., 2., 0.],
+        ..SOURCE
+    };
+    assert_eq!(
+        p.step(Observation {
+            current,
+            supply_location: item,
+            ..at_source()
+        })
+        .action,
+        Action::Collect
+    );
+    assert!(Plan::new(1, HOME, Location { level: 1, ..SOURCE }).is_none());
+}
+#[test]
+fn loss_blocked_path_and_death_terminate_without_fabricating_success() {
     for event in [
         Observation {
-            execution_failed: true,
+            path_blocked: true,
             ..observation()
         },
         Observation {
@@ -154,28 +309,28 @@ fn loss_execution_failure_and_death_stop_the_trip() {
             ..observation()
         },
     ] {
-        let mut plan = Plan::new(1, HOME, SOURCE).unwrap();
-        assert_eq!(plan.step(event).action, Action::Wait);
-        assert_eq!(plan.step(observation()).action, Action::Wait);
+        let mut p = plan();
+        assert_eq!(p.step(event).action, Action::Wait);
+        assert_eq!(p.step(observation()).action, Action::Wait);
     }
-    let mut plan = Plan::new(1, HOME, SOURCE).unwrap();
-    plan.step(Observation {
+    let mut p = plan();
+    p.step(Observation {
         supply: Supply::Owned,
-        ..observation()
+        ..at_source()
     });
-    assert_eq!(plan.step(observation()).phase, Phase::Failed);
+    assert_eq!(p.step(observation()).phase, Phase::Failed);
 }
-
 #[test]
 fn malformed_snapshots_are_rejected() {
-    let snapshot = Plan::new(1, HOME, SOURCE).unwrap().save();
+    let snapshot = plan().save();
+    assert_eq!(snapshot.len(), Plan::SNAPSHOT_SIZE);
     for length in 0..snapshot.len() {
         assert!(Plan::load(&snapshot[..length]).is_none());
     }
     let mut extra = snapshot.clone();
     extra.push(0);
     assert!(Plan::load(&extra).is_none());
-    for offset in [0, 4, 12, 20, 60, 64] {
+    for offset in [0, 4, 12, 20, 28, 68, 72, 76, 80] {
         let mut invalid = snapshot.clone();
         match offset {
             4 | 12 => invalid[offset..offset + 8].fill(0),
