@@ -7,6 +7,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #pragma once
+#include "alife_service_trace.h"
 
 IC void CALifeObjectRegistry::add(CSE_ALifeDynamicObject* object)
 {
@@ -17,6 +18,7 @@ IC void CALifeObjectRegistry::add(CSE_ALifeDynamicObject* object)
     }
 
     m_objects.insert(std::make_pair(object->ID, object));
+    alife_service_trace::object("register", object);
 }
 
 IC void CALifeObjectRegistry::remove(const ALife::_OBJECT_ID& id, bool no_assert)
@@ -28,6 +30,7 @@ IC void CALifeObjectRegistry::remove(const ALife::_OBJECT_ID& id, bool no_assert
         return;
     }
 
+    alife_service_trace::event("remove", id);
     m_objects.erase(I);
 }
 

@@ -4,6 +4,7 @@ use std::{
     path::Path,
 };
 
+pub mod service_trace;
 pub mod snapshot;
 
 /// Keep the handle alive for the entire validation. The OS releases the lock

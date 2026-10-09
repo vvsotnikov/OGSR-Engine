@@ -7,6 +7,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
+#include "alife_service_trace.h"
 #include "alife_update_manager.h"
 #include "alife_simulator_header.h"
 #include "alife_time_manager.h"
@@ -78,7 +79,24 @@ float CALifeUpdateManager::shedule_Scale()
 void CALifeUpdateManager::update_switch()
 {
     init_ef_storage();
+    const bool trace = alife_service_trace::enabled.load(std::memory_order_relaxed);
+    if (trace)
+    {
+        alife_service_trace::record("clock", 65535, Device.dwTimeGlobal, Device.dwFrame);
+        alife_service_trace::record("scheduler", 65535,
+            (std::uint64_t(shedule.t_min) << 32) | std::uint64_t(shedule.t_max), m_objects_per_update, alife_service_trace::Cache::Scheduler);
+        alife_service_trace::record("settings", graph().level().level_id(),
+            std::uint64_t(std::int64_t(graph().level().time_limit_ms() * 1000.0)),
+            (uses_distance_switching() ? 0u : 1u) | (g_mt_config.test(mtALife) ? 2u : 0u), alife_service_trace::Cache::Settings);
+        alife_service_trace::record("update");
+    }
 
+    const auto switch_slice = [this, trace] {
+        if (trace) alife_service_trace::record("slice_begin", 65535, 0, u32(graph().level().objects().size()));
+        const u32 visited = graph().level().update(CSwitchPredicate(this));
+        if (trace) alife_service_trace::record("slice_end", 65535, visited, u32(graph().level().objects().size()));
+        return visited;
+    };
     START_PROFILE("ALife/switch");
     if (m_reconcile_metrics)
     {
@@ -86,11 +104,11 @@ void CALifeUpdateManager::update_switch()
         CTimer reconcile_timer;
         reconcile_timer.Start();
         const double budget_ms = graph().level().time_limit_ms();
-        const u32 visited = graph().level().update(CSwitchPredicate(this));
+        const u32 visited = switch_slice();
         finish_reconciliation(reconcile_timer.GetElapsed_sec() * 1000.0, budget_ms, visited);
     }
     else
-        graph().level().update(CSwitchPredicate(this));
+        switch_slice();
     STOP_PROFILE
 }
 
@@ -349,6 +367,7 @@ void CALifeUpdateManager::set_switch_online(ALife::_OBJECT_ID id, bool value)
     CSE_ALifeDynamicObject* object = objects().object(id);
     VERIFY(object);
     object->can_switch_online(value);
+    alife_service_trace::object(value ? "permission_on" : "permission_off", object);
 }
 
 void CALifeUpdateManager::set_switch_offline(ALife::_OBJECT_ID id, bool value)
@@ -356,6 +375,7 @@ void CALifeUpdateManager::set_switch_offline(ALife::_OBJECT_ID id, bool value)
     CSE_ALifeDynamicObject* object = objects().object(id);
     VERIFY(object);
     object->can_switch_offline(value);
+    alife_service_trace::object("offline_permission", object);
 }
 
 void CALifeUpdateManager::set_interactive(ALife::_OBJECT_ID id, bool value)

@@ -7,6 +7,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
+#include "alife_service_trace.h"
 #include "alife_simulator_base.h"
 #include "alife_simulator_header.h"
 #include "alife_time_manager.h"
@@ -47,6 +48,7 @@ void CALifeSimulatorBase::destroy() { unload(); }
 
 void CALifeSimulatorBase::unload()
 {
+    alife_service_trace::end();
     m_unloading = true;
     xr_delete(m_objects);
     xr_delete(m_header);
@@ -67,6 +69,7 @@ void CALifeSimulatorBase::reload(LPCSTR section)
     m_header = xr_new<CALifeSimulatorHeader>(section);
     m_time_manager = xr_new<CALifeTimeManager>(section);
     m_spawns = xr_new<CALifeSpawnRegistry>(section);
+    alife_service_trace::begin();
     m_objects = xr_new<CALifeObjectRegistry>(section);
     m_graph_objects = xr_new<CALifeGraphRegistry>();
     m_scheduled = xr_new<CALifeScheduleRegistry>();

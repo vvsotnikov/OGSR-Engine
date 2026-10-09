@@ -564,6 +564,7 @@
     <ClInclude Include="alife_surge_manager.h" />
     <ClInclude Include="alife_surge_manager_inline.h" />
     <ClInclude Include="alife_diagnostics.h" />
+    <ClInclude Include="alife_service_trace.h" />
     <ClInclude Include="alife_switch_policy.h" />
     <ClInclude Include="alife_switch_manager.h" />
     <ClInclude Include="alife_switch_manager_inline.h" />
@@ -1648,6 +1649,7 @@
     <ClCompile Include="alife_graph_registry.cpp" />
     <ClCompile Include="alife_group_registry.cpp" />
     <ClCompile Include="alife_object_registry.cpp" />
+    <ClCompile Include="alife_service_trace.cpp" />
     <ClCompile Include="alife_schedule_registry.cpp" />
     <ClCompile Include="alife_smart_terrain_registry.cpp" />
     <ClCompile Include="alife_spawn_registry.cpp" />

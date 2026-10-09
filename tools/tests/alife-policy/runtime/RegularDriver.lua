@@ -34,13 +34,17 @@ return function(cfg)
     end, now, cfg.budget_ms, cfg.budget_ms > 0 and 8 or 400)
     local stage, deadline, last_frame, sample = 0, 0, nil, 0
     local creation_start, creation_end, work_total, all_online = nil, nil, 0, false
+    local frames, previous_time = {}, nil
     local function tick()
         local d = device()
         if not db.actor or not app_ready() or d.precache_frame ~= 0 then return end
         if d.frame == last_frame then return end
-        assert(not d:is_paused() and db.actor:alive(), "Paused or dead actor")
+        assert(not d:is_paused(), "Paused actor")
+        assert(db.actor:alive(), "Dead actor")
         if eligibility and not eligibility() then return end
         local time = now()
+        if cfg.frame_times and previous_time then frames[#frames+1] = {d.frame, d:time_global(), stage, time-previous_time} end
+        previous_time = time
         if stage == 0 then
             assert(level.name() == "l05_bar", "Wrong map")
             stage, deadline = 1, time + 15000
@@ -70,6 +74,12 @@ return function(cfg)
             log1("[regular] measure_end")
             if cfg.verify_ids and #cfg.verify_ids > 0 then log1("[regular] verified_restored count=" .. #cfg.verify_ids) end
             populations:close()
+            if cfg.frame_times then
+                local output = assert(io.open(path("regular-frames.csv"), "w"))
+                output:write("frame,game_ms,stage,wall_ms\n")
+                for _,row in ipairs(frames) do output:write(string.format("%d,%d,%d,%.6f\n", unpack(row))) end
+                output:close()
+            end
             if cfg.save then get_console():execute("save regular_validation") end
             get_console():execute("quit")
             return

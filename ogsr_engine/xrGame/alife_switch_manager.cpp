@@ -7,6 +7,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
+#include "alife_service_trace.h"
 #include "alife_switch_policy.h"
 #include "alife_switch_manager.h"
 #include "xrServer_Objects_ALife.h"
@@ -52,6 +53,7 @@ void CALifeSwitchManager::add_online(CSE_ALifeDynamicObject* object, bool update
     VERIFY((ai().game_graph().vertex(object->m_tGraphID)->level_id() == graph().level().level_id()));
 
     object->m_bOnline = true;
+    alife_service_trace::event("online", object->ID);
 
     NET_Packet tNetPacket;
     CSE_Abstract* l_tpAbstract = smart_cast<CSE_Abstract*>(object);
@@ -84,6 +86,7 @@ void CALifeSwitchManager::remove_online(CSE_ALifeDynamicObject* object, bool upd
 {
     START_PROFILE("ALife/switch/remove_online")
     object->m_bOnline = false;
+    alife_service_trace::event("offline", object->ID);
 
     m_saved_chidren = object->children;
     CSE_ALifeTraderAbstract* inventory_owner = smart_cast<CSE_ALifeTraderAbstract*>(object);
@@ -249,6 +252,8 @@ struct CALifeSwitchManager::ReconciliationOperations
 
 void CALifeSwitchManager::switch_object(CSE_ALifeDynamicObject* I)
 {
+    if (alife_service_trace::visits_enabled.load(std::memory_order_relaxed))
+        alife_service_trace::object("visit", I);
     ReconciliationOperations operations{*this, I};
     alife_diagnostics::reconcile_object<CTimer>(m_reconciliation.sampled, m_reconciliation.stages, operations);
 }

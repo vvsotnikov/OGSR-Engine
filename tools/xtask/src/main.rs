@@ -267,6 +267,21 @@ exec sh .githooks/pre-commit
     Ok(())
 }
 
+fn service_report(path: &str, frames: Option<&str>) -> Result {
+    let reader = std::io::BufReader::new(fs::File::open(path)?);
+    let mut report = match frames {
+        Some(frames) => xtask::service_trace::read_warmed(reader, &fs::read_to_string(frames)?)?,
+        None => xtask::service_trace::read(reader)?,
+    };
+    print!("{}", report.render());
+    if report.dropped != 0 {
+        return Err(
+            "Service capture dropped events; do not use as complete latency evidence".into(),
+        );
+    }
+    Ok(())
+}
+
 fn main_result() -> Result {
     let args: Vec<_> = env::args().skip(1).collect();
     let root = PathBuf::from(git(&["rev-parse", "--show-toplevel"])?);
@@ -277,6 +292,15 @@ fn main_result() -> Result {
         .collect::<Vec<_>>()
         .as_slice()
     {
+        ["frame-report", path] => {
+            print!(
+                "{}",
+                xtask::service_trace::frame_report(&fs::read_to_string(path)?)?
+            );
+            Ok(())
+        }
+        ["service-report", path, "--frames", frames] => service_report(path, Some(frames)),
+        ["service-report", path] => service_report(path, None),
         ["install-hooks"] => install_hook(&root),
         ["reset-snapshot"] => {
             let _lock = lock()?;
@@ -291,7 +315,8 @@ fn main_result() -> Result {
         _ => Err(concat!(
             "Usage: cargo xtask {validate [--tests-only | ",
             "--configuration Debug|Release|ReleaseTracyProfiler] | ",
-            "install-hooks | pre-commit | reset-snapshot}"
+            "install-hooks | pre-commit | reset-snapshot | ",
+            "service-report TRACE [--frames FRAMES] | frame-report FRAMES}"
         )
         .into()),
     }
