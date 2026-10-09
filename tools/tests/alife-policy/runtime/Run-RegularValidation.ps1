@@ -1,5 +1,6 @@
 param(
     [Parameter(Mandatory)][string]$InstallRoot,
+    [ValidateSet('Release','Debug')][string]$Configuration = 'Release',
     [ValidateRange(0,400)][int]$Count = 0,
     [ValidateRange(0,10)][int]$BudgetMs = 0,
     [switch]$SaveSnapshot,
@@ -24,7 +25,7 @@ if (([int][bool]$ServiceTrace + [int][bool]$ServiceSlices + [int][bool]$ServiceL
 . "$PSScriptRoot/PolicyMessages.ps1"
 $engine = Join-Path $InstallRoot "$Package/xrEngine.exe"
 if (!(Test-Path $engine) -or !(Test-Path "$InstallRoot/$Package/build.json")) { throw "Missing package or manifest: $engine" }
-$build = Read-ValidationPackage $engine
+$build = Read-ValidationPackage $engine -Configuration $Configuration
 if ($Mode -eq 'distance' -and $Eligibility) { throw 'Eligibility fixture requires whole-map mode' }
 if ($Transitions -and ($Count -ne 0 -or $Eligibility -or $SaveSnapshot -or $VerifySession)) { throw 'Transition fixture must run by itself' }
 $session = & "$PSScriptRoot/Prepare-Session.ps1" -InstallRoot $InstallRoot `

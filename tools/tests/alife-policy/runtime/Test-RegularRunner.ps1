@@ -61,6 +61,19 @@ try {
     }
     Assert-Rejected { & $runner @common -Mode distance -Eligibility } 'Eligibility fixture requires whole-map mode'
 
+    @{configuration='Debug'; tracyEnabled=$false; sha256=$hash} |
+        ConvertTo-Json | Set-Content "$package/build.json"
+    Assert-Rejected { & $runner @common } 'Validation requires a Release package with tracyEnabled=false'
+    $debugSession = & $runner @common -Configuration Debug -Eligibility
+    $debugMeta = Get-Content -Raw "$debugSession/session.json" | ConvertFrom-Json
+    if ($debugMeta.build.configuration -ne 'Debug' -or !$debugMeta.eligibilityRequested -or
+        !(Test-Path "$debugSession/appdata/Test-Ownership.lua")) {
+        throw 'Debug scenario or ownership fixture missing'
+    }
+    @{configuration='Release'; tracyEnabled=$false; sha256=$hash} |
+        ConvertTo-Json | Set-Content "$package/build.json"
+    Assert-Rejected { & $runner @common -Configuration Debug } 'Validation requires a Debug package with tracyEnabled=false'
+
     $source = "$root/saved-evidence"
     New-Item -ItemType Directory "$source/appdata/logs" | Out-Null
     $sourceMeta = @{status='regular-completed'; extraRequested=3}

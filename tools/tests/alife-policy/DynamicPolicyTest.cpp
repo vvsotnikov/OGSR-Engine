@@ -25,7 +25,7 @@ struct Operations
     float online_limit() const { return 150; }
     float offline_limit() const { return 200; }
     bool keep_data() const { return keep; }
-    void clear_data() { data = false; }
+    void clear_data() { if (rejections != 1) throw std::runtime_error("Data cleared before reporting rejection"); data = false; }
     void report_rejection(bool distance) { ++rejections; distance_rejection = distance; }
     void switch_online() { online = true; }
     void switch_offline() { online = false; }
@@ -72,9 +72,7 @@ int main()
                     const bool rejected = !online && !expected_online;
                     require(op.rejections == unsigned(rejected), "Incorrect rejection reporting");
                     require(op.distance_rejection == (rejected && allowed), "Incorrect rejection reason");
-                    const unsigned reads = online
-                        ? unsigned(op.allow_offline && allowed && op.distance)
-                        : unsigned(allowed && op.allow_offline && op.distance);
+                    const unsigned reads = unsigned(allowed && op.allow_offline && op.distance);
                     require(op.distance_reads == reads, "Distance queried out of permission order");
                     Queries queries{op};
                     const auto decision = online ? alife_switch_policy::dynamic_offline(queries)

@@ -35,8 +35,10 @@ permissions. Synchronization can change online state; dispatch uses that new
 state. Diagnostics observes lifecycle phases but cannot skip or select them.
 
 For game validation, package a Release build as `<install>/bin_whole_lifecycle`
-with its DLLs and a `build.json` containing `baseCommit`, executable `sha256`,
-`configuration: Release`, and `tracyEnabled: false`. Use a separate installation
+with its DLLs and a `build.json` containing `sourceCommit`, executable `sha256`,
+`configuration: Release`, and `tracyEnabled: false`. For a full Debug package,
+use `configuration: Debug` and pass `-Configuration Debug` to the runner.
+Use a separate installation
 with the original SoC resources, its standard `fsgame.ltx`, and a Bar save at
 `seeds/bar-2026-10-03/savedgames/bar_center.sav`, plus its user settings.
 `runtime/Prepare-RegularValidation.ps1 -BaselineRoot <baseline> -InstallRoot <new-install>`
