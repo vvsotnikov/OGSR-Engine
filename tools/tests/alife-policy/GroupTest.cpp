@@ -1,4 +1,4 @@
-#include "alife_switch_policy.h"
+#include "alife_switch_lifecycle.h"
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -41,7 +41,7 @@ void run(const char* name, Operations op, std::vector<int> survivors, std::vecto
 {
     for (unsigned i=0; i<op.storage.size(); ++i) op.order.push_back(i);
     op.count = unsigned(op.order.size());
-    alife_switch_policy::legacy_group_offline(op);
+    alife_switch_lifecycle::legacy_group_offline(op);
     std::vector<int> actual;
     for (unsigned i : op.order) actual.push_back(op.storage[i].id);
     std::vector<std::string> expected;

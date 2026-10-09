@@ -205,7 +205,7 @@ void CALifeSwitchManager::try_switch_online(CSE_ALifeDynamicObject* I)
         bool keep_data() const { return I->keep_saved_data_anyway(); }
         void clear_data() { I->client_data.clear(); }
     } operations{*this, I};
-    alife_switch_policy::manager_online(operations);
+    alife_switch_lifecycle::manager_online(operations);
     STOP_PROFILE
 }
 

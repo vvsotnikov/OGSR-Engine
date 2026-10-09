@@ -7,7 +7,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
-#include "alife_switch_policy.h"
+#include "alife_switch_lifecycle.h"
 #include "xrServer_Objects_ALife_Monsters.h"
 #include "ai_space.h"
 #include "alife_simulator.h"
@@ -162,7 +162,7 @@ void CSE_ALifeOnlineOfflineGroup::try_switch_online()
             VERIFY3(member.second->can_switch_offline(), "Incorrect situation : some of the OnlineOffline group members cannot be switched online due to their personal properties", member.second->name_replace());
         }
     } operations{*this};
-    alife_switch_policy::online_group_online(operations);
+    alife_switch_lifecycle::online_group_online(operations);
 }
 
 void CSE_ALifeOnlineOfflineGroup::try_switch_offline()
@@ -184,7 +184,7 @@ void CSE_ALifeOnlineOfflineGroup::try_switch_offline()
             VERIFY3(member.second->can_switch_online(), "Incorrect situation : some of the OnlineOffline group members cannot be switched online due to their personal properties", member.second->name_replace());
         }
     } operations{*this};
-    alife_switch_policy::online_group_offline(operations);
+    alife_switch_lifecycle::online_group_offline(operations);
 }
 
 void CSE_ALifeOnlineOfflineGroup::switch_online()
