@@ -139,6 +139,8 @@ void CScriptBinder::save(NET_Packet& output_packet)
 
 void CScriptBinder::load(IReader& input_packet)
 {
+    // CGameObject::net_Load reads the binder payload last in its bounded reader.
+    // If fields are appended after it, this marker must be framed separately.
     if (input_packet.elapsed() == sizeof(no_planner_binder) &&
         !memcmp(input_packet.pointer(), no_planner_binder, sizeof(no_planner_binder)))
     {

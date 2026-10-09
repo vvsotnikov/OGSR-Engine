@@ -32,7 +32,7 @@ return function(cfg)
             assert(source_node, "No clear supply-trip route")
             if not npc_id then
                 local source = level.vertex_position(source_node)
-                if cfg.scenario == "elevated" then source.y = source.y + 2 end
+                if cfg.scenario == "elevated" then source.y = source.y + 2.4 end
                 log1(string.format("[npc fixture] route home_graph=%d source_graph=%d",home_graph,cross_table():vertex(source_node):game_vertex_id()))
                 supply_id = assert(alife():create(cfg.scenario == "elevated" and "npc_trip_elevated_bandage" or "bandage", source, source_node, cross_table():vertex(source_node):game_vertex_id())).id
                 npc_id = assert(alife():create("npc_trip_stalker", home, home_node, cross_table():vertex(home_node):game_vertex_id())).id
@@ -89,7 +89,7 @@ return function(cfg)
             local item = level.object_by_id(supply_id)
             if item and item:get_physics_shell() then
                 item:get_physics_shell():freeze()
-                assert(item:position().y-level.vertex_position(source_node).y > 1.6, "Supply fell before elevated test")
+                assert(item:position().y-level.vertex_position(source_node).y > 2.0, "Supply fell before elevated test")
                 elevated = true
             end
         end
@@ -138,7 +138,7 @@ return function(cfg)
                 client:hit(stimulus)
             end
             if attacked and client:best_enemy() then fought = true end
-            if attacked and now-attacked > 8000 and not released_enemy then
+            if attacked and now-attacked > 70000 and not released_enemy then
                 assert(fought, "Combat interruption was not observed")
                 client:set_enemy_callback(function() return false end)
                 client:set_relation(game_object.neutral,db.actor)

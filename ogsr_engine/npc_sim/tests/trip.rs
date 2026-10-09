@@ -20,6 +20,7 @@ fn observation() -> Observation {
         pickup_pending: false,
         path_blocked: false,
         elapsed_ms: 0,
+        edge_distance: 0.0,
         interrupted: false,
         alive: true,
     }
@@ -31,7 +32,7 @@ fn at_source() -> Observation {
     }
 }
 fn plan() -> Plan {
-    Plan::new(123, HOME, SOURCE).unwrap()
+    Plan::new(123, HOME, SOURCE, SOURCE).unwrap()
 }
 #[test]
 fn trip_confirms_actual_ownership_and_resumes_after_interruption() {
@@ -221,7 +222,7 @@ fn pickup_timeout_requires_an_uninterrupted_pending_request() {
     assert_eq!(
         p.step(Observation {
             pickup_pending: true,
-            elapsed_ms: 999,
+            elapsed_ms: 120_000,
             ..at_source()
         })
         .phase,
@@ -230,7 +231,7 @@ fn pickup_timeout_requires_an_uninterrupted_pending_request() {
     assert_eq!(
         p.step(Observation {
             pickup_pending: true,
-            elapsed_ms: 1,
+            elapsed_ms: 1000,
             ..at_source()
         })
         .phase,
@@ -277,7 +278,16 @@ fn stalled_travel_is_bounded_and_timer_survives_reload() {
 }
 #[test]
 fn graph_boundary_does_not_prevent_arrival_and_elevated_item_uses_ground_target() {
-    let mut p = plan();
+    let mut p = Plan::new(
+        123,
+        HOME,
+        SOURCE,
+        Location {
+            position: [30., 2., 0.],
+            ..SOURCE
+        },
+    )
+    .unwrap();
     let current = Location {
         game_vertex: 1,
         ..SOURCE
@@ -295,7 +305,7 @@ fn graph_boundary_does_not_prevent_arrival_and_elevated_item_uses_ground_target(
         .action,
         Action::Collect
     );
-    assert!(Plan::new(1, HOME, Location { level: 1, ..SOURCE }).is_none());
+    assert!(Plan::new(1, HOME, Location { level: 1, ..SOURCE }, SOURCE).is_none());
 }
 #[test]
 fn loss_blocked_path_and_death_terminate_without_fabricating_success() {
@@ -330,7 +340,7 @@ fn malformed_snapshots_are_rejected() {
     let mut extra = snapshot.clone();
     extra.push(0);
     assert!(Plan::load(&extra).is_none());
-    for offset in [0, 4, 12, 20, 28, 68, 72, 76, 80] {
+    for offset in [0, 4, 12, 20, 28, 116, 120, 124, 128, 132, 136] {
         let mut invalid = snapshot.clone();
         match offset {
             4 | 12 => invalid[offset..offset + 8].fill(0),
@@ -338,4 +348,238 @@ fn malformed_snapshots_are_rejected() {
         }
         assert!(Plan::load(&invalid).is_none(), "offset {offset}");
     }
+}
+
+#[test]
+fn combat_end_does_not_charge_the_unobserved_interval_or_prior_displacement() {
+    let mut p = plan();
+    p.step(Observation {
+        current: Location {
+            position: [20., 0., 0.],
+            ..HOME
+        },
+        ..observation()
+    });
+    p.step(Observation {
+        interrupted: true,
+        ..observation()
+    });
+    let mut p = Plan::load(&p.save()).unwrap();
+    assert_eq!(
+        p.step(Observation {
+            elapsed_ms: 120_000,
+            ..observation()
+        })
+        .phase,
+        Phase::Outbound
+    );
+    // Normal travel away from the pre-combat closest point remains progress.
+    for x in [-1., -2., -3.] {
+        assert_eq!(
+            p.step(Observation {
+                current: Location {
+                    position: [x, 0., 0.],
+                    ..HOME
+                },
+                elapsed_ms: 30_000,
+                ..observation()
+            })
+            .phase,
+            Phase::Outbound
+        );
+    }
+}
+#[test]
+fn long_detours_and_offline_edges_count_as_movement() {
+    let mut p = plan();
+    for x in 0..10 {
+        assert_eq!(
+            p.step(Observation {
+                current: Location {
+                    position: [-(x as f32), 0., 0.],
+                    ..HOME
+                },
+                elapsed_ms: 10_000,
+                ..observation()
+            })
+            .phase,
+            Phase::Outbound
+        );
+    }
+    let mut p = plan();
+    for edge_distance in 1..10 {
+        assert_eq!(
+            p.step(Observation {
+                edge_distance: edge_distance as f32,
+                elapsed_ms: 30_000,
+                ..observation()
+            })
+            .phase,
+            Phase::Outbound
+        );
+        p = Plan::load(&p.save()).unwrap();
+    }
+}
+#[test]
+fn permanently_unavailable_representation_is_bounded_across_save_and_combat() {
+    let wait = Observation {
+        representation_ready: false,
+        ..at_source()
+    };
+    let mut p = plan();
+    p.step(wait);
+    p.step(Observation {
+        elapsed_ms: 299_000,
+        ..wait
+    });
+    p.step(Observation {
+        interrupted: true,
+        ..wait
+    });
+    let mut p = Plan::load(&p.save()).unwrap();
+    assert_eq!(
+        p.step(Observation {
+            elapsed_ms: 120_000,
+            ..wait
+        })
+        .phase,
+        Phase::Collecting
+    );
+    assert_eq!(
+        p.step(Observation {
+            elapsed_ms: 1000,
+            ..wait
+        })
+        .phase,
+        Phase::Failed
+    );
+}
+#[test]
+fn restored_pickup_wait_does_not_charge_combat_or_representation_gap() {
+    let pending = Observation {
+        pickup_pending: true,
+        ..at_source()
+    };
+    let mut p = plan();
+    p.step(at_source());
+    p.step(Observation {
+        elapsed_ms: 4000,
+        ..pending
+    });
+    p.step(Observation {
+        interrupted: true,
+        ..pending
+    });
+    let mut p = Plan::load(&p.save()).unwrap();
+    assert_eq!(
+        p.step(Observation {
+            elapsed_ms: 120_000,
+            ..pending
+        })
+        .phase,
+        Phase::Collecting
+    );
+    p.step(Observation {
+        representation_ready: false,
+        ..pending
+    });
+    assert_eq!(
+        p.step(Observation {
+            elapsed_ms: 120_000,
+            ..pending
+        })
+        .phase,
+        Phase::Collecting
+    );
+    assert_eq!(
+        p.step(Observation {
+            elapsed_ms: 1000,
+            ..pending
+        })
+        .phase,
+        Phase::Failed
+    );
+}
+#[test]
+fn elevated_item_is_approached_until_reachable_and_moved_item_is_not_chased() {
+    let item = Location {
+        position: [30., 2.4, 0.],
+        ..SOURCE
+    };
+    let mut p = Plan::new(123, HOME, SOURCE, item).unwrap();
+    assert_eq!(
+        p.step(Observation {
+            current: Location {
+                position: [28.6, 0., 0.],
+                ..SOURCE
+            },
+            supply_location: item,
+            ..at_source()
+        })
+        .action,
+        Action::Travel(SOURCE)
+    );
+    assert_eq!(
+        p.step(Observation {
+            supply_location: item,
+            ..at_source()
+        })
+        .action,
+        Action::Collect
+    );
+    assert_eq!(
+        p.step(Observation {
+            supply_location: Location {
+                position: [33., 2.4, 0.],
+                ..SOURCE
+            },
+            ..at_source()
+        })
+        .phase,
+        Phase::Failed
+    );
+}
+#[test]
+fn invalid_navigation_ids_on_physical_facts_do_not_crash_or_invent_missing_items() {
+    let mut p = plan();
+    assert_eq!(
+        p.step(Observation {
+            supply_location: Location {
+                level_vertex: u32::MAX,
+                ..SOURCE
+            },
+            ..at_source()
+        })
+        .action,
+        Action::Collect
+    );
+    let unknown = Observation {
+        supply_location: Location {
+            level: u32::MAX,
+            ..SOURCE
+        },
+        ..at_source()
+    };
+    assert_eq!(p.step(unknown).action, Action::Wait);
+    assert_eq!(
+        p.step(Observation {
+            elapsed_ms: 300_000,
+            ..unknown
+        })
+        .phase,
+        Phase::Failed
+    );
+    let mut p = plan();
+    assert_eq!(
+        p.step(Observation {
+            current: Location {
+                level: u32::MAX,
+                ..HOME
+            },
+            ..observation()
+        })
+        .phase,
+        Phase::Failed
+    );
+    assert!(Plan::load(&p.save()).is_some());
 }

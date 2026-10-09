@@ -9,6 +9,7 @@ pub struct Input {
     pickup_pending: u32,
     path_blocked: u32,
     elapsed_ms: u32,
+    edge_distance: f32,
     interrupted: u32,
     alive: u32,
 }
@@ -59,11 +60,16 @@ pub unsafe extern "C" fn npc_plan_create(
     identity: u64,
     home: *const Location,
     source: *const Location,
+    remembered_item: *const Location,
 ) -> *mut Plan {
-    let (Some(home), Some(source)) = (unsafe { home.as_ref() }, unsafe { source.as_ref() }) else {
+    let (Some(home), Some(source), Some(remembered_item)) = (
+        unsafe { home.as_ref() },
+        unsafe { source.as_ref() },
+        unsafe { remembered_item.as_ref() },
+    ) else {
         return std::ptr::null_mut();
     };
-    Plan::new(identity, *home, *source)
+    Plan::new(identity, *home, *source, *remembered_item)
         .map_or(std::ptr::null_mut(), |plan| Box::into_raw(Box::new(plan)))
 }
 
@@ -106,9 +112,6 @@ pub unsafe extern "C" fn npc_plan_step(
         3 => Supply::OtherOwner,
         _ => return false,
     };
-    if !input.current.valid() || (supply != Supply::Missing && !input.supply_location.valid()) {
-        return false;
-    }
     let decision = plan.step(Observation {
         current: input.current,
         supply_location: input.supply_location,
@@ -117,6 +120,7 @@ pub unsafe extern "C" fn npc_plan_step(
         pickup_pending: input.pickup_pending != 0,
         path_blocked: input.path_blocked != 0,
         elapsed_ms: input.elapsed_ms,
+        edge_distance: input.edge_distance,
         interrupted: input.interrupted != 0,
         alive: input.alive != 0,
     });
@@ -162,7 +166,7 @@ pub unsafe extern "C" fn npc_plan_load(input: *const u8, length: usize) -> *mut 
 }
 
 const _: () = assert!(std::mem::size_of::<Location>() == 24);
-const _: () = assert!(std::mem::size_of::<Input>() == 76);
+const _: () = assert!(std::mem::size_of::<Input>() == 80);
 const _: () = assert!(std::mem::size_of::<Output>() == 56);
 const _: () = assert!(Phase::Dead as u32 == 5);
 
@@ -204,7 +208,7 @@ mod tests {
         };
         // Separate host buffers and uniquely owned plans obey the C ABI contract.
         unsafe {
-            let plan = npc_plan_create(7, &home, &source);
+            let plan = npc_plan_create(7, &home, &source, &source);
             assert!(!plan.is_null());
             let mut output = Output::default();
             let mut input = Input {
@@ -215,11 +219,16 @@ mod tests {
                 pickup_pending: 0,
                 path_blocked: 0,
                 elapsed_ms: 0,
+                edge_distance: 0.0,
                 interrupted: 0,
                 alive: 1,
             };
             assert!(npc_plan_step(plan, &input, &mut output));
             assert_eq!(output.phase, Phase::Collecting as u32);
+            input.supply_location.level_vertex = u32::MAX;
+            assert!(npc_plan_step(plan, &input, &mut output));
+            assert_eq!(output.phase, Phase::Collecting as u32);
+            input.supply_location = source;
             let size = npc_plan_save(plan, std::ptr::null_mut(), 0);
             let mut snapshot = vec![0; size];
             assert_eq!(npc_plan_save(plan, snapshot.as_mut_ptr(), size), size);

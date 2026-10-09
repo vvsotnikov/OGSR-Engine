@@ -12,7 +12,9 @@ struct NpcObservation
 {
     NpcLocation current, supply_location;
     std::uint32_t supply; // missing=0, free=1, owned=2, other owner=3
-    std::uint32_t representation_ready, pickup_pending, path_blocked, elapsed_ms, interrupted, alive;
+    std::uint32_t representation_ready, pickup_pending, path_blocked, elapsed_ms;
+    float edge_distance;
+    std::uint32_t interrupted, alive;
 };
 struct NpcDecision
 {
@@ -22,13 +24,13 @@ struct NpcDecision
     std::uint32_t game_vertex, level_vertex, level;
     float position[3];
 };
-static_assert(sizeof(NpcLocation) == 24 && sizeof(NpcObservation) == 76 && sizeof(NpcDecision) == 56);
+static_assert(sizeof(NpcLocation) == 24 && sizeof(NpcObservation) == 80 && sizeof(NpcDecision) == 56);
 
 // Unique ownership, serialized calls, valid non-overlapping buffers. The caller
 // retains buffer ownership; only npc_plan_destroy may free a plan.
 extern "C"
 {
-NpcPlan* npc_plan_create(std::uint64_t identity, const NpcLocation* home, const NpcLocation* source);
+NpcPlan* npc_plan_create(std::uint64_t identity, const NpcLocation* home, const NpcLocation* source, const NpcLocation* remembered_item);
 void npc_plan_destroy(NpcPlan*);
 bool npc_plan_step(NpcPlan*, const NpcObservation*, NpcDecision*);
 bool npc_plan_status(const NpcPlan*, NpcDecision*);

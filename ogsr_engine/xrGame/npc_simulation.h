@@ -18,6 +18,7 @@ class CNpcSimulation
         CSE_ALifeDynamicObject* supply{};
         NpcPlan* plan{};
         u64 pickup_command = 0;
+        u64 online_path_command = 0;
         u32 last_observation = 0;
         bool observed = false;
         bool interrupted = false;

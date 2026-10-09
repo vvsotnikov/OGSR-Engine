@@ -13,6 +13,7 @@
 #include "stalker_movement_manager.h"
 #include "restricted_object.h"
 #include "movement_manager_space.h"
+#include "level_path_manager.h"
 #include "ai_space.h"
 #include "level.h"
 #include "game_graph.h"
@@ -24,7 +25,8 @@ namespace
 constexpr u32 planner_chunk = 0x4e504331; // NPC1; optional root chunk, independent of legacy registry order.
 NpcLocation location(const CSE_ALifeDynamicObject& object)
 {
-    return {object.m_tGraphID, object.m_tNodeID, ai().game_graph().vertex(object.m_tGraphID)->level_id(), {object.o_Position.x, object.o_Position.y, object.o_Position.z}};
+    const u32 level = ai().game_graph().valid_vertex_id(object.m_tGraphID) ? ai().game_graph().vertex(object.m_tGraphID)->level_id() : u32(-1);
+    return {object.m_tGraphID, object.m_tNodeID, level, {object.o_Position.x, object.o_Position.y, object.o_Position.z}};
 }
 NpcLocation navigation_location(const CSE_ALifeDynamicObject& object)
 {
@@ -96,7 +98,8 @@ bool CNpcSimulation::enroll(u16 npc_id, u16 supply_id)
         ai().game_graph().vertex(supply->m_tGraphID)->level_id() != m_alife.graph().level().level_id() ||
         !ai().level_graph().valid_vertex_id(npc->m_tNodeID) || !ai().level_graph().valid_vertex_id(supply->m_tNodeID)) return false;
     const auto home = navigation_location(*npc), source = navigation_location(*supply);
-    NpcPlan* plan = npc_plan_create(m_next_identity, &home, &source);
+    const auto remembered_item = location(*supply);
+    NpcPlan* plan = npc_plan_create(m_next_identity, &home, &source, &remembered_item);
     if (!plan) return false;
     Msg("[npc trip] enroll identity=%llu npc=%u supply=%u", m_next_identity, npc_id, supply_id);
     ++m_next_identity;
@@ -109,7 +112,13 @@ NpcDecision CNpcSimulation::observe(Entry& entry, const Fvector& here, u32 graph
     NpcDecision before{}, after{};
     R_ASSERT(npc_plan_status(entry.plan, &before));
     NpcObservation input{};
-    input.current = {graph, entry.npc->m_tNodeID, ai().game_graph().vertex(GameGraph::_GRAPH_ID(graph))->level_id(), {here.x, here.y, here.z}};
+    const u32 level = ai().game_graph().valid_vertex_id(GameGraph::_GRAPH_ID(graph)) ? ai().game_graph().vertex(GameGraph::_GRAPH_ID(graph))->level_id() : u32(-1);
+    input.current = {graph, entry.npc->m_tNodeID, level, {here.x, here.y, here.z}};
+    if (!entry.npc->m_bOnline)
+    {
+        const auto& detail = entry.npc->brain().movement().detail();
+        input.edge_distance = detail.path().size() > 1 ? detail.walked_distance() : 0.f;
+    }
     input.interrupted = interrupted;
     input.alive = alive;
     input.path_blocked = blocked;
@@ -154,22 +163,23 @@ bool CNpcSimulation::update_online(CAI_Stalker& client, bool interrupted)
     if (m_entries.empty()) return false;
     auto entry = find(smart_cast<CSE_ALifeMonsterAbstract*>(objects().object(client.ID(), true)));
     if (!entry) return false;
-    const auto decision = observe(*entry, client.Position(), client.ai_location().game_vertex_id(), interrupted, client.g_Alive(), false);
+    NpcDecision status{};
+    R_ASSERT(npc_plan_status(entry->plan, &status));
+    const bool path_failed = !entry->interrupted && entry->online_path_command == status.command &&
+        client.movement().path_type() == MovementManager::ePathTypeLevelPath && client.movement().level_path().failed();
+    if (interrupted) entry->online_path_command = 0;
+    const auto decision = observe(*entry, client.Position(), client.ai_location().game_vertex_id(), interrupted, client.g_Alive(), path_failed);
     if (interrupted || !client.g_Alive()) return true; // existing immediate planner owns movement now
     if (decision.action == 1)
     {
         client.movement().set_movement_type(MonsterSpace::eMovementTypeWalk);
-        if (ai().game_graph().vertex(client.ai_location().game_vertex_id())->level_id() != decision.level)
+        if (ai().level_graph().level_id() == decision.level && ai().level_graph().valid_vertex_id(decision.level_vertex))
         {
-            client.movement().set_desired_position(nullptr);
-            client.movement().set_path_type(MovementManager::ePathTypeGamePath);
-            client.movement().set_game_dest_vertex(GameGraph::_GRAPH_ID(decision.game_vertex));
-        }
-        else if (ai().level_graph().valid_vertex_id(decision.level_vertex))
-        {
+            if (entry->online_path_command != decision.command) client.movement().level_path().reset();
             client.movement().set_path_type(MovementManager::ePathTypeLevelPath);
             client.movement().set_nearest_accessible_position(
                 Fvector().set(decision.position[0], decision.position[1], decision.position[2]), decision.level_vertex);
+            entry->online_path_command = decision.command;
         }
         else
         {
@@ -190,6 +200,7 @@ bool CNpcSimulation::update_offline(CSE_ALifeMonsterAbstract* object)
     auto entry = find(object);
     if (!entry) return false;
     if (object->m_bOnline) return true;
+    entry->online_path_command = 0;
     const auto decision = observe(*entry, object->o_Position, object->m_tGraphID, false, object->fHealth > 0, false);
     auto& movement = object->brain().movement();
     if (decision.action == 1)

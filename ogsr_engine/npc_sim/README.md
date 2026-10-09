@@ -4,7 +4,9 @@ Rust owns arrival, knowledge use, pickup waiting and travel-failure policy. The
 host reports world facts and elapsed time, projects navigation positions through
 the engine, and executes movement/ownership commands. Remote supply facts are
 consumed only at the remembered destination; own inventory is always observable.
-The saved destination is a navigation point, distinct from the physical item.
+The saved destination is a navigation point; the remembered physical item
+position is stored separately. Knowing the item is still there does not imply
+that the NPC is close enough to collect it.
 A different game vertex on the same level does not prevent arrival.
 
 `npc_planner = supply_trip` reserves a stalker section for this owner **from
@@ -32,8 +34,14 @@ pickup event for that command. Displacement creates a new command, permitting a
 retry; an already queued event can still complete and must be observed. After
 reload, pending network requests are reissued only if ownership is not already
 confirmed. Rust owns the timeout; neither combat nor a representation mismatch
-charges it. Travel progress and timeout state persist, while absolute engine
-clock values and the current interruption flag do not.
+charges it, including the first observation after either pause. Elapsed time
+belongs to the interval before an observation, so its preceding interruption /
+readiness state is saved too. Movement in any direction counts as progress;
+offline graph-edge distance counts even while the server position is unchanged.
+Sixty active seconds without movement ends travel. A representation mismatch or
+unknown item position has its own five-minute active waiting bound. Fixed switch
+permissions can make a trip impossible; they do not turn a temporary mismatch
+into immediate failure. Absolute engine clock values are never persisted.
 
 Calls on each plan must be serialized. The adapter runs in the existing game /
 ALife update phases; it does not add a worker. Allocation never crosses ownership:
