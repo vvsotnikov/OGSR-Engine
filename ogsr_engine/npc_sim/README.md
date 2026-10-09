@@ -41,3 +41,9 @@ The C ABI is not a synchronization boundary. Current frame ordering runs script
 updates before deferred A-Life work and joins that work before the next frame.
 Calls on an agent must remain serialized if that ordering changes. Agent allocation belongs to Rust;
 host buffers belong to C++. Neither side may free the other's allocations.
+
+The host and Rust are rebuilt together; the C ABI is private, not a mod API.
+Adding observation facts does not itself require a save-format change. Changing
+persisted goal state does require a versioned loader. Bounded source memory may
+forget old information to accept new observations, but cannot replace the active
+trip binding; forgetting a source does not mean learning that its item is gone.

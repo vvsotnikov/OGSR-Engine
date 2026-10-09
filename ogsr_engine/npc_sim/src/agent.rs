@@ -87,7 +87,14 @@ impl Agent {
         self.sources
             .iter()
             .enumerate()
-            .find(|(i, source)| Some(*i) != self.selected && source.failure != FailureReason::None)
+            .filter(|(i, _)| Some(*i) != self.selected)
+            .min_by_key(|(i, source)| {
+                (
+                    source.failure == FailureReason::None,
+                    source.retry_ms == 0,
+                    *i,
+                )
+            })
             .map(|(i, _)| i)
     }
     // The caller supplies new information, not a periodic world-state refresh.
@@ -228,9 +235,10 @@ impl Agent {
             let pursuing_source = matches!(trip.phase, Phase::Outbound | Phase::Collecting);
             let returning = trip.phase == Phase::Returning;
             let completed_away = trip.phase == Phase::Complete
+                && stocked
                 && !o.interrupted
                 && o.current.spatially_valid()
-                && !o.current.near(self.home, 1.5);
+                && !o.current.near(self.home, 3.0);
             let mut decision = trip.decision();
             if !terminal {
                 decision = trip.step_with_goal(o, stocked);

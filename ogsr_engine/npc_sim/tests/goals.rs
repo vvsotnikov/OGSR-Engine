@@ -72,6 +72,43 @@ fn a_stocked_npc_returns_home_after_post_completion_combat_displacement() {
 }
 
 #[test]
+fn small_nudges_do_not_restart_a_completed_return() {
+    let mut a = agent();
+    let done = a.step(observation(1.49), 1);
+    assert_eq!(done.decision.phase, Phase::Complete);
+    assert_eq!(a.step(observation(1.51), 1), done);
+    assert_eq!(a.step(observation(2.99), 1), done);
+    assert_eq!(
+        a.step(observation(3.01), 1).decision.phase,
+        Phase::Returning
+    );
+}
+
+#[test]
+fn full_memory_can_accept_news_without_false_failure_or_active_binding_replacement() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    for i in 0..Agent::MAX_SOURCES {
+        assert!(a.remember(i, point(10.), point(10.)));
+    }
+    a.step(observation(0.), 0);
+    let slot = a.available_source_slot().unwrap();
+    assert_eq!(slot, 1);
+    assert!(a.remember(slot, point(20.), point(20.)));
+    assert_eq!(a.status().source, Some(0));
+    assert!(a.sources().iter().all(|s| s.failure == FailureReason::None));
+    let mut o = observation(0.);
+    o.elapsed_ms = 60_000;
+    a.step(o, 0);
+    // Prefer replacing a cooling route before an untried source, without
+    // claiming the item disappeared just because its route was blocked.
+    assert_eq!(a.available_source_slot(), Some(0));
+    let mut restored = Agent::load(&a.save()).unwrap();
+    assert!(restored.remember(0, point(4.), point(4.)));
+    assert_ne!(restored.status().source, Some(0));
+    assert_eq!(restored.sources()[0].failure, FailureReason::None);
+}
+
+#[test]
 fn a_gift_at_the_source_trip_deadline_does_not_delay_the_untried_home_route() {
     let mut a = agent();
     a.step(observation(0.), 0);

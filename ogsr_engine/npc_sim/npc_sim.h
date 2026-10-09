@@ -36,6 +36,7 @@ extern "C"
 NpcAgent* npc_agent_create(std::uint64_t identity, const NpcLocation* home, const NpcLocation* source, const NpcLocation* remembered_item);
 NpcAgent* npc_agent_create_goal(std::uint64_t identity, const NpcLocation* home);
 bool npc_agent_remember(NpcAgent*, std::uint32_t index, const NpcLocation* navigation, const NpcLocation* physical);
+// UINT32_MAX if unavailable. Query and remember belong to one serialized operation.
 std::uint32_t npc_agent_available_source_slot(const NpcAgent*);
 std::size_t npc_agent_source_count(const NpcAgent*);
 bool npc_agent_source(const NpcAgent*, std::uint32_t index, NpcLocation* navigation);
