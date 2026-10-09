@@ -39,9 +39,7 @@ impl Agent {
         })
     }
     pub fn assigned(plan: Plan) -> Self {
-        let mut knowledge = Knowledge::default();
-        let (navigation, physical) = plan.source();
-        assert!(knowledge.remember(0, plan.home(), navigation, physical));
+        let knowledge = Knowledge::from_assigned_trip(&plan);
         Self {
             identity: plan.identity(),
             home: plan.home(),

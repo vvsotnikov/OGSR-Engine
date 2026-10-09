@@ -1,5 +1,5 @@
 use crate::activity::{ActivityOutcome, ActivityReport, ActivityState};
-use crate::{FailureReason, Location};
+use crate::{valid_source, FailureReason, Location, Plan};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Source {
@@ -21,6 +21,15 @@ impl Knowledge {
     pub const MAX_SOURCES: usize = 256;
     const SOURCE_RETRY_MS: u32 = 60_000;
 
+    pub fn from_assigned_trip(trip: &Plan) -> Self {
+        // Plan's private state can only originate from its validated constructor
+        // or loader; this preserves that source without a second admission rule.
+        let (navigation, physical) = trip.source();
+        Self {
+            sources: vec![Source::new(navigation, physical, 0)],
+        }
+    }
+
     pub fn sources(&self) -> &[Source] {
         &self.sources
     }
@@ -34,10 +43,7 @@ impl Knowledge {
             let rank = source.learned_order as usize;
             if rank >= sources.len()
                 || ranks[rank]
-                || !source.navigation.valid()
-                || !source.physical.spatially_valid()
-                || source.navigation.level != home.level
-                || source.physical.level != home.level
+                || !valid_source(home, source.navigation, source.physical)
                 || source.retry_ms > Self::SOURCE_RETRY_MS
             {
                 return None;
@@ -74,10 +80,7 @@ impl Knowledge {
     ) -> bool {
         index <= self.sources.len()
             && index < Self::MAX_SOURCES
-            && navigation.valid()
-            && physical.spatially_valid()
-            && navigation.level == home.level
-            && physical.level == home.level
+            && valid_source(home, navigation, physical)
     }
 
     pub fn remember(
@@ -90,13 +93,7 @@ impl Knowledge {
         if !self.accepts(index, home, navigation, physical) {
             return false;
         }
-        let mut source = Source {
-            navigation,
-            physical,
-            failure: FailureReason::None,
-            retry_ms: 0,
-            learned_order: self.sources.len() as u32,
-        };
+        let mut source = Source::new(navigation, physical, self.sources.len() as u32);
         if index == self.sources.len() {
             self.sources.push(source);
         } else {
@@ -156,5 +153,17 @@ impl Knowledge {
                     .then(a.cmp(b))
             })
             .map(|(i, _)| i)
+    }
+}
+
+impl Source {
+    fn new(navigation: Location, physical: Location, learned_order: u32) -> Self {
+        Self {
+            navigation,
+            physical,
+            learned_order,
+            failure: FailureReason::None,
+            retry_ms: 0,
+        }
     }
 }

@@ -1,4 +1,4 @@
-use crate::{Action, Decision, FailureReason, Location, Observation, Phase, Supply};
+use crate::{valid_source, Action, Decision, FailureReason, Location, Observation, Phase, Supply};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Plan {
@@ -6,7 +6,7 @@ pub struct Plan {
     command: u64,
     home: Location,
     source: Location,
-    phase: Phase,
+    phase: TripPhase,
     interrupted: bool,
     stalled_ms: u32,
     pickup_ms: u32,
@@ -30,18 +30,13 @@ impl Plan {
         source: Location,
         remembered_item: Location,
     ) -> Option<Self> {
-        (identity != 0
-            && home.valid()
-            && source.valid()
-            && remembered_item.spatially_valid()
-            && home.level == source.level
-            && source.level == remembered_item.level)
-            .then_some(Self {
+        (identity != 0 && home.valid() && valid_source(home, source, remembered_item)).then_some(
+            Self {
                 identity,
                 command: 1,
                 home,
                 source,
-                phase: Phase::Outbound,
+                phase: TripPhase::Outbound,
                 interrupted: false,
                 stalled_ms: 0,
                 pickup_ms: 0,
@@ -53,18 +48,19 @@ impl Plan {
                 location_valid: true,
                 active_ms: 0,
                 reason: FailureReason::None,
-            })
+            },
+        )
     }
-    fn transition(&mut self, phase: Phase) {
+    fn transition(&mut self, phase: TripPhase) {
         if self.phase != phase {
             if let Some(command) = self.command.checked_add(1) {
                 self.command = command;
                 self.phase = phase;
             } else {
-                self.phase = Phase::Failed;
+                self.phase = TripPhase::Failed;
                 self.reason = FailureReason::CounterExhausted;
             }
-            if self.phase != Phase::Failed {
+            if self.phase != TripPhase::Failed {
                 self.reason = FailureReason::None;
             }
             self.stalled_ms = 0;
@@ -73,7 +69,7 @@ impl Plan {
         }
     }
     fn fail(&mut self, reason: FailureReason) {
-        self.transition(Phase::Failed);
+        self.transition(TripPhase::Failed);
         self.reason = reason;
     }
     pub fn step(&mut self, o: Observation) -> Decision {
@@ -109,10 +105,13 @@ impl Plan {
             self.edge_distance = o.edge_distance;
         }
         let previous_phase = self.phase;
-        let terminal = matches!(self.phase, Phase::Complete | Phase::Failed | Phase::Dead);
+        let terminal = matches!(
+            self.phase,
+            TripPhase::Complete | TripPhase::Failed | TripPhase::Dead
+        );
 
         if !o.alive {
-            self.transition(Phase::Dead);
+            self.transition(TripPhase::Dead);
         } else if !terminal {
             self.active_ms = self.active_ms.saturating_add(elapsed).min(TRIP_DEADLINE_MS);
             if self.active_ms >= TRIP_DEADLINE_MS {
@@ -131,17 +130,17 @@ impl Plan {
                 let mut decision = self.decision();
                 decision.action = Action::Wait;
                 return decision;
-            } else if self.phase == Phase::Returning && !satisfied {
+            } else if self.phase == TripPhase::Returning && !satisfied {
                 self.fail(FailureReason::LostSupply);
             } else if satisfied {
-                self.transition(Phase::Returning);
+                self.transition(TripPhase::Returning);
                 if o.current.near(self.home, 1.5) {
-                    self.transition(Phase::Complete);
+                    self.transition(TripPhase::Complete);
                 }
             } else if !o.current.near(self.source, 1.5) {
-                self.transition(Phase::Outbound);
+                self.transition(TripPhase::Outbound);
             } else if unknown_item {
-                self.transition(Phase::Collecting);
+                self.transition(TripPhase::Collecting);
             } else if o.supply != Supply::Free {
                 self.fail(FailureReason::SupplyUnavailable);
             } else if !self.remembered_item.near(o.supply_location, 1.0) {
@@ -149,9 +148,9 @@ impl Plan {
             } else if !o.current.near(o.supply_location, 2.5) {
                 // The item is still where remembered, but the NPC must approach
                 // the navigation point more closely before it can reach it.
-                self.transition(Phase::Outbound);
+                self.transition(TripPhase::Outbound);
             } else {
-                self.transition(Phase::Collecting);
+                self.transition(TripPhase::Collecting);
             }
         }
         let mut decision = self.decision();
@@ -231,16 +230,16 @@ impl Plan {
         Decision {
             identity: self.identity,
             command: self.command,
-            phase: self.phase,
+            phase: self.phase.into(),
             reason: self.reason,
             interrupted: self.interrupted,
             action: if self.interrupted {
                 Action::Wait
             } else {
                 match self.phase {
-                    Phase::Outbound => Action::Travel(self.source),
-                    Phase::Collecting => Action::Collect,
-                    Phase::Returning => Action::Travel(self.home),
+                    TripPhase::Outbound => Action::Travel(self.source),
+                    TripPhase::Collecting => Action::Collect,
+                    TripPhase::Returning => Action::Travel(self.home),
                     _ => Action::Wait,
                 }
             },
@@ -307,12 +306,12 @@ impl Plan {
         let remembered_item = location();
         let progress_anchor = location();
         let phase = match u32::from_le_bytes(read(bytes, &mut cursor)) {
-            0 => Phase::Outbound,
-            1 => Phase::Collecting,
-            2 => Phase::Returning,
-            3 => Phase::Complete,
-            4 => Phase::Failed,
-            5 => Phase::Dead,
+            0 => TripPhase::Outbound,
+            1 => TripPhase::Collecting,
+            2 => TripPhase::Returning,
+            3 => TripPhase::Complete,
+            4 => TripPhase::Failed,
+            5 => TripPhase::Dead,
             _ => return None,
         };
         let stalled_ms = u32::from_le_bytes(read(bytes, &mut cursor));
@@ -340,7 +339,7 @@ impl Plan {
             || unavailable_ms > UNAVAILABLE_TIMEOUT_MS
             || flags > 7
             || active_ms > TRIP_DEADLINE_MS
-            || (phase == Phase::Failed) != (reason != FailureReason::None)
+            || (phase == TripPhase::Failed) != (reason != FailureReason::None)
             || !progress_anchor.spatially_valid()
             || !edge_distance.is_finite()
             || edge_distance < 0.0
@@ -404,7 +403,7 @@ impl Plan {
         activity.command = command;
         activity.interrupted = interrupted;
         if source.is_none() {
-            activity.phase = Phase::Returning;
+            activity.phase = TripPhase::Returning;
         }
         activity
     }
@@ -425,12 +424,11 @@ impl Plan {
 
     pub(super) fn state(&self) -> ActivityState {
         match self.phase {
-            Phase::Outbound | Phase::Collecting => ActivityState::Fetching,
-            Phase::Returning => ActivityState::Returning,
-            Phase::Complete => ActivityState::Complete,
-            Phase::Failed => ActivityState::Failed,
-            Phase::Dead => ActivityState::Dead,
-            Phase::Waiting => unreachable!("Waiting belongs to an agent without an activity"),
+            TripPhase::Outbound | TripPhase::Collecting => ActivityState::Fetching,
+            TripPhase::Returning => ActivityState::Returning,
+            TripPhase::Complete => ActivityState::Complete,
+            TripPhase::Failed => ActivityState::Failed,
+            TripPhase::Dead => ActivityState::Dead,
         }
     }
 
@@ -450,6 +448,30 @@ impl Plan {
             previous,
             outcome,
             decision,
+        }
+    }
+}
+
+// Waiting is an agent state with no activity, never a state of a supply trip.
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TripPhase {
+    Outbound = 0,
+    Collecting = 1,
+    Returning = 2,
+    Complete = 3,
+    Failed = 4,
+    Dead = 5,
+}
+impl From<TripPhase> for Phase {
+    fn from(value: TripPhase) -> Self {
+        match value {
+            TripPhase::Outbound => Self::Outbound,
+            TripPhase::Collecting => Self::Collecting,
+            TripPhase::Returning => Self::Returning,
+            TripPhase::Complete => Self::Complete,
+            TripPhase::Failed => Self::Failed,
+            TripPhase::Dead => Self::Dead,
         }
     }
 }

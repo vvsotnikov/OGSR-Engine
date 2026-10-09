@@ -100,3 +100,10 @@ pub struct Decision {
     pub interrupted: bool,
     pub action: Action,
 }
+
+fn valid_source(home: Location, navigation: Location, physical: Location) -> bool {
+    navigation.valid()
+        && physical.spatially_valid()
+        && navigation.level == home.level
+        && physical.level == home.level
+}
