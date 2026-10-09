@@ -1,11 +1,18 @@
 # Integration invariants
 
-`npc_planner = supply_trip` takes control from spawn, before a trip is assigned.
-The legacy Lua binder also owns campaign callbacks and dialog/trade state, not
-just task selection. Opt-in therefore requires a dedicated NPC section; applying
-it to campaign sections would remove those unrelated behaviors. Restoring the
-binder after removing opt-in must preserve native client state while allowing
-script state to initialize without an old Lua payload.
+Enrollment and execution ownership differ. The native action planner arbitrates
+ordinary A-Life, combat, and Lua schemes; Rust may issue movement or pickup only
+while ordinary A-Life owns execution. A script suspension survives combat,
+offline switching, and saves until ordinary online activity releases it. Lua
+schemes do not execute offline, so an offline NPC cannot finish a script task
+and release itself.
+
+Opt-in still requires a dedicated section and excludes story/group/smart-terrain
+assignments. The real binder retains dialog, trade, quest and lifecycle services.
+Its client payload must be captured before switching offline and retained there;
+ordinary engine switching would otherwise discard it. Old binderless saves
+carry a marker so the newly enabled binder initializes without parsing missing
+Lua data. This is not a migration of campaign jobs into Rust.
 
 Server positions are not authoritative for online item physics. Navigation must
 use a reachable point, while pickup knowledge and reach must use the physical

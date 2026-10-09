@@ -421,12 +421,6 @@ BOOL CAI_Stalker::net_Spawn(CSE_Abstract* DC)
 
     m_pPhysics_support->in_NetSpawn(e);
 
-    // The dedicated planner section has no legacy Lua dialog state.
-    if (CNpcSimulation::configured(cNameSect().c_str()))
-    {
-        DisableTalk();
-        DisableTrade();
-    }
     // No ordinary-activity action has executed in this representation yet.
     // Combat may be selected first, without an ALife action to finalize.
     if (auto simulation = CNpcSimulation::active()) simulation->update_online(*this, true);
@@ -717,7 +711,7 @@ void CAI_Stalker::shedule_Update(u32 DT)
         Device.Statistic->AI_Think.Begin();
         if (GetScriptControl())
         {
-            if (auto simulation = CNpcSimulation::active()) simulation->update_online(*this, true);
+            if (auto simulation = CNpcSimulation::active()) simulation->update_online(*this, true, NpcControl::Script);
             ProcessScripts();
         }
         else

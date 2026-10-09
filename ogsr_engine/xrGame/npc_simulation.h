@@ -28,7 +28,7 @@ class CNpcSimulation
     xr_map<CSE_ALifeHumanAbstract*, Entry> m_entries;
     u64 m_next_identity = 1;
 
-    NpcDecision observe(Entry&, const Fvector&, u32 game_vertex, bool interrupted, bool alive, bool failed);
+    NpcDecision observe(Entry&, const Fvector&, u32 game_vertex, bool interrupted, bool alive, bool failed, NpcControl);
     void collect(Entry&, CAI_Stalker* client, const NpcDecision&);
     Entry* find(CSE_ALifeMonsterAbstract*);
     const CALifeObjectRegistry& objects() const;
@@ -43,7 +43,7 @@ public:
     bool owns(CSE_ALifeMonsterAbstract*) const;
     bool owns(u16 id) const;
     bool update_offline(CSE_ALifeMonsterAbstract*);
-    bool update_online(CAI_Stalker&, bool interrupted = false);
+    bool update_online(CAI_Stalker&, bool interrupted = false, NpcControl control = NpcControl::Ordinary);
     void remove(CSE_ALifeDynamicObject*);
     void died(CSE_ALifeDynamicObject*);
     int phase(u16 id) const;

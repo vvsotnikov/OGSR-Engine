@@ -41,7 +41,9 @@ return function(cfg)
             home = level.vertex_position(34548)
             assert(level.name() == "l05_bar")
             get_console():execute("g_god on"); level.disable_input()
-            db.actor:set_actor_position(vector():set(home.x,home.y+1.1,home.z))
+            local actor_node = level.vertex_in_direction(34548,vector():set(-1,0,0),25)
+            local actor_position = level.vertex_position(actor_node)
+            db.actor:set_actor_position(vector():set(actor_position.x,actor_position.y+1.1,actor_position.z))
             if not npc then
                 local candidates = {}
                 for _, d in ipairs({{1,0},{-1,0},{0,1},{0,-1}}) do
@@ -117,6 +119,7 @@ return function(cfg)
         end
         if attacked and not released and now-attacked > 70000 then
             assert(fought)
+            assert(db.storage[npc] and db.storage[npc].state_mgr,"Missing native Lua binder during combat")
             assert(object(gift).parent_id == npc,"Gift was not received during combat")
             log1("[npc goal fixture] gift_owned_during_combat")
             client:set_enemy_callback(function() return false end)
@@ -159,7 +162,8 @@ return function(cfg)
                     complete(); return
                 end
                 if cfg.scenario == "goal-combat" then
-                    assert(fought and here:distance_to(home) <= 1.6,"Combat did not resume the satisfied goal")
+                    if here:distance_to(home) > 1.6 or client:best_enemy() then return end
+                    assert(fought)
                     complete(); return
                 end
                 if transfer(gift,donor) then stage = 3; log1("[npc goal fixture] gift_removed") end

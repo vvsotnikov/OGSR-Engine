@@ -1,4 +1,4 @@
-use crate::{Action, Agent, AgentDecision, Location, Observation, Phase, Plan, Supply};
+use crate::{Action, Agent, AgentDecision, Control, Location, Observation, Phase, Plan, Supply};
 
 #[repr(C)]
 pub struct Input {
@@ -92,6 +92,7 @@ pub unsafe extern "C" fn npc_agent_step(
     plan: *mut Agent,
     input: *const Input,
     output: *mut Output,
+    control: u32,
 ) -> bool {
     let (Some(plan), Some(input), Some(output)) = (
         unsafe { plan.as_mut() },
@@ -119,7 +120,14 @@ pub unsafe extern "C" fn npc_agent_step(
         3 => Supply::OtherOwner,
         _ => return false,
     };
-    let decision = plan.step(
+    let control = match control {
+        0 => Control::Ordinary,
+        1 => Control::Immediate,
+        2 => Control::Script,
+        3 => Control::Offline,
+        _ => return false,
+    };
+    let decision = plan.step_controlled(
         Observation {
             current: input.current,
             supply_location: input.supply_location,
@@ -133,6 +141,7 @@ pub unsafe extern "C" fn npc_agent_step(
             alive: input.alive != 0,
         },
         input.bandages,
+        control,
     );
     *output = Output::from(decision);
     true
@@ -329,17 +338,21 @@ mod tests {
                 alive: 1,
                 bandages: 0,
             };
-            assert!(npc_agent_step(plan, &input, &mut output));
+            assert!(npc_agent_step(plan, &input, &mut output, 0));
             assert_eq!(output.phase, Phase::Collecting as u32);
             input.supply_location.level_vertex = u32::MAX;
-            assert!(npc_agent_step(plan, &input, &mut output));
+            assert!(npc_agent_step(plan, &input, &mut output, 0));
             assert_eq!(output.phase, Phase::Collecting as u32);
             input.supply_location = source;
             let size = npc_agent_save(plan, std::ptr::null_mut(), 0);
             let mut snapshot = vec![0; size];
             assert_eq!(npc_agent_save(plan, snapshot.as_mut_ptr(), size), size);
+            assert!(!npc_agent_step(plan, &input, &mut output, 99));
+            let mut invalid_control = vec![0; size];
+            npc_agent_save(plan, invalid_control.as_mut_ptr(), size);
+            assert_eq!(snapshot, invalid_control);
             input.supply = 99;
-            assert!(!npc_agent_step(plan, &input, &mut output));
+            assert!(!npc_agent_step(plan, &input, &mut output, 0));
             let mut unchanged = vec![0; size];
             npc_agent_save(plan, unchanged.as_mut_ptr(), size);
             assert_eq!(snapshot, unchanged);
@@ -350,7 +363,7 @@ mod tests {
             assert!(!restored.is_null());
             npc_agent_destroy(plan);
             input.supply = 2;
-            assert!(npc_agent_step(restored, &input, &mut output));
+            assert!(npc_agent_step(restored, &input, &mut output, 0));
             assert_eq!(output.identity, 7);
             assert_eq!(output.phase, Phase::Returning as u32);
             assert_eq!(output.level_vertex, home.level_vertex);

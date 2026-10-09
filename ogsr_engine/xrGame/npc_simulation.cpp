@@ -157,7 +157,7 @@ bool CNpcSimulation::remember(u16 npc_id, u16 supply_id)
     return true;
 }
 
-NpcDecision CNpcSimulation::observe(Entry& entry, const Fvector& here, u32 graph, bool interrupted, bool alive, bool blocked)
+NpcDecision CNpcSimulation::observe(Entry& entry, const Fvector& here, u32 graph, bool interrupted, bool alive, bool blocked, NpcControl control)
 {
     NpcDecision before{}, after{};
     R_ASSERT(npc_agent_status(entry.plan, &before));
@@ -191,11 +191,11 @@ NpcDecision CNpcSimulation::observe(Entry& entry, const Fvector& here, u32 graph
         }
     // World facts are distinct from knowledge: Rust decides what can be learned
     // at the remembered destination and owns arrival, waiting and failure policy.
-    R_ASSERT(npc_agent_step(entry.plan, &input, &after));
-    if (before.phase != after.phase || before.command != after.command || entry.interrupted != interrupted)
+    R_ASSERT(npc_agent_step(entry.plan, &input, &after, control));
+    if (before.phase != after.phase || before.command != after.command || entry.interrupted != bool(after.interrupted))
         Msg("[npc trip] identity=%llu npc=%u command=%llu phase=%u reason=%u interrupted=%u online=%u source=%u bandages=%u", after.identity,
             entry.npc->ID, after.command, after.phase, after.reason, after.interrupted, u32(entry.npc->m_bOnline), after.source, input.bandages);
-    entry.interrupted = interrupted;
+    entry.interrupted = bool(after.interrupted);
     return after;
 }
 
@@ -217,7 +217,7 @@ void CNpcSimulation::collect(Entry& entry, CAI_Stalker* client, const NpcDecisio
         m_alife.graph().attach(*entry.npc, smart_cast<CSE_ALifeInventoryItem*>(supply), supply->m_tGraphID, true);
 }
 
-bool CNpcSimulation::update_online(CAI_Stalker& client, bool interrupted)
+bool CNpcSimulation::update_online(CAI_Stalker& client, bool interrupted, NpcControl control)
 {
     if (m_entries.empty()) return false;
     auto entry = find(smart_cast<CSE_ALifeMonsterAbstract*>(objects().object(client.ID(), true)));
@@ -227,7 +227,8 @@ bool CNpcSimulation::update_online(CAI_Stalker& client, bool interrupted)
     const bool path_failed = !entry->interrupted && entry->online_path_command == status.command &&
         client.movement().path_type() == MovementManager::ePathTypeLevelPath && client.movement().level_path().failed();
     if (interrupted) entry->online_path_command = 0;
-    const auto decision = observe(*entry, client.Position(), client.ai_location().game_vertex_id(), interrupted, client.g_Alive(), path_failed);
+    if (interrupted && control == NpcControl::Ordinary) control = NpcControl::Immediate;
+    const auto decision = observe(*entry, client.Position(), client.ai_location().game_vertex_id(), interrupted, client.g_Alive(), path_failed, control);
     if (interrupted || !client.g_Alive()) return true; // existing immediate planner owns movement now
     if (decision.action == 1)
     {
@@ -280,7 +281,7 @@ bool CNpcSimulation::update_offline(CSE_ALifeMonsterAbstract* object)
     if (!entry) return false;
     if (object->m_bOnline) return true;
     entry->online_path_command = 0;
-    const auto decision = observe(*entry, object->o_Position, object->m_tGraphID, false, object->fHealth > 0, false);
+    const auto decision = observe(*entry, object->o_Position, object->m_tGraphID, false, object->fHealth > 0, false, NpcControl::Offline);
     auto& movement = object->brain().movement();
     if (decision.action == 1)
     {
@@ -318,7 +319,7 @@ void CNpcSimulation::remove(CSE_ALifeDynamicObject* object)
 void CNpcSimulation::died(CSE_ALifeDynamicObject* object)
 {
     if (auto entry = find(smart_cast<CSE_ALifeMonsterAbstract*>(object)))
-        observe(*entry, object->o_Position, object->m_tGraphID, false, false, false);
+        observe(*entry, object->o_Position, object->m_tGraphID, false, false, false, NpcControl::Immediate);
 }
 
 int CNpcSimulation::phase(u16 id) const

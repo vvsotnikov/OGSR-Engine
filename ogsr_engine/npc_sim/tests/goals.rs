@@ -366,3 +366,72 @@ fn source_recency_migrates_and_rejects_duplicate_or_out_of_range_ranks() {
     outside[64 + 56..64 + 60].copy_from_slice(&2u32.to_le_bytes());
     assert!(Agent::load(&outside).is_none());
 }
+
+#[test]
+fn script_control_survives_combat_offline_and_reload_until_ordinary_release() {
+    use npc_sim::Control;
+    let mut a = agent();
+    a.step_controlled(observation(0.), 0, Control::Ordinary);
+    let mut o = observation(4.);
+    o.elapsed_ms = 90_000;
+    for control in [Control::Script, Control::Immediate, Control::Offline] {
+        let d = a.step_controlled(o, 0, control).decision;
+        assert_eq!(d.action, Action::Wait);
+        assert!(d.interrupted);
+        assert_eq!(d.phase, Phase::Outbound);
+        a = Agent::load(&a.save()).unwrap();
+    }
+    let gift = a.step_controlled(o, 1, Control::Offline).decision;
+    assert_eq!(gift.phase, Phase::Returning);
+    assert_eq!(gift.action, Action::Wait);
+    a = Agent::load(&a.save()).unwrap();
+    let resumed = a.step_controlled(o, 1, Control::Ordinary).decision;
+    assert_eq!(resumed.action, Action::Travel(point(0.)));
+    assert_eq!(resumed.reason, FailureReason::None);
+}
+
+#[test]
+fn old_goal_saves_default_to_no_script_owner() {
+    use npc_sim::Control;
+    let mut a = agent();
+    a.step_controlled(observation(0.), 0, Control::Ordinary);
+    let mut bytes = a.save();
+    bytes[4..8].copy_from_slice(&3u32.to_le_bytes());
+    let mut restored = Agent::load(&bytes).unwrap();
+    assert_eq!(
+        restored
+            .step_controlled(observation(0.), 0, Control::Offline)
+            .decision
+            .action,
+        Action::Travel(point(10.))
+    );
+    a.step_controlled(observation(0.), 0, Control::Script);
+    let mut invalid_old = a.save();
+    invalid_old[4..8].copy_from_slice(&3u32.to_le_bytes());
+    assert!(Agent::load(&invalid_old).is_none());
+}
+
+#[test]
+fn assigned_trip_also_honors_persisted_script_control() {
+    use npc_sim::Control;
+    let mut original = agent();
+    original.step(observation(0.), 0);
+    // The legacy activity snapshot is the final activity bytes of the envelope.
+    let bytes = original.save();
+    let mut a = Agent::load(&bytes[bytes.len() - Plan::SNAPSHOT_SIZE..]).unwrap();
+    assert!(!a.is_medical());
+    a.step_controlled(observation(0.), 0, Control::Script);
+    a = Agent::load(&a.save()).unwrap();
+    assert_eq!(
+        a.step_controlled(observation(0.), 0, Control::Offline)
+            .decision
+            .action,
+        Action::Wait
+    );
+    assert_eq!(
+        a.step_controlled(observation(0.), 0, Control::Ordinary)
+            .decision
+            .action,
+        Action::Travel(point(10.))
+    );
+}

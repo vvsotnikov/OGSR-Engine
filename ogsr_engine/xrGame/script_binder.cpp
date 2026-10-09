@@ -19,7 +19,7 @@
 
 namespace
 {
-// A planner-owned client has native save data but no Lua binder payload. Keep
+// Older planner saves have native data but no Lua binder payload. Keep
 // that distinction across offline saves and configuration changes: a newly
 // enabled binder must initialize normally, not parse nonexistent script state.
 constexpr u8 no_planner_binder[] = {'N', 'P', 'C', '_', 'N', 'O', '_', 'B', 'I', 'N', 'D', 'E', 'R', 0, 0, 1};
@@ -59,9 +59,6 @@ void CScriptBinder::reload(LPCSTR section)
     if (!pSettings->line_exist(section, "script_binding"))
         return;
 
-    // Explicit planner-owned NPCs use native ordinary activity instead of a
-    // second Lua task owner. Combat/danger remain in the native stalker planner.
-    if (CNpcSimulation::configured(section)) return;
     auto script_func_name = pSettings->r_string(section, "script_binding");
     luabind::functor<void> lua_function;
     if (!ai().script_engine().functor(script_func_name, lua_function))

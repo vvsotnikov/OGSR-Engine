@@ -18,6 +18,8 @@
 #include "game_level_cross_table.h"
 #include "game_graph.h"
 #include "xrServer.h"
+#include "npc_simulation.h"
+#include "gameobject.h"
 
 void CSE_ALifeDynamicObject::on_spawn()
 {
@@ -56,6 +58,14 @@ void CSE_ALifeDynamicObject::switch_online()
 void CSE_ALifeDynamicObject::switch_offline()
 {
     R_ASSERT(m_bOnline);
+    if (CNpcSimulation::configured(name()))
+        if (auto client = smart_cast<CGameObject*>(Level().Objects.net_Find(ID)); client && !client->getDestroy())
+        {
+            // Snapshot the binder before destruction clears its Lua storage.
+            NET_Packet packet;
+            client->net_Save(packet);
+            load(packet);
+        }
     m_bOnline = false;
     alife().remove_online(this);
 #ifdef DEBUG
