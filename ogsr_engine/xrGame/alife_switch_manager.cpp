@@ -11,6 +11,8 @@
 #include "alife_switch_lifecycle.h"
 #include "alife_switch_manager.h"
 #include "xrServer_Objects_ALife.h"
+#include "xrServer_Objects_ALife_Items.h"
+#include <typeinfo>
 #include "alife_graph_registry.h"
 #include "alife_object_registry.h"
 #include "alife_schedule_registry.h"
@@ -52,6 +54,7 @@ void CALifeSwitchManager::add_online(CSE_ALifeDynamicObject* object, bool update
     START_PROFILE("ALife/switch/add_online")
     VERIFY((ai().game_graph().vertex(object->m_tGraphID)->level_id() == graph().level().level_id()));
 
+    object->m_representation.invalidate();
     object->m_bOnline = true;
     alife_service_trace::event("online", object->ID);
 
@@ -85,6 +88,7 @@ void CALifeSwitchManager::add_online(CSE_ALifeDynamicObject* object, bool update
 void CALifeSwitchManager::remove_online(CSE_ALifeDynamicObject* object, bool update_registries)
 {
     START_PROFILE("ALife/switch/remove_online")
+    object->m_representation.invalidate();
     object->m_bOnline = false;
     alife_service_trace::event("offline", object->ID);
 
@@ -245,6 +249,15 @@ struct CALifeSwitchManager::ReconciliationOperations
     void release() { manager.release(object); }
     bool synchronize_location() { return manager.synchronize_location(object); }
     bool online() const { return object->m_bOnline; }
+    bool needs_representation_decision(bool online)
+    {
+        // Exact native type only: subclasses can override eligibility or switching.
+        // This type's whole-map online policy depends only on its permission flags.
+        // Keep offline maintenance/cleanup and attached-parent checks on every visit.
+        const bool audited = !manager.uses_distance_switching() && online && object->ID_Parent == 0xffff &&
+            typeid(*object) == typeid(CSE_ALifeItem);
+        return object->m_representation.needs_decision(audited, object->m_flags.get());
+    }
     // Preserve manager checks and virtual group/object switching behavior.
     void try_switch_online() { manager.try_switch_online(object); }
     void try_switch_offline() { manager.try_switch_offline(object); }

@@ -108,6 +108,8 @@ void CALifeGraphRegistry::attach(CSE_Abstract& object, CSE_ALifeInventoryItem* i
     CSE_ALifeDynamicObject* dynamic_object = smart_cast<CSE_ALifeDynamicObject*>(&object);
     R_ASSERT2(!alife_query || dynamic_object, "Cannot attach an item to a non-alife object object");
 
+    dynamic_object->m_representation.invalidate();
+    item->m_self->m_representation.invalidate();
     dynamic_object->attach(item, alife_query, add_children);
 }
 
@@ -135,8 +137,12 @@ void CALifeGraphRegistry::detach(CSE_Abstract& object, CSE_ALifeInventoryItem* i
     VERIFY(alife_query || !smart_cast<CSE_ALifeDynamicObject*>(&object) ||
            (ai().game_graph().vertex(smart_cast<CSE_ALifeDynamicObject*>(&object)->m_tGraphID)->level_id() == level().level_id()));
 
+    item->m_self->m_representation.invalidate();
     if (dynamic_object)
+    {
+        dynamic_object->m_representation.invalidate();
         dynamic_object->detach(item, 0, alife_query, remove_children);
+    }
     else
     {
 #ifdef DEBUG

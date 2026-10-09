@@ -503,6 +503,7 @@
     <ClInclude Include="agent_manager_properties_inline.h" />
     <ClInclude Include="alife_simulator.h" />
     <ClInclude Include="alife_simulator_inline.h" />
+    <ClInclude Include="..\COMMON_AI\alife_representation_state.h" />
     <ClInclude Include="..\COMMON_AI\alife_space.h" />
     <ClInclude Include="alife_interaction_manager.h" />
     <ClInclude Include="alife_communication_manager.h" />

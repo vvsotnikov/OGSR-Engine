@@ -59,8 +59,11 @@ void reconcile_object(Operations& op, Observer& observer)
     observer.finished(0);
     if (!ready) return;
     const bool online = op.online();
-    if (online) op.try_switch_offline();
-    else op.try_switch_online();
+    if (op.needs_representation_decision(online))
+    {
+        if (online) op.try_switch_offline();
+        else op.try_switch_online();
+    }
     observer.finished(online ? 1 : 2);
     if (op.redundant()) op.release();
     observer.finished(3);
