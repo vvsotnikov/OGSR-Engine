@@ -54,9 +54,7 @@ return function(cfg)
         end
         assert(stage >= 7 or (phase ~= 4 and phase ~= 5),"Goal failed or died")
         if stage == 0 and client and db.storage[npc] then
-            local ini = ini_file("scripts\\npc_control.ltx")
-            xr_logic.configure_schemes(client,ini,"scripts\\npc_control.ltx",modules.stype_stalker,"logic",nil)
-            xr_logic.activate_by_section(client,ini,"nil",false)
+            assert(db.storage[npc].ini and not db.storage[npc].active_section,"Spawn did not initialize planner-compatible logic")
             xr_logic.pstor_store(client,"npc_control_quest",42)
             stage = 1
         elseif stage == 1 and client and client:position():distance_to(home) > 2 then

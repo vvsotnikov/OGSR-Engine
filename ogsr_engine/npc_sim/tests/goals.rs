@@ -478,3 +478,24 @@ fn script_released_during_combat_can_continue_offline() {
         Action::Travel(point(10.))
     );
 }
+
+#[test]
+fn saving_a_new_script_owner_does_not_advance_the_activity() {
+    use npc_sim::ScriptControl;
+    let mut a = agent();
+    let before = a.step(observation(0.), 0).decision;
+    a.report_script_control(ScriptControl::Owned);
+    assert_eq!(a.status().decision, before);
+    let mut restored = Agent::load(&a.save()).unwrap();
+    let paused = restored
+        .step_controlled(observation(4.), 0, ScriptControl::Unobserved)
+        .decision;
+    assert_eq!(paused.phase, Phase::Outbound);
+    assert_eq!(paused.action, Action::Wait);
+    restored.report_script_control(ScriptControl::Released);
+    let mut released = Agent::load(&restored.save()).unwrap();
+    assert_eq!(
+        released.step(observation(4.), 0).decision.action,
+        Action::Travel(point(10.))
+    );
+}

@@ -48,6 +48,8 @@ public:
     bool update_offline(CSE_ALifeMonsterAbstract*);
     bool update_online(CAI_Stalker&, bool interrupted = false);
     void before_offline(CSE_ALifeDynamicObject*);
+    void capture_binder(u16 id, const u8* data, u32 size);
+    void discard_binder(u16 id);
     void restore_binder(u16 id, CScriptBinderObject&);
     void remove(CSE_ALifeDynamicObject*);
     void died(CSE_ALifeDynamicObject*);

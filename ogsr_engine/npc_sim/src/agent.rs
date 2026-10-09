@@ -168,12 +168,15 @@ impl Agent {
         bandages: u32,
         control: ScriptControl,
     ) -> AgentDecision {
+        self.report_script_control(control);
+        self.step(o, bandages)
+    }
+    pub fn report_script_control(&mut self, control: ScriptControl) {
         match control {
             ScriptControl::Released => self.script_suspended = false,
             ScriptControl::Owned => self.script_suspended = true,
             ScriptControl::Unobserved => {}
         }
-        self.step(o, bandages)
     }
     pub fn step(&mut self, mut o: Observation, bandages: u32) -> AgentDecision {
         o.interrupted |= self.script_suspended;

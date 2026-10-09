@@ -127,7 +127,11 @@ void CScriptBinder::save(NET_Packet& output_packet)
 {
     if (m_object)
     {
+        const auto start = output_packet.w_tell();
         m_object->save(&output_packet);
+        if (auto simulation = CNpcSimulation::active())
+            if (auto object = smart_cast<CGameObject*>(this))
+                simulation->capture_binder(object->ID(), output_packet.B.data + start, output_packet.w_tell() - start);
     }
     else if (auto object = smart_cast<CGameObject*>(this); object && CNpcSimulation::configured(object->cNameSect().c_str()))
     {
@@ -148,6 +152,10 @@ void CScriptBinder::load(IReader& input_packet)
     if (m_object)
     {
         m_object->load(&input_packet);
+        // The standard client payload already restored Lua state. Consume its
+        // fallback copy so net_Spawn cannot load the same binder a second time.
+        if (auto simulation = CNpcSimulation::active())
+            if (auto object = smart_cast<CGameObject*>(this)) simulation->discard_binder(object->ID());
     }
 }
 

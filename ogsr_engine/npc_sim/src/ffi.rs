@@ -149,6 +149,21 @@ pub unsafe extern "C" fn npc_agent_step(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn npc_agent_script_control(plan: *mut Agent, control: u32) -> bool {
+    let Some(plan) = (unsafe { plan.as_mut() }) else {
+        return false;
+    };
+    let control = match control {
+        0 => ScriptControl::Unobserved,
+        1 => ScriptControl::Released,
+        2 => ScriptControl::Owned,
+        _ => return false,
+    };
+    plan.report_script_control(control);
+    true
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn npc_agent_status(plan: *const Agent, output: *mut Output) -> bool {
     let (Some(plan), Some(output)) = (unsafe { plan.as_ref() }, unsafe { output.as_mut() }) else {
         return false;
@@ -349,6 +364,8 @@ mod tests {
             let mut snapshot = vec![0; size];
             assert_eq!(npc_agent_save(plan, snapshot.as_mut_ptr(), size), size);
             assert!(!npc_agent_step(plan, &input, &mut output, 99));
+            assert!(!npc_agent_script_control(plan, 99));
+            assert!(!npc_agent_script_control(std::ptr::null_mut(), 2));
             let mut invalid_control = vec![0; size];
             npc_agent_save(plan, invalid_control.as_mut_ptr(), size);
             assert_eq!(snapshot, invalid_control);

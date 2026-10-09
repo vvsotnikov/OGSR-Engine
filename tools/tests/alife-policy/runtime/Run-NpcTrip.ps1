@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory)][string]$InstallRoot,
     [Parameter(Mandatory)][ValidatePattern('^bin_[a-zA-Z0-9_]+$')][string]$Package,
     [ValidateSet('Release','Debug')][string]$Configuration = 'Debug',
-    [ValidateSet('basic','interrupt','offline','switch','missing','death','mismatch','natural','elevated','boundary','far','moved','spawn-combat','save','resume','fallback','goal-cycle','goal-displaced','goal-combat','goal-switch','goal-competition','goal-save','goal-resume','goal-wait-save','goal-wait-resume','control-save','control-resume','control-meet')][string]$Scenario = 'basic',
+    [ValidateSet('basic','interrupt','offline','switch','missing','death','mismatch','natural','elevated','boundary','far','moved','spawn-combat','save','resume','fallback','goal-cycle','goal-displaced','goal-combat','goal-switch','goal-competition','goal-save','goal-resume','goal-wait-save','goal-wait-resume','control-save','control-resume','control-meet','control-transition')][string]$Scenario = 'basic',
     [ValidateSet('whole-map','distance')][string]$Mode = 'whole-map',
     [string]$ResumeSession = '',
     [switch]$GoalOffline,
@@ -48,6 +48,7 @@ Add-Content $config "`n[npc_trip_stalker]:stalker" -Encoding ascii
 if ($Scenario -ne 'fallback') { Add-Content $config 'npc_planner = supply_trip' -Encoding ascii }
 if ($Scenario -eq 'elevated') { Add-Content $config "`n[npc_trip_elevated_bandage]:bandage`nuse_ai_locations = false" -Encoding ascii }
 if ($Scenario.StartsWith('control-')) {
+    Add-Content $config 'custom_data = scripts\npc_control.ltx' -Encoding ascii
     New-Item -ItemType Directory "$runtime/gamedata/config/scripts" -Force | Out-Null
     Copy-Item "$PSScriptRoot/npc_control.ltx" "$runtime/gamedata/config/scripts/npc_control.ltx"
 }
@@ -66,7 +67,7 @@ if ($Scenario -in @('resume','fallback','goal-resume','goal-wait-resume','contro
     $luaConfig = "local ids=dofile(getFS():update_path(`"`$app_data_root`$`",`"npc-trip-ids.lua`")); ids.scenario='$Scenario'; return ids"
 }
 Set-Content "$session/appdata/regular-config.lua" $luaConfig -Encoding ascii
-$driver = if ($Scenario.StartsWith('control-')) { 'NpcControlDriver.lua' } elseif ($Scenario.StartsWith('goal-')) { 'NpcGoalDriver.lua' } else { 'NpcTripDriver.lua' }
+$driver = if ($Scenario -eq 'control-transition') { 'NpcControlTransitionDriver.lua' } elseif ($Scenario.StartsWith('control-')) { 'NpcControlDriver.lua' } elseif ($Scenario.StartsWith('goal-')) { 'NpcGoalDriver.lua' } else { 'NpcTripDriver.lua' }
 Copy-Item "$PSScriptRoot/$driver" "$session/appdata/RegularDriver.lua"
 $meta.status = 'npc-prepared'
 $meta | ConvertTo-Json -Depth 8 | Set-Content "$session/session.json" -Encoding utf8
@@ -83,7 +84,7 @@ try {
     if ($logs.Count -ne 1) { throw 'Expected one log' }
     $log = [IO.File]::ReadAllText($logs[0].FullName)
     Assert-ValidationLogHealthy $log
-    Assert-PolicyMessages $log $Mode 1 $false
+    Assert-PolicyMessages $log $Mode $(if ($Scenario -eq 'control-transition') { 4 } else { 1 }) $false
     if ($game.ExitCode -ne 0 -or $log -match '\[npc fixture\] FAILED') { throw 'NPC scenario failed' }
     if ($Scenario -in @('save','goal-save','goal-wait-save','control-save')) {
         if ($log -notmatch '\[npc fixture\] saved_pending' -or $log -notmatch 'Game npc_trip_pending\.sav is successfully saved' -or !(Test-Path "$session/appdata/savedgames/npc_trip_pending.sav")) { throw 'Pending trip save was not acknowledged' }

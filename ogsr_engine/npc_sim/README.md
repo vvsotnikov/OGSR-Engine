@@ -10,17 +10,24 @@ binders report no observation, not a release.
 
 A persistent script section cannot finish offline because Lua schemes do not
 execute there. Its ownership survives saves and representation changes until
-the script releases the section. Temporary reactions end at the representation
+the script releases the section (`active = nil`). Planner-compatible ordinary
+logic must therefore have no active section; a standing `walker` or `remark`
+job deliberately retains control, even when it has nothing to do. Temporary reactions end at the representation
 boundary; they do not claim persistent script ownership.
 
 Opt-in still requires a dedicated section and excludes story/group/smart-terrain
-assignments. Only enrolled NPCs snapshot their binder before offline destruction.
+assignments. The shipped smart-terrain registration goes through the native brain selector,
+which excludes planner sections before enrollment. Custom scripts must respect
+that same ownership boundary. Only enrolled NPCs retain binder snapshots.
 The separate NPC save chunk retains that Lua payload without retaining native
 client memory, conditions or inventory-owner state, which can become stale while
 offline. It is consumed before binder net_spawn, where the saved scheme is
 activated. Its writer version must accompany it: a live server entity can still
 report an older input version, which would misparse freshly saved dialog data.
-Normal online saves continue using the standard client save chain.
+ClientSave captures the same fallback before level-change autosaves: that path
+does not call switch_offline. Normal online loads consume the fallback after
+loading the standard client payload, so the binder is never loaded twice.
+Capturing ownership during save must not advance goal time or issue actions.
 Old binderless saves carry a marker so the newly enabled binder initializes
 without parsing missing Lua data. This is not a migration of campaign jobs.
 

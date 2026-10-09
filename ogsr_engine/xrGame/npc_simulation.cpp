@@ -315,12 +315,25 @@ void CNpcSimulation::before_offline(CSE_ALifeDynamicObject* object)
     if (!entry) return;
     auto client = smart_cast<CAI_Stalker*>(Level().Objects.net_Find(object->ID));
     if (!client || client->getDestroy()) return;
-    // Refresh script ownership even if the section changed since the last AI tick.
-    observe(*entry, client->Position(), client->ai_location().game_vertex_id(), true, client->g_Alive(), false, script_control(object->ID));
     NET_Packet packet;
     client->CScriptBinder::save(packet);
+}
+
+void CNpcSimulation::capture_binder(u16 id, const u8* data, u32 size)
+{
+    auto entry = find(smart_cast<CSE_ALifeMonsterAbstract*>(objects().object(id, true)));
+    if (!entry) return;
+    // ClientSave also reaches this path before a level-change autosave, where
+    // switch_offline is not called. Saving must not advance goal time or actions.
+    R_ASSERT(npc_agent_script_control(entry->plan, script_control(id)));
     entry->binder_version = script_server_object_version();
-    entry->binder_data.assign(packet.B.data, packet.B.data + packet.w_tell());
+    entry->binder_data.assign(data, data + size);
+}
+
+void CNpcSimulation::discard_binder(u16 id)
+{
+    if (auto entry = find(smart_cast<CSE_ALifeMonsterAbstract*>(objects().object(id, true))))
+        entry->binder_data.clear();
 }
 
 void CNpcSimulation::restore_binder(u16 id, CScriptBinderObject& binder)
