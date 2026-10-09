@@ -15,8 +15,8 @@ class CNpcSimulation
     struct Entry
     {
         CSE_ALifeHumanAbstract* npc{};
-        CSE_ALifeDynamicObject* supply{};
-        NpcPlan* plan{};
+        xr_vector<CSE_ALifeDynamicObject*> supplies;
+        NpcAgent* plan{};
         u64 pickup_command = 0;
         u64 online_path_command = 0;
         u32 last_observation = 0;
@@ -29,7 +29,7 @@ class CNpcSimulation
     u64 m_next_identity = 1;
 
     NpcDecision observe(Entry&, const Fvector&, u32 game_vertex, bool interrupted, bool alive, bool failed);
-    void collect(Entry&, CAI_Stalker* client, u64 command);
+    void collect(Entry&, CAI_Stalker* client, const NpcDecision&);
     Entry* find(CSE_ALifeMonsterAbstract*);
     const CALifeObjectRegistry& objects() const;
 
@@ -38,7 +38,8 @@ public:
     ~CNpcSimulation();
     static CNpcSimulation* active();
     static bool configured(LPCSTR section);
-    bool enroll(u16 npc, u16 supply);
+    bool enroll(u16 npc, u16 supply, bool medical_goal = false);
+    bool remember(u16 npc, u16 supply);
     bool owns(CSE_ALifeMonsterAbstract*) const;
     bool owns(u16 id) const;
     bool update_offline(CSE_ALifeMonsterAbstract*);

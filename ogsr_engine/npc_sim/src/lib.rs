@@ -1,6 +1,8 @@
 //! Persistent intentions and policy. The host reports facts and executes commands.
 #![deny(unsafe_op_in_unsafe_fn)]
+mod agent;
 mod ffi;
+pub use agent::{Agent, AgentDecision, Source};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -41,6 +43,7 @@ pub enum Phase {
     Complete = 3,
     Failed = 4,
     Dead = 5,
+    Waiting = 6,
 }
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -168,7 +171,10 @@ impl Plan {
         self.transition(Phase::Failed);
         self.reason = reason;
     }
-    pub fn step(&mut self, mut o: Observation) -> Decision {
+    pub fn step(&mut self, o: Observation) -> Decision {
+        self.step_with_goal(o, o.supply == Supply::Owned)
+    }
+    fn step_with_goal(&mut self, mut o: Observation, satisfied: bool) -> Decision {
         // elapsed_ms describes the interval *before* this observation. Combat
         // may produce only start/end observations, with no ticks in between.
         if !o.edge_distance.is_finite() || o.edge_distance < 0.0 {
@@ -220,9 +226,9 @@ impl Plan {
                 let mut decision = self.decision();
                 decision.action = Action::Wait;
                 return decision;
-            } else if self.phase == Phase::Returning && o.supply != Supply::Owned {
+            } else if self.phase == Phase::Returning && !satisfied {
                 self.fail(FailureReason::LostSupply);
-            } else if o.supply == Supply::Owned {
+            } else if satisfied {
                 self.transition(Phase::Returning);
                 if o.current.near(self.home, 1.5) {
                     self.transition(Phase::Complete);
