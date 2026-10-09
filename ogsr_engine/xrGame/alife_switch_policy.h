@@ -14,6 +14,7 @@ struct Decision
 
 // The policy receives this restricted view in production as well as tests.
 // Registry, transition, trace and client-data operations are not exposed.
+// This restricts the callable API, not side effects within virtual/Lua queries.
 template <class Source>
 class QueryView
 {

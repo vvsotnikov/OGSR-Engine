@@ -142,6 +142,7 @@ struct DynamicSwitchOperations
     void clear_data() { object.client_data.clear(); }
     void report_rejection(alife_switch_policy::Rejection reason) const
     {
+        VERIFY(reason == alife_switch_policy::Rejection::permission || reason == alife_switch_policy::Rejection::distance);
         const bool distance = reason == alife_switch_policy::Rejection::distance;
         if (alife_service_trace::visits_enabled.load(std::memory_order_relaxed))
             alife_service_trace::event(distance ? "distance_rejected" : "permission_rejected", object.ID);
