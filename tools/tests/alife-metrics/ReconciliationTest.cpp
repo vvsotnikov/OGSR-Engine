@@ -1,4 +1,5 @@
 #include "alife_diagnostics.h"
+#include "alife_switch_lifecycle.h"
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -21,12 +22,13 @@ struct Operations
     bool initial_redundant = false, synchronized = true, is_online = false;
     bool flip_on_sync = false, flip_on_switch = false, redundant_after_switch = false;
     bool evaluated = false, released = false;
+    unsigned online_reads = 0;
     std::vector<std::string> calls;
     void alive() const { require(!released, "Object accessed after release"); }
     bool redundant() { alive(); calls.push_back("redundant"); return evaluated ? redundant_after_switch : initial_redundant; }
     void release() { alive(); calls.push_back("release"); released = true; }
     bool synchronize_location() { alive(); calls.push_back("sync"); is_online ^= flip_on_sync; return synchronized; }
-    bool online() const { alive(); return is_online; }
+    bool online() { alive(); ++online_reads; return is_online; }
     void dispatch(const char* name) { alive(); calls.push_back(name); evaluated = true; is_online ^= flip_on_switch; }
     void try_switch_online() { dispatch("online"); }
     void try_switch_offline() { dispatch("offline"); }
@@ -39,8 +41,18 @@ void scenario(const char* name, Operations operations, const std::vector<std::st
     {
         double stages[4] = {};
         const unsigned timers = TestTimer::constructions;
-        alife_diagnostics::reconcile_object<TestTimer>(sampled, stages, operations);
+        if (sampled)
+        {
+            alife_diagnostics::ReconciliationTiming<TestTimer> timing(stages);
+            alife_switch_lifecycle::reconcile_object(operations, timing);
+        }
+        else
+        {
+            alife_switch_lifecycle::Unobserved observer;
+            alife_switch_lifecycle::reconcile_object(operations, observer);
+        }
         require(operations.calls == expected, "Lifecycle operation order differs");
+        require(operations.online_reads == unsigned(phase != 0), "Representation must be read once after synchronization");
         require(operations.released == release_expected, "Incorrect release outcome");
         require(TestTimer::constructions - timers == unsigned(sampled), "Unsampled path constructed a timer");
         require(stages[0] == (sampled ? 2.0 : 0.0), "Incorrect pre-switch duration");

@@ -16,19 +16,29 @@ mode. It is an inherited retention defect tracked in #18, not the intended
 contract of #1. These regression tests preserve the old behavior pending that fix.
 
 Configure this directory with CMake, build and run CTest (Python 3, PowerShell, and C/C++17 compilers).
-The engine and tests compile `alife_switch_policy.h` directly. Operations bind
+The engine and tests compile `alife_switch_policy.h` and
+`alife_switch_lifecycle.h` directly. Operations bind
 real engine objects and registries in the engine and controlled state in tests.
 No method text or engine class declarations are copied into the fixtures.
 The tests cover distance boundaries, eligibility, cleanup and group member order;
 real registry effects and client construction require native scenarios. The
 controlled-operation tests do not compile the engine adapters. Release and Tracy
-builds compile those adapters; native scenarios exercise their effects only for
-the object types used by each scenario. Full `DEBUG` assertion paths remain
-unverified pending the separate build repairs in #16.
+and full Debug builds compile those adapters; native scenarios exercise their
+effects only for the object types used by each scenario. `-Eligibility` exercises
+simulator permission setters and direct mutation of the exposed object flags, then an inventory item
+through attach, detach, offline, online and destruction.
+
+Scheduler maintenance precedes permission queries, which can change during
+maintenance. Rejected activation reports its reason before clearing saved client
+data. Attached objects follow their parent rather than independent switching
+permissions. Synchronization can change online state; dispatch uses that new
+state. Diagnostics observes lifecycle phases but cannot skip or select them.
 
 For game validation, package a Release build as `<install>/bin_whole_lifecycle`
-with its DLLs and a `build.json` containing `baseCommit`, executable `sha256`,
-`configuration: Release`, and `tracyEnabled: false`. Use a separate installation
+with its DLLs and a `build.json` containing `sourceCommit`, executable `sha256`,
+`configuration: Release`, and `tracyEnabled: false`. For a full Debug package,
+use `configuration: Debug` and pass `-Configuration Debug` to the runner.
+Use a separate installation
 with the original SoC resources, its standard `fsgame.ltx`, and a Bar save at
 `seeds/bar-2026-10-03/savedgames/bar_center.sav`, plus its user settings.
 `runtime/Prepare-RegularValidation.ps1 -BaselineRoot <baseline> -InstallRoot <new-install>`

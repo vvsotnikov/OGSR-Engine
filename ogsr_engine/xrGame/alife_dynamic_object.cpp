@@ -8,7 +8,7 @@
 
 #include "stdafx.h"
 #include "alife_service_trace.h"
-#include "alife_switch_policy.h"
+#include "alife_switch_lifecycle.h"
 #include "xrServer_Objects_ALife.h"
 #include "alife_simulator.h"
 #include "alife_schedule_registry.h"
@@ -140,8 +140,10 @@ struct DynamicSwitchOperations
     float offline_limit() const { return object.alife().offline_distance(); }
     bool keep_data() const { return object.keep_saved_data_anyway(); }
     void clear_data() { object.client_data.clear(); }
-    void report_rejection(bool distance) const
+    void report_rejection(alife_switch_policy::Rejection reason) const
     {
+        VERIFY(reason == alife_switch_policy::Rejection::permission || reason == alife_switch_policy::Rejection::distance);
+        const bool distance = reason == alife_switch_policy::Rejection::distance;
         if (alife_service_trace::visits_enabled.load(std::memory_order_relaxed))
             alife_service_trace::event(distance ? "distance_rejected" : "permission_rejected", object.ID);
 #ifdef DEBUG
@@ -162,13 +164,13 @@ struct DynamicSwitchOperations
 void CSE_ALifeDynamicObject::try_switch_online()
 {
     DynamicSwitchOperations operations{*this};
-    alife_switch_policy::dynamic_online(operations);
+    alife_switch_lifecycle::dynamic_online(operations);
 }
 
 void CSE_ALifeDynamicObject::try_switch_offline()
 {
     DynamicSwitchOperations operations{*this};
-    alife_switch_policy::dynamic_offline(operations);
+    alife_switch_lifecycle::dynamic_offline(operations);
 }
 
 bool CSE_ALifeDynamicObject::redundant() const { return (false); }

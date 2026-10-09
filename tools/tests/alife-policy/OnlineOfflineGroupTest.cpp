@@ -1,4 +1,4 @@
-#include "alife_switch_policy.h"
+#include "alife_switch_lifecycle.h"
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -21,7 +21,7 @@ struct Operations
     void verify_online_member(float) const {}
     void verify_offline_member(float) const {}
     // Execute the same dynamic policy used by the inherited engine method.
-    void dynamic_online() { ++attempts; alife_switch_policy::dynamic_online(*this); }
+    void dynamic_online() { ++attempts; alife_switch_lifecycle::dynamic_online(*this); }
     bool schedulable() const { return false; }
     bool needs_update() const { throw std::runtime_error("Unexpected schedule access"); }
     bool scheduled() const { throw std::runtime_error("Unexpected schedule access"); }
@@ -29,7 +29,7 @@ struct Operations
     void unschedule() { throw std::runtime_error("Unexpected schedule access"); }
     float actor_distance() const { check_distance(); return selected; }
     float online_limit() const { return 150; }
-    void report_rejection(bool) const {}
+    void report_rejection(alife_switch_policy::Rejection) const {}
     bool keep_data() const { return false; }
     void clear_data() {}
     void switch_online() { online=true; }
@@ -65,8 +65,8 @@ int main()
                                 else for (float x : positions)
                                     if (!distance || !(x > 200)) { selected=x; expected=!distance || !(x > 150); attempts=1; break; }
                             }
-                            if (online) alife_switch_policy::online_group_offline(op);
-                            else alife_switch_policy::online_group_online(op);
+                            if (online) alife_switch_lifecycle::online_group_offline(op);
+                            else alife_switch_lifecycle::online_group_online(op);
                             const bool same_position=op.selected==selected || (op.selected!=op.selected && selected!=selected);
                             if (op.online!=expected || !same_position || op.attempts!=attempts)
                                 throw std::runtime_error("Incorrect state, selected member or inherited dispatch count");

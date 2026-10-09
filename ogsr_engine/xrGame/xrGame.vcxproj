@@ -566,6 +566,7 @@
     <ClInclude Include="alife_diagnostics.h" />
     <ClInclude Include="alife_service_trace.h" />
     <ClInclude Include="alife_switch_policy.h" />
+    <ClInclude Include="alife_switch_lifecycle.h" />
     <ClInclude Include="alife_switch_manager.h" />
     <ClInclude Include="alife_switch_manager_inline.h" />
     <ClInclude Include="saved_game_wrapper.h" />

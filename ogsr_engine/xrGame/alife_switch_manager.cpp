@@ -8,7 +8,7 @@
 
 #include "stdafx.h"
 #include "alife_service_trace.h"
-#include "alife_switch_policy.h"
+#include "alife_switch_lifecycle.h"
 #include "alife_switch_manager.h"
 #include "xrServer_Objects_ALife.h"
 #include "alife_graph_registry.h"
@@ -205,7 +205,7 @@ void CALifeSwitchManager::try_switch_online(CSE_ALifeDynamicObject* I)
         bool keep_data() const { return I->keep_saved_data_anyway(); }
         void clear_data() { I->client_data.clear(); }
     } operations{*this, I};
-    alife_switch_policy::manager_online(operations);
+    alife_switch_lifecycle::manager_online(operations);
     STOP_PROFILE
 }
 
@@ -255,7 +255,16 @@ void CALifeSwitchManager::switch_object(CSE_ALifeDynamicObject* I)
     if (alife_service_trace::visits_enabled.load(std::memory_order_relaxed))
         alife_service_trace::object("visit", I);
     ReconciliationOperations operations{*this, I};
-    alife_diagnostics::reconcile_object<CTimer>(m_reconciliation.sampled, m_reconciliation.stages, operations);
+    if (m_reconciliation.sampled)
+    {
+        alife_diagnostics::ReconciliationTiming<CTimer> timing(m_reconciliation.stages);
+        alife_switch_lifecycle::reconcile_object(operations, timing);
+    }
+    else
+    {
+        alife_switch_lifecycle::Unobserved observer;
+        alife_switch_lifecycle::reconcile_object(operations, observer);
+    }
 }
 
 void CALifeSwitchManager::begin_reconciliation()

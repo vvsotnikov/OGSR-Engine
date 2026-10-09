@@ -7,7 +7,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
-#include "alife_switch_policy.h"
+#include "alife_switch_lifecycle.h"
 #include "xrServer_Objects_ALife.h"
 #include "ai_space.h"
 #include "alife_simulator.h"
@@ -163,7 +163,7 @@ void CSE_ALifeGroupAbstract::try_switch_offline()
         void decrement_count() { --group.m_wCount; }
         void switch_offline() { object->alife().switch_offline(object); }
     } operations{*this};
-    alife_switch_policy::legacy_group_offline(operations);
+    alife_switch_lifecycle::legacy_group_offline(operations);
 }
 
 bool CSE_ALifeGroupAbstract::redundant() const { return (m_tpMembers.empty()); }

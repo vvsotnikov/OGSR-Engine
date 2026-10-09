@@ -1,4 +1,4 @@
-#include "alife_switch_policy.h"
+#include "alife_switch_lifecycle.h"
 #include <iostream>
 #include <stdexcept>
 #include <vector>
@@ -22,7 +22,7 @@ int main()
             for (bool keep : {false, true})
             {
                 Operations op{attached, activates, keep};
-                alife_switch_policy::manager_online(op);
+                alife_switch_lifecycle::manager_online(op);
                 std::vector<std::string> expected = attached ? std::vector<std::string>{"parent"} : std::vector<std::string>{"offline", "try"};
                 const bool clear = !attached && !activates && !keep;
                 if (clear) expected.push_back("clear");
