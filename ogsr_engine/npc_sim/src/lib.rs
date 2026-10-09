@@ -110,9 +110,8 @@ fn valid_source(home: Location, navigation: Location, physical: Location) -> boo
 
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Control {
-    Ordinary = 0,
-    Immediate = 1,
-    Script = 2,
-    Offline = 3,
+pub enum ScriptControl {
+    Unobserved = 0,
+    Released = 1,
+    Owned = 2,
 }

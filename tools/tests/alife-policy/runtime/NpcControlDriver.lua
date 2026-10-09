@@ -2,7 +2,7 @@
 return function(cfg)
     local npc,item = cfg.npc,cfg.item
     local stage,started,since,anchor = 0,nil,nil,nil
-    local finished, sampled = false,nil
+    local finished, sampled, other, returned = false,nil,nil,false
     local function path(name) return getFS():update_path("$app_data_root$",name) end
     local function switch(client,section)
         assert(xr_logic.switch_to_section(client,db.storage[npc],section))
@@ -24,6 +24,7 @@ return function(cfg)
                     return assert(alife():create(section,level.vertex_position(vertex),vertex,cross_table():vertex(vertex):game_vertex_id())).id
                 end
                 npc,item = spawn("npc_trip_stalker",34548),spawn("bandage",node)
+                if cfg.scenario == "control-meet" then other=spawn("npc_trip_stalker",level.vertex_in_direction(34548,vector():set(0,0,-1),20)) end
                 assert(alife():start_supply_goal(npc))
                 assert(alife():remember_supply(npc,item))
             else
@@ -60,8 +61,16 @@ return function(cfg)
             stage = 1
         elseif stage == 1 and client and client:position():distance_to(home) > 2 then
             assert(client:is_trade_enabled(),"Trade disabled for planner NPC")
-            switch(client,"remark@hold")
-            stage = 2
+            if cfg.scenario == "control-meet" then
+                xr_meet.init_meet(client,db.storage[npc].ini,"meet@fixture",db.storage[npc].meet,nil)
+                db.actor:activate_slot(0)
+                local pos = client:position()
+                db.actor:set_actor_position(vector():set(pos.x,pos.y+1.1,pos.z+1))
+                stage = 11
+            else
+                switch(client,"remark@hold")
+                stage = 2
+            end
         elseif stage == 2 and action == xr_actions_id.zmey_remark_base+1 then
             if not since then since,anchor = now,client:position() end
             assert(client:position():distance_to(anchor) < 1,"Planner moved a script-controlled NPC")
@@ -75,6 +84,7 @@ return function(cfg)
             if not since then since,anchor = now,server.position end
             assert(server.position:distance_to(anchor) < 0.1,"Offline planner stole script control")
             if now-since > 4000 then
+                server.money = 1234567
                 local file = assert(io.open(path("npc-trip-ids.lua"),"w"))
                 file:write(string.format("return {npc=%d,item=%d}",npc,item)); file:close()
                 finished = true
@@ -91,6 +101,7 @@ return function(cfg)
                 stage = 5
             end
         elseif stage == 5 and client and db.storage[npc] then
+            assert(client:money() == 1234567,"Stale native client snapshot overwrote offline money")
             assert(xr_logic.pstor_retrieve(client,"npc_control_quest",0) == 42,"Binder lost quest state")
             assert(db.storage[npc].active_section == "remark@hold","Binder lost script activity")
             if action == xr_actions_id.zmey_remark_base+1 then
@@ -119,6 +130,45 @@ return function(cfg)
             log1("[npc control] dialog_trade_passed")
             client:kill(db.actor)
             stage = 7
+        elseif stage == 11 and action == xr_actions_id.stohe_meet_base+1 and client:is_talk_enabled() then
+            assert(not db.storage[npc].active_section,"Meet unexpectedly claimed a persistent section")
+            db.actor:run_talk_dialog(client)
+            assert(client:is_talking(),"Mid-trip dialog did not start")
+            db.actor:stop_talk()
+            local ordinary = assert(level.object_by_id(other))
+            xr_logic.pstor_store(ordinary,"npc_control_unenrolled",99)
+            assert(alife():supply_trip_phase(other) == -1)
+            alife():set_switch_online(npc,false)
+            alife():set_switch_online(item,false)
+            alife():set_switch_online(other,false)
+            anchor,since,stage = client:position(),now,12
+        elseif stage == 12 and not server.online and not client then
+            if server.position:distance_to(anchor) > 2 then
+                log1("[npc control] meet_released_offline")
+                server.money = 1234567
+                local pos=level.vertex_position(level.vertex_in_direction(34548,vector():set(-1,0,0),25))
+                db.actor:set_actor_position(vector():set(pos.x,pos.y+1.1,pos.z))
+                alife():set_switch_online(npc,true)
+                alife():set_switch_online(item,true)
+                alife():set_switch_online(other,true)
+                stage=13
+            end
+        elseif stage == 13 and client and action then
+            if not returned then
+                -- The tested meet is over; prevent another greeting on the return leg.
+                xr_meet.init_meet(client,db.storage[npc].ini,"no_meet",db.storage[npc].meet,nil)
+                returned=true
+            end
+            local ordinary=level.object_by_id(other)
+            if not ordinary or not db.storage[other] or not db.storage[other].ini then return end
+            assert(xr_logic.pstor_retrieve(ordinary,"npc_control_unenrolled",0) == 0,"Unenrolled NPC retained nonstandard script snapshot")
+            assert(client:money() == 1234567)
+            assert(xr_logic.pstor_retrieve(client,"npc_control_quest",0) == 42)
+            if phase == 3 then
+                assert(alife():object(item).parent_id == npc)
+                log1("[npc fixture] complete scenario="..cfg.scenario)
+                finished=true; get_console():execute("quit")
+            end
         elseif stage == 7 and client and not client:alive() then
             assert(db.storage[npc].death.killer == db.actor:id(),"Binder death callback missing")
             assert(phase == 5,"Native death did not end the goal")

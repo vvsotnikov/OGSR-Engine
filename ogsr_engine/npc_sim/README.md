@@ -1,18 +1,28 @@
 # Integration invariants
 
 Enrollment and execution ownership differ. The native action planner arbitrates
-ordinary A-Life, combat, and Lua schemes; Rust may issue movement or pickup only
-while ordinary A-Life owns execution. A script suspension survives combat,
-offline switching, and saves until ordinary online activity releases it. Lua
-schemes do not execute offline, so an offline NPC cannot finish a script task
-and release itself.
+ordinary A-Life, combat, and Lua schemes; Rust may issue online movement or pickup
+only while ordinary A-Life owns execution. The Lua bridge reports persistent
+ownership from xr_logic's active section, not from a selected action ID: meet,
+combat and state transitions alone must not strand an offline goal. Custom
+binders with a different activity model must adapt that bridge. Uninitialized
+binders report no observation, not a release.
+
+A persistent script section cannot finish offline because Lua schemes do not
+execute there. Its ownership survives saves and representation changes until
+the script releases the section. Temporary reactions end at the representation
+boundary; they do not claim persistent script ownership.
 
 Opt-in still requires a dedicated section and excludes story/group/smart-terrain
-assignments. The real binder retains dialog, trade, quest and lifecycle services.
-Its client payload must be captured before switching offline and retained there;
-ordinary engine switching would otherwise discard it. Old binderless saves
-carry a marker so the newly enabled binder initializes without parsing missing
-Lua data. This is not a migration of campaign jobs into Rust.
+assignments. Only enrolled NPCs snapshot their binder before offline destruction.
+The separate NPC save chunk retains that Lua payload without retaining native
+client memory, conditions or inventory-owner state, which can become stale while
+offline. It is consumed before binder net_spawn, where the saved scheme is
+activated. Its writer version must accompany it: a live server entity can still
+report an older input version, which would misparse freshly saved dialog data.
+Normal online saves continue using the standard client save chain.
+Old binderless saves carry a marker so the newly enabled binder initializes
+without parsing missing Lua data. This is not a migration of campaign jobs.
 
 Server positions are not authoritative for online item physics. Navigation must
 use a reachable point, while pickup knowledge and reach must use the physical

@@ -1,0 +1,7 @@
+-- Facts from the installed xr_logic binder; Rust owns suspension policy.
+function script_control(id)
+    local st = db.storage[id]
+    if not st or not st.ini then return 0 end -- binder not initialized yet
+    if st.active_section and st.active_section ~= "nil" then return 2 end
+    return 1 -- meet/combat/state transitions alone do not claim persistent activity
+end

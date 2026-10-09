@@ -711,7 +711,7 @@ void CAI_Stalker::shedule_Update(u32 DT)
         Device.Statistic->AI_Think.Begin();
         if (GetScriptControl())
         {
-            if (auto simulation = CNpcSimulation::active()) simulation->update_online(*this, true, NpcControl::Script);
+            if (auto simulation = CNpcSimulation::active()) simulation->update_online(*this, true);
             ProcessScripts();
         }
         else

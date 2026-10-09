@@ -1,7 +1,9 @@
 use crate::activity::ActivityState;
 use crate::goal::{ActivityRequest, Goal, GoalKind};
 use crate::knowledge::{Knowledge, Source};
-use crate::{Action, Control, Decision, FailureReason, Location, Observation, Phase, Plan, Supply};
+use crate::{
+    Action, Decision, FailureReason, Location, Observation, Phase, Plan, ScriptControl, Supply,
+};
 mod persistence;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -162,16 +164,15 @@ impl Agent {
     }
     pub fn step_controlled(
         &mut self,
-        mut o: Observation,
+        o: Observation,
         bandages: u32,
-        control: Control,
+        control: ScriptControl,
     ) -> AgentDecision {
         match control {
-            Control::Ordinary => self.script_suspended = false,
-            Control::Script => self.script_suspended = true,
-            Control::Immediate | Control::Offline => {}
+            ScriptControl::Released => self.script_suspended = false,
+            ScriptControl::Owned => self.script_suspended = true,
+            ScriptControl::Unobserved => {}
         }
-        o.interrupted |= matches!(control, Control::Immediate | Control::Script);
         self.step(o, bandages)
     }
     pub fn step(&mut self, mut o: Observation, bandages: u32) -> AgentDecision {

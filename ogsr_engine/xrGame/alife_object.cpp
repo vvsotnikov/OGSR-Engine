@@ -9,7 +9,6 @@
 #include "stdafx.h"
 #include "xrServer_Objects_ALife.h"
 #include "alife_simulator.h"
-#include "npc_simulation.h"
 #include "xrServer_Objects_ALife_Items.h"
 
 void CSE_ALifeObject::spawn_supplies() { spawn_supplies(*m_ini_string); }
@@ -84,8 +83,4 @@ void CSE_ALifeObject::spawn_supplies(LPCSTR ini_string)
     }
 }
 
-bool CSE_ALifeObject::keep_saved_data_anyway() const
-{
-    // Script execution is suspended offline, not reinitialized on every visit.
-    return CNpcSimulation::configured(name());
-}
+bool CSE_ALifeObject::keep_saved_data_anyway() const { return (false); }

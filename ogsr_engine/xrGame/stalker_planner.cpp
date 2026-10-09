@@ -86,16 +86,8 @@ void CStalkerPlanner::update(u32 time_delta)
     inherited::update();
 
     if (auto simulation = CNpcSimulation::active(); simulation && simulation->owns(m_object->ID()))
-    {
-        if (!initialized()) simulation->update_online(*m_object, true);
-        else if (current_action_id() != eWorldOperatorALifePlanner)
-        {
-            const auto action = current_action_id();
-            const bool immediate = action == eWorldOperatorCombatPlanner || action == eWorldOperatorDangerPlanner ||
-                action == eWorldOperatorAnomalyPlanner || action == eWorldOperatorDeathPlanner;
-            simulation->update_online(*m_object, true, immediate ? NpcControl::Immediate : NpcControl::Script);
-        }
-    }
+        if (!initialized() || current_action_id() != eWorldOperatorALifePlanner)
+            simulation->update_online(*m_object, true);
 
 #ifdef GOAP_DEBUG
     if (m_failed)

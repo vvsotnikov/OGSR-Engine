@@ -1,4 +1,6 @@
-use crate::{Action, Agent, AgentDecision, Control, Location, Observation, Phase, Plan, Supply};
+use crate::{
+    Action, Agent, AgentDecision, Location, Observation, Phase, Plan, ScriptControl, Supply,
+};
 
 #[repr(C)]
 pub struct Input {
@@ -121,10 +123,9 @@ pub unsafe extern "C" fn npc_agent_step(
         _ => return false,
     };
     let control = match control {
-        0 => Control::Ordinary,
-        1 => Control::Immediate,
-        2 => Control::Script,
-        3 => Control::Offline,
+        0 => ScriptControl::Unobserved,
+        1 => ScriptControl::Released,
+        2 => ScriptControl::Owned,
         _ => return false,
     };
     let decision = plan.step_controlled(

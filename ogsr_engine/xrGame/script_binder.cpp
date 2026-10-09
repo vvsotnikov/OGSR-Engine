@@ -88,6 +88,7 @@ BOOL CScriptBinder::net_Spawn(CSE_Abstract* DC)
     CSE_ALifeObject* object = smart_cast<CSE_ALifeObject*>(abstract);
     if (object && m_object)
     {
+        if (auto simulation = CNpcSimulation::active()) simulation->restore_binder(abstract->ID, *m_object);
         return (BOOL)m_object->net_Spawn(object);
     }
     return TRUE;
