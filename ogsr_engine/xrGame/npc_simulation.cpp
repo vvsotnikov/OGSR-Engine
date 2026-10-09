@@ -21,6 +21,7 @@
 #include "level_graph.h"
 #include "game_level_cross_table.h"
 #include "xrMessages.h"
+#include "clsid_game.h"
 
 namespace
 {
@@ -56,7 +57,7 @@ NpcLocation navigation_location(const CSE_ALifeDynamicObject& object)
 
 CNpcSimulation::~CNpcSimulation()
 {
-    for (auto& [_, entry] : m_entries) npc_plan_destroy(entry.plan);
+    for (auto& [_, entry] : m_entries) npc_agent_destroy(entry.plan);
 }
 
 const CALifeObjectRegistry& CNpcSimulation::objects() const
@@ -94,41 +95,70 @@ bool CNpcSimulation::configured(LPCSTR section)
     return pSettings->line_exist(section, "npc_planner") && !xr_strcmp(pSettings->r_string(section, "npc_planner"), "supply_trip");
 }
 
-bool CNpcSimulation::enroll(u16 npc_id, u16 supply_id)
+namespace
+{
+bool navigable_here(const CSE_ALifeDynamicObject& object)
+{
+    if (!ai().get_level_graph() || !ai().game_graph().valid_vertex_id(object.m_tGraphID) ||
+        ai().game_graph().vertex(object.m_tGraphID)->level_id() != ai().level_graph().level_id() ||
+        !ai().level_graph().valid_vertex_id(object.m_tNodeID)) return false;
+    const auto point = location(object);
+    const Fvector position = Fvector().set(point.position[0], point.position[1], point.position[2]);
+    return point.level == ai().level_graph().level_id() && _valid(position) && ai().level_graph().valid_vertex_position(position);
+}
+}
+
+bool CNpcSimulation::enroll(u16 npc_id, u16 supply_id, bool medical_goal)
 {
     auto npc = smart_cast<CSE_ALifeHumanAbstract*>(objects().object(npc_id, true));
-    auto supply = objects().object(supply_id, true);
-    if (!npc || !supply || !smart_cast<CSE_ALifeInventoryItem*>(supply) || supply->ID_Parent != 0xffff ||
-        npc->fHealth <= 0 || npc->m_story_id != ALife::_STORY_ID(-1) || npc->m_group_id != 0xffff ||
-        npc->m_smart_terrain_id != 0xffff || owns(npc) || m_next_identity == u64(-1)) return false;
-    if (!configured(npc->name())) return false;
-    if (!ai().game_graph().valid_vertex_id(npc->m_tGraphID) || !ai().game_graph().valid_vertex_id(supply->m_tGraphID)) return false;
+    auto supply = supply_id == u16(-1) ? nullptr : objects().object(supply_id, true);
+    if (!npc || npc->fHealth <= 0 || npc->m_story_id != ALife::_STORY_ID(-1) || npc->m_group_id != 0xffff ||
+        npc->m_smart_terrain_id != 0xffff || owns(npc) || m_next_identity == u64(-1) || !configured(npc->name())) return false;
     if (npc->m_bOnline)
     {
         auto client = smart_cast<CAI_Stalker*>(Level().Objects.net_Find(npc_id));
         if (!client || client->GetScriptControl()) return false;
     }
-    if (!ai().get_level_graph() ||
-        ai().game_graph().vertex(npc->m_tGraphID)->level_id() != m_alife.graph().level().level_id() ||
-        ai().game_graph().vertex(supply->m_tGraphID)->level_id() != m_alife.graph().level().level_id() ||
-        !ai().level_graph().valid_vertex_id(npc->m_tNodeID) || !ai().level_graph().valid_vertex_id(supply->m_tNodeID)) return false;
-    const auto npc_position = location(*npc), remembered_item = location(*supply);
-    for (const auto& point : {npc_position, remembered_item})
-        if (point.level != ai().level_graph().level_id() ||
-            !ai().level_graph().valid_vertex_position(Fvector().set(point.position[0], point.position[1], point.position[2]))) return false;
-    const auto home = navigation_location(*npc), source = navigation_location(*supply);
-    NpcPlan* plan = npc_plan_create(m_next_identity, &home, &source, &remembered_item);
+    if (!navigable_here(*npc)) return false;
+    if (!medical_goal && (!supply || !smart_cast<CSE_ALifeInventoryItem*>(supply) ||
+        supply->ID_Parent != u16(-1) || !navigable_here(*supply))) return false;
+    const auto home = navigation_location(*npc);
+    NpcAgent* plan = nullptr;
+    if (medical_goal) plan = npc_agent_create_goal(m_next_identity, &home);
+    else
+    {
+        const auto source = navigation_location(*supply), physical = location(*supply);
+        plan = npc_agent_create(m_next_identity, &home, &source, &physical);
+    }
     if (!plan) return false;
-    Msg("[npc trip] enroll identity=%llu npc=%u supply=%u", m_next_identity, npc_id, supply_id);
+    Msg("[npc trip] enroll identity=%llu npc=%u supply=%u goal=%u", m_next_identity, npc_id, supply_id, u32(medical_goal));
     ++m_next_identity;
-    m_entries.emplace(npc, Entry{npc, supply, plan});
+    Entry entry{};
+    entry.npc = npc;
+    entry.plan = plan;
+    if (!medical_goal) entry.supplies.push_back(supply);
+    m_entries.emplace(npc, std::move(entry));
+    return true;
+}
+
+bool CNpcSimulation::remember(u16 npc_id, u16 supply_id)
+{
+    auto entry = find(smart_cast<CSE_ALifeMonsterAbstract*>(objects().object(npc_id, true)));
+    auto supply = objects().object(supply_id, true);
+    if (!entry || !supply || supply->m_tClassID != CLSID_IITEM_BANDAGE ||
+        supply->ID_Parent != u16(-1) || !navigable_here(*supply)) return false;
+    const auto found = std::find(entry->supplies.begin(), entry->supplies.end(), supply);
+    const auto index = u32(found - entry->supplies.begin());
+    const auto navigation = navigation_location(*supply), physical = location(*supply);
+    if (!npc_agent_remember(entry->plan, index, &navigation, &physical)) return false;
+    if (found == entry->supplies.end()) entry->supplies.push_back(supply);
     return true;
 }
 
 NpcDecision CNpcSimulation::observe(Entry& entry, const Fvector& here, u32 graph, bool interrupted, bool alive, bool blocked)
 {
     NpcDecision before{}, after{};
-    R_ASSERT(npc_plan_status(entry.plan, &before));
+    R_ASSERT(npc_agent_status(entry.plan, &before));
     NpcObservation input{};
     const u32 level = ai().game_graph().valid_vertex_id(GameGraph::_GRAPH_ID(graph)) ? ai().game_graph().vertex(GameGraph::_GRAPH_ID(graph))->level_id() : u32(-1);
     input.current = {graph, entry.npc->m_tNodeID, level, {here.x, here.y, here.z}};
@@ -145,36 +175,44 @@ NpcDecision CNpcSimulation::observe(Entry& entry, const Fvector& here, u32 graph
     entry.was_online = entry.npc->m_bOnline;
     entry.observed = true;
     entry.last_observation = Device.dwTimeGlobal;
-    if (entry.supply)
-    {
-        input.supply = entry.supply->ID_Parent == entry.npc->ID ? 2 : entry.supply->ID_Parent == u16(-1) ? 1 : 3;
-        input.supply_location = location(*entry.supply);
-        input.representation_ready = entry.supply->m_bOnline == entry.npc->m_bOnline;
-    }
+    // Server ownership is authoritative in both representations; client spawn
+    // and inventory replication can temporarily lag it.
+    for (const auto id : entry.npc->children)
+        if (auto item = objects().object(id, true); item && item->ID_Parent == entry.npc->ID && item->m_tClassID == CLSID_IITEM_BANDAGE)
+            ++input.bandages;
+    if (before.source < entry.supplies.size())
+        if (auto supply = entry.supplies[before.source])
+        {
+            input.supply = supply->ID_Parent == entry.npc->ID ? 2 : supply->ID_Parent == u16(-1) ? 1 : 3;
+            input.supply_location = location(*supply);
+            input.representation_ready = supply->m_bOnline == entry.npc->m_bOnline;
+        }
     // World facts are distinct from knowledge: Rust decides what can be learned
     // at the remembered destination and owns arrival, waiting and failure policy.
-    R_ASSERT(npc_plan_step(entry.plan, &input, &after));
-    if (before.phase != after.phase || entry.interrupted != interrupted)
-        Msg("[npc trip] identity=%llu npc=%u command=%llu phase=%u reason=%u interrupted=%u online=%u", after.identity,
-            entry.npc->ID, after.command, after.phase, after.reason, after.interrupted, u32(entry.npc->m_bOnline));
+    R_ASSERT(npc_agent_step(entry.plan, &input, &after));
+    if (before.phase != after.phase || before.command != after.command || entry.interrupted != interrupted)
+        Msg("[npc trip] identity=%llu npc=%u command=%llu phase=%u reason=%u interrupted=%u online=%u source=%u bandages=%u", after.identity,
+            entry.npc->ID, after.command, after.phase, after.reason, after.interrupted, u32(entry.npc->m_bOnline), after.source, input.bandages);
     entry.interrupted = interrupted;
     return after;
 }
 
-void CNpcSimulation::collect(Entry& entry, CAI_Stalker* client, u64 command)
+void CNpcSimulation::collect(Entry& entry, CAI_Stalker* client, const NpcDecision& decision)
 {
-    if (entry.pickup_command == command || !entry.supply || entry.supply->ID_Parent != 0xffff ||
-        entry.npc->m_bOnline != entry.supply->m_bOnline) return;
-    entry.pickup_command = command;
+    if (decision.source >= entry.supplies.size()) return;
+    auto supply = entry.supplies[decision.source];
+    if (entry.pickup_command == decision.command || !supply || supply->ID_Parent != 0xffff ||
+        entry.npc->m_bOnline != supply->m_bOnline) return;
+    entry.pickup_command = decision.command;
     if (client)
     {
         NET_Packet packet;
         CGameObject::u_EventGen(packet, GE_OWNERSHIP_TAKE, entry.npc->ID);
-        packet.w_u16(entry.supply->ID);
+        packet.w_u16(supply->ID);
         CGameObject::u_EventSend(packet);
     }
     else
-        m_alife.graph().attach(*entry.npc, smart_cast<CSE_ALifeInventoryItem*>(entry.supply), entry.supply->m_tGraphID, true);
+        m_alife.graph().attach(*entry.npc, smart_cast<CSE_ALifeInventoryItem*>(supply), supply->m_tGraphID, true);
 }
 
 bool CNpcSimulation::update_online(CAI_Stalker& client, bool interrupted)
@@ -183,7 +221,7 @@ bool CNpcSimulation::update_online(CAI_Stalker& client, bool interrupted)
     auto entry = find(smart_cast<CSE_ALifeMonsterAbstract*>(objects().object(client.ID(), true)));
     if (!entry) return false;
     NpcDecision status{};
-    R_ASSERT(npc_plan_status(entry->plan, &status));
+    R_ASSERT(npc_agent_status(entry->plan, &status));
     const bool path_failed = !entry->interrupted && entry->online_path_command == status.command &&
         client.movement().path_type() == MovementManager::ePathTypeLevelPath && client.movement().level_path().failed();
     if (interrupted) entry->online_path_command = 0;
@@ -229,7 +267,7 @@ bool CNpcSimulation::update_online(CAI_Stalker& client, bool interrupted)
     else
     {
         client.movement().set_movement_type(MonsterSpace::eMovementTypeStand);
-        if (decision.action == 2) collect(*entry, &client, decision.command);
+        if (decision.action == 2) collect(*entry, &client, decision);
     }
     return true;
 }
@@ -252,7 +290,7 @@ bool CNpcSimulation::update_offline(CSE_ALifeMonsterAbstract* object)
     else
     {
         movement.path_type(MovementManager::ePathTypeNoPath);
-        if (decision.action == 2) collect(*entry, nullptr, decision.command);
+        if (decision.action == 2) collect(*entry, nullptr, decision);
     }
     return true;
 }
@@ -263,12 +301,13 @@ void CNpcSimulation::remove(CSE_ALifeDynamicObject* object)
     {
         if (it->second.npc == object)
         {
-            npc_plan_destroy(it->second.plan);
+            npc_agent_destroy(it->second.plan);
             it = m_entries.erase(it);
         }
         else
         {
-            if (it->second.supply == object) it->second.supply = nullptr;
+            for (auto& supply : it->second.supplies)
+                if (supply == object) supply = nullptr;
             ++it;
         }
     }
@@ -285,31 +324,32 @@ int CNpcSimulation::phase(u16 id) const
     if (!owns(id)) return -1;
     auto npc = smart_cast<CSE_ALifeHumanAbstract*>(objects().object(id));
     NpcDecision status{};
-    R_ASSERT(npc_plan_status(m_entries.at(npc).plan, &status));
+    R_ASSERT(npc_agent_status(m_entries.at(npc).plan, &status));
     return status.phase;
 }
 
 void CNpcSimulation::save(IWriter& stream) const
 {
     stream.open_chunk(planner_chunk);
-    stream.w_u32(1);
+    stream.w_u32(2);
     stream.w_u64(m_next_identity);
     stream.w_u32(u32(m_entries.size()));
     xr_map<u64, const Entry*> ordered;
     for (const auto& [_, entry] : m_entries)
     {
         NpcDecision status{};
-        R_ASSERT(npc_plan_status(entry.plan, &status));
+        R_ASSERT(npc_agent_status(entry.plan, &status));
         ordered.emplace(status.identity, &entry);
     }
     for (const auto& [_, value] : ordered)
     {
         const Entry& entry = *value;
         stream.w_u16(entry.npc->ID);
-        stream.w_u16(entry.supply ? entry.supply->ID : u16(-1));
-        const auto size = npc_plan_save(entry.plan, nullptr, 0);
+        stream.w_u16(u16(entry.supplies.size()));
+        for (auto supply : entry.supplies) stream.w_u16(supply ? supply->ID : u16(-1));
+        const auto size = npc_agent_save(entry.plan, nullptr, 0);
         xr_vector<u8> bytes(size);
-        R_ASSERT(npc_plan_save(entry.plan, bytes.data(), bytes.size()) == size);
+        R_ASSERT(npc_agent_save(entry.plan, bytes.data(), bytes.size()) == size);
         stream.w_u32(u32(size));
         stream.w(bytes.data(), u32(size));
     }
@@ -321,7 +361,9 @@ void CNpcSimulation::load(IReader& source)
     R_ASSERT(m_entries.empty());
     IReader* chunk = source.open_chunk(planner_chunk);
     if (!chunk) return; // Existing saves enroll nobody.
-    R_ASSERT2(chunk->length() >= 16 && chunk->r_u32() == 1, "Unsupported NPC planner save");
+    R_ASSERT(chunk->length() >= 16);
+    const u32 version = chunk->r_u32();
+    R_ASSERT2(version == 1 || version == 2, "Unsupported NPC planner save");
     m_next_identity = chunk->r_u64();
     const u32 count = chunk->r_u32();
     R_ASSERT(count <= objects().objects().size() && m_next_identity != 0);
@@ -330,29 +372,47 @@ void CNpcSimulation::load(IReader& source)
     {
         R_ASSERT(chunk->elapsed() >= 8);
         auto npc = smart_cast<CSE_ALifeHumanAbstract*>(objects().object(chunk->r_u16(), true));
-        const u16 item_id = chunk->r_u16();
-        auto supply = item_id == u16(-1) ? nullptr : objects().object(item_id, true);
+        const u16 source_count = version == 1 ? 1 : chunk->r_u16();
+        R_ASSERT(source_count <= 256 && chunk->elapsed() >= source_count * 2u + 4u);
+        xr_vector<CSE_ALifeDynamicObject*> supplies;
+        for (u16 i = 0; i < source_count; ++i)
+        {
+            const u16 item_id = chunk->r_u16();
+            auto supply = item_id == u16(-1) ? nullptr : objects().object(item_id, true);
+            R_ASSERT(item_id == u16(-1) || (supply && smart_cast<CSE_ALifeInventoryItem*>(supply)));
+            supplies.push_back(supply);
+        }
         const u32 size = chunk->r_u32();
-        R_ASSERT(npc && m_entries.find(npc) == m_entries.end() && size <= chunk->elapsed() && size <= 4096);
-        R_ASSERT(item_id == u16(-1) || (supply && smart_cast<CSE_ALifeInventoryItem*>(supply)));
+        R_ASSERT(npc && m_entries.find(npc) == m_entries.end() && size <= chunk->elapsed() && size <= 16384);
         xr_vector<u8> bytes(size);
         chunk->r(bytes.data(), size);
-        NpcPlan* plan = npc_plan_load(bytes.data(), bytes.size());
+        NpcAgent* plan = npc_agent_load(bytes.data(), bytes.size());
         R_ASSERT2(plan, "Invalid NPC planner state");
+        R_ASSERT(npc_agent_source_count(plan) == supplies.size());
+        for (u32 i = 0; i < supplies.size(); ++i)
+        {
+            NpcLocation remembered{};
+            R_ASSERT(npc_agent_source(plan, i, &remembered));
+            R_ASSERT(ai().game_graph().valid_vertex_id(GameGraph::_GRAPH_ID(remembered.game_vertex)));
+        }
         NpcLocation home{}, destination{};
-        R_ASSERT(npc_plan_locations(plan, &home, &destination));
+        R_ASSERT(npc_agent_locations(plan, &home, &destination));
         R_ASSERT2(ai().game_graph().valid_vertex_id(GameGraph::_GRAPH_ID(home.game_vertex)) &&
             ai().game_graph().valid_vertex_id(GameGraph::_GRAPH_ID(destination.game_vertex)), "Saved NPC planner has an invalid game vertex");
         NpcDecision status{};
-        R_ASSERT(npc_plan_status(plan, &status));
+        R_ASSERT(npc_agent_status(plan, &status));
         R_ASSERT(status.identity < m_next_identity && identities.insert(status.identity).second);
         if (!configured(npc->name()))
         {
             Msg("[npc trip] discarded identity=%llu npc=%u: planner opt-in removed", status.identity, npc->ID);
-            npc_plan_destroy(plan);
+            npc_agent_destroy(plan);
             continue;
         }
-        m_entries.emplace(npc, Entry{npc, supply, plan});
+        Entry entry{};
+        entry.npc = npc;
+        entry.supplies = std::move(supplies);
+        entry.plan = plan;
+        m_entries.emplace(npc, std::move(entry));
         Msg("[npc trip] restore identity=%llu npc=%u phase=%u", status.identity, npc->ID, status.phase);
     }
     R_ASSERT(chunk->elapsed() == 0);

@@ -32,6 +32,16 @@ try {
     $resume = & "$PSScriptRoot/Run-NpcTrip.ps1" -InstallRoot $root -Package bin_fixture -Scenario resume -ResumeSession $session -PrepareOnly
     if ((Get-Content "$resume/appdata/savedgames/npc_trip_pending.sav" -Raw).Trim() -ne 'pending' -or
         (Get-FileHash "$resume/appdata/npc-trip-ids.lua").Hash -ne (Get-FileHash "$session/appdata/npc-trip-ids.lua").Hash) { throw 'Resume did not use the pending save and its bindings' }
+    $goal = & "$PSScriptRoot/Run-NpcTrip.ps1" -InstallRoot $root -Package bin_fixture -Scenario goal-save -GoalOffline -PrepareOnly
+    $goalMeta = Get-Content "$goal/session.json" -Raw | ConvertFrom-Json
+    if (!$goalMeta.goalOffline -or (Get-FileHash "$goal/appdata/RegularDriver.lua").Hash -ne (Get-FileHash "$PSScriptRoot/NpcGoalDriver.lua").Hash) { throw 'Wrong goal driver or mode' }
+    $goalMeta.status = 'npc-completed'
+    $goalMeta | ConvertTo-Json | Set-Content "$goal/session.json"
+    Set-Content "$goal/appdata/savedgames/npc_trip_pending.sav" 'goal'
+    Set-Content "$goal/appdata/npc-trip-ids.lua" 'return {npc=1,offline=true,stage=2}'
+    $restoredGoal = & "$PSScriptRoot/Run-NpcTrip.ps1" -InstallRoot $root -Package bin_fixture -Scenario goal-resume -ResumeSession $goal -PrepareOnly
+    if (!(Get-Content "$restoredGoal/session.json" -Raw | ConvertFrom-Json).goalOffline -or
+        (Get-FileHash "$restoredGoal/appdata/npc-trip-ids.lua").Hash -ne (Get-FileHash "$goal/appdata/npc-trip-ids.lua").Hash) { throw 'Goal resume lost saved mode or bindings' }
     $after = @($paths | ForEach-Object { (Get-FileHash "$root/$_").Hash })
     if (($before -join ',') -ne ($after -join ',')) { throw 'Original inputs modified' }
 } finally {

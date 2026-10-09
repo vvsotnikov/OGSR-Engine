@@ -27,6 +27,12 @@ queued ownership event. Actual ownership must remain authoritative even after
 a command changes. A save does not preserve the engine's pending event queue,
 so restoring an intention must not assume its old request is still in flight.
 
-The C ABI is not a synchronization boundary. Calls on a plan must remain
-serialized if simulation moves to workers. Plan allocation belongs to Rust;
+Removing an item's runtime binding is not news delivered to the NPC. Remembered
+sources must survive that removal so absence is learned on a visit. Conversely,
+inventory ownership is immediately available to the owner in both representations;
+client inventory replication can lag the authoritative server ownership.
+
+The C ABI is not a synchronization boundary. Current frame ordering runs script
+updates before deferred A-Life work and joins that work before the next frame.
+Calls on an agent must remain serialized if that ordering changes. Agent allocation belongs to Rust;
 host buffers belong to C++. Neither side may free the other's allocations.
