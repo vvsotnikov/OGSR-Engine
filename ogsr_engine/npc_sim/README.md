@@ -18,7 +18,9 @@ Engine object IDs can change during representation switches. Runtime bindings
 use the server objects, while saves bind the Rust identity and intention to the
 IDs in that same save. Removing an object clears these bindings before its
 callbacks run. No Rust pointer or struct layout is serialized. Saves without the
-optional NPC chunk contain no enrolled plans.
+optional NPC chunk contain no enrolled plans. A saved plan requires its section
+to retain the opt-in setting; loading rejects a conflicting configuration instead
+of allowing both the Lua binder and Rust planner to control the same NPC.
 
 Calls on a plan must be serialized by the host. The core does not introduce a
 worker or alter the engine scheduler. Allocation never crosses ownership: Rust
@@ -35,7 +37,8 @@ stalker planner; they interrupt execution without replacing the trip.
 
 Use `tools/tests/alife-policy/runtime/Run-NpcTrip.ps1` with an existing validation
 installation and a package whose `build.json` matches its executable. Scenarios
-are `basic`, `interrupt`, `offline`, `switch`, `save`, and `resume`; pass the
+are `basic`, `interrupt`, `offline`, `switch`, `missing`, `death`, `save`, and
+`resume`; pass the
 completed save session as `-ResumeSession` for the last one. The runner creates a
 private configuration and appdata directory. Its Lua driver only sets up and
 observes the scenario: it never moves the NPC or awards the supply. The interruption

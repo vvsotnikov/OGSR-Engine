@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory)][string]$InstallRoot,
     [Parameter(Mandatory)][ValidatePattern('^bin_[a-zA-Z0-9_]+$')][string]$Package,
     [ValidateSet('Release','Debug')][string]$Configuration = 'Debug',
-    [ValidateSet('basic','interrupt','offline','switch','save','resume')][string]$Scenario = 'basic',
+    [ValidateSet('basic','interrupt','offline','switch','missing','death','save','resume')][string]$Scenario = 'basic',
     [string]$ResumeSession = '',
     [switch]$PrepareOnly
 )

@@ -269,10 +269,15 @@ void CNpcSimulation::load(IReader& source)
         const u32 size = chunk->r_u32();
         R_ASSERT(npc && m_entries.find(npc) == m_entries.end() && size <= chunk->elapsed() && size <= 4096);
         R_ASSERT(item_id == u16(-1) || (supply && smart_cast<CSE_ALifeInventoryItem*>(supply)));
+        R_ASSERT2(configured(npc->name()), "Saved NPC planner requires npc_planner = supply_trip in its section");
         xr_vector<u8> bytes(size);
         chunk->r(bytes.data(), size);
         NpcPlan* plan = npc_plan_load(bytes.data(), bytes.size());
         R_ASSERT2(plan, "Invalid NPC planner state");
+        NpcLocation home{}, destination{};
+        R_ASSERT(npc_plan_locations(plan, &home, &destination));
+        R_ASSERT2(ai().game_graph().valid_vertex_id(GameGraph::_GRAPH_ID(home.game_vertex)) &&
+            ai().game_graph().valid_vertex_id(GameGraph::_GRAPH_ID(destination.game_vertex)), "Saved NPC planner has an invalid game vertex");
         NpcDecision status{};
         R_ASSERT(npc_plan_status(plan, &status));
         R_ASSERT(status.identity < m_next_identity && identities.insert(status.identity).second);
