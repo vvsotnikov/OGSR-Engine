@@ -25,7 +25,6 @@ pub struct Agent {
 
 impl Agent {
     pub const MAX_SOURCES: usize = Knowledge::MAX_SOURCES;
-    const RETRY_MS: u32 = Knowledge::RETRY_MS;
     pub fn medical(identity: u64, home: Location) -> Option<Self> {
         (identity != 0 && home.valid()).then_some(Self {
             identity,
@@ -42,14 +41,14 @@ impl Agent {
     pub fn assigned(plan: Plan) -> Self {
         let mut knowledge = Knowledge::default();
         let (navigation, physical) = plan.source();
-        knowledge.remember(0, navigation, physical);
+        assert!(knowledge.remember(0, plan.home(), navigation, physical));
         Self {
             identity: plan.identity(),
             home: plan.home(),
             goal: Goal::new(GoalKind::AssignedItem),
             knowledge,
             selected: Some(0),
-            command: plan.decision().command,
+            command: plan.command(),
             dead: false,
             interrupted: false,
             activity: Some(plan),
@@ -59,10 +58,10 @@ impl Agent {
         self.home
     }
     pub fn sources(&self) -> &[Source] {
-        &self.knowledge.sources
+        self.knowledge.sources()
     }
     pub fn is_medical(&self) -> bool {
-        self.goal.kind == GoalKind::CarryBandage
+        self.goal.is_medical()
     }
     pub fn available_source_slot(&self) -> Option<usize> {
         if !self.is_medical() {
@@ -72,11 +71,7 @@ impl Agent {
     }
     // The caller supplies new information, not a periodic world-state refresh.
     pub fn remember(&mut self, index: usize, navigation: Location, physical: Location) -> bool {
-        if !self.is_medical()
-            || !self
-                .knowledge
-                .accepts(index, self.home, navigation, physical)
-        {
+        if !self.is_medical() {
             return false;
         }
         let replace_activity = self.selected == Some(index)
@@ -92,7 +87,12 @@ impl Agent {
         } else {
             self.command
         };
-        self.knowledge.remember(index, navigation, physical);
+        if !self
+            .knowledge
+            .remember(index, self.home, navigation, physical)
+        {
+            return false;
+        }
         if replace_activity {
             self.command = command;
             self.activity = None;
@@ -109,7 +109,7 @@ impl Agent {
             ActivityRequest::ReturnHome => None,
         };
         let locations = source.map(|i| {
-            let s = &self.knowledge.sources[i];
+            let s = self.knowledge.sources()[i];
             (s.navigation, s.physical)
         });
         self.activity = Some(Plan::start(
@@ -120,7 +120,7 @@ impl Agent {
             interrupted,
         ));
         self.command = command;
-        self.goal.return_retry_ms = 0;
+        self.goal.activity_started();
         self.selected = source;
         true
     }
@@ -161,8 +161,9 @@ impl Agent {
     }
     pub fn step(&mut self, o: Observation, bandages: u32) -> AgentDecision {
         if !self.is_medical() {
-            let decision = self.activity.as_mut().unwrap().step(o);
-            self.command = decision.command;
+            let activity = self.activity.as_mut().unwrap();
+            let decision = activity.step(o);
+            self.command = activity.command();
             return AgentDecision {
                 decision,
                 source: self.selected,
@@ -180,17 +181,17 @@ impl Agent {
             o.elapsed_ms
         };
         self.interrupted = o.interrupted;
-        self.goal.return_retry_ms = self.goal.return_retry_ms.saturating_sub(elapsed);
+        self.goal.elapse(elapsed);
         self.knowledge.elapse(elapsed);
         let inventory_changed = self.goal.observe_inventory(bandages);
         if let Some(activity) = self.activity.as_mut() {
             if o.supply == Supply::Owned {
                 self.knowledge.acquired(self.selected);
             }
-            let report = activity.advance(o, self.goal.satisfied);
-            self.command = report.decision.command;
+            let report = activity.advance(o, self.goal.satisfied());
+            self.command = activity.command();
             self.knowledge
-                .learn(self.selected, &report, self.goal.satisfied);
+                .learn(self.selected, &report, self.goal.satisfied());
             if self
                 .goal
                 .reconsider(&report, inventory_changed, o, self.home)
@@ -211,12 +212,9 @@ impl Agent {
                 initial.elapsed_ms = 0;
                 initial.path_blocked = false;
                 initial.pickup_pending = false;
-                let report = self
-                    .activity
-                    .as_mut()
-                    .unwrap()
-                    .advance(initial, self.goal.satisfied);
-                self.command = report.decision.command;
+                let activity = self.activity.as_mut().unwrap();
+                activity.advance(initial, self.goal.satisfied());
+                self.command = activity.command();
             }
             // Source facts belong to the previous selection. Observe a newly
             // selected source next tick before advancing its activity.

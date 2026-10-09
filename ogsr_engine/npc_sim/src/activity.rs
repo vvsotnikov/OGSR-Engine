@@ -381,6 +381,10 @@ pub(super) enum ActivityOutcome {
     Dead,
 }
 
+// This is a supply-trip report, not a general-purpose activity protocol.
+// Keep the prior state: a new return failure arms a cooldown, whereas later
+// reports of that same terminal failure must not restart it.
+#[derive(Debug)]
 pub(super) struct ActivityReport {
     pub previous: ActivityState,
     pub outcome: ActivityOutcome,
@@ -403,6 +407,10 @@ impl Plan {
             activity.phase = Phase::Returning;
         }
         activity
+    }
+
+    pub(super) fn command(&self) -> u64 {
+        self.command
     }
 
     pub(super) fn identity(&self) -> u64 {

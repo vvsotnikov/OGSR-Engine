@@ -11,14 +11,14 @@ impl Agent {
         put(
             &mut bytes,
             u32::from(self.is_medical())
-                | (u32::from(self.goal.satisfied) << 1)
+                | (u32::from(self.goal.satisfied()) << 1)
                 | (u32::from(self.dead) << 2)
                 | (u32::from(self.interrupted) << 3),
         );
-        put(&mut bytes, self.goal.return_retry_ms);
+        put(&mut bytes, self.goal.return_retry_ms());
         put(&mut bytes, self.selected.map_or(u32::MAX, |i| i as u32));
-        put(&mut bytes, self.knowledge.sources.len() as u32);
-        for source in &self.knowledge.sources {
+        put(&mut bytes, self.knowledge.sources().len() as u32);
+        for source in self.knowledge.sources() {
             put_location(&mut bytes, source.navigation);
             put_location(&mut bytes, source.physical);
             put(&mut bytes, source.failure as u32);
@@ -51,24 +51,19 @@ impl Agent {
         let return_retry_ms = r.u32()?;
         let selected = r.u32()?;
         let count = r.u32()? as usize;
-        if command == 0
-            || flags > 15
-            || count > Self::MAX_SOURCES
-            || return_retry_ms > Self::RETRY_MS
-        {
+        if command == 0 || flags > 15 || count > Self::MAX_SOURCES {
             return None;
         }
         agent.command = command;
-        agent.goal.kind = if flags & 1 != 0 {
+        let kind = if flags & 1 != 0 {
             GoalKind::CarryBandage
         } else {
             GoalKind::AssignedItem
         };
-        agent.goal.satisfied = flags & 2 != 0;
+        agent.goal = Goal::restore(kind, flags & 2 != 0, return_retry_ms)?;
         agent.dead = flags & 4 != 0;
         agent.interrupted = flags & 8 != 0;
-        agent.goal.return_retry_ms = return_retry_ms;
-        let mut ranks = [false; Self::MAX_SOURCES];
+        let mut sources = Vec::with_capacity(count);
         for index in 0..count {
             let navigation = r.location()?;
             let physical = r.location()?;
@@ -87,19 +82,7 @@ impl Agent {
             };
             let retry_ms = r.u32()?;
             let learned_order = if version == 3 { r.u32()? } else { index as u32 };
-            if learned_order as usize >= count || ranks[learned_order as usize] {
-                return None;
-            }
-            ranks[learned_order as usize] = true;
-            if !navigation.valid()
-                || !physical.spatially_valid()
-                || navigation.level != home.level
-                || physical.level != home.level
-                || retry_ms > Self::RETRY_MS
-            {
-                return None;
-            }
-            agent.knowledge.sources.push(Source {
+            sources.push(Source {
                 navigation,
                 physical,
                 failure,
@@ -107,6 +90,7 @@ impl Agent {
                 learned_order,
             });
         }
+        agent.knowledge = Knowledge::restore(home, sources)?;
         if selected != u32::MAX {
             if selected as usize >= count {
                 return None;
@@ -115,10 +99,7 @@ impl Agent {
         }
         if !r.0.is_empty() {
             let trip = Plan::load(r.0)?;
-            if trip.identity() != identity
-                || trip.home() != home
-                || trip.decision().command != command
-            {
+            if trip.identity() != identity || trip.home() != home || trip.command() != command {
                 return None;
             }
             agent.activity = Some(trip);

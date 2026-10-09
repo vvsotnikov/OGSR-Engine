@@ -10,9 +10,9 @@ pub(super) enum GoalKind {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Goal {
-    pub kind: GoalKind,
-    pub satisfied: bool,
-    pub return_retry_ms: u32,
+    kind: GoalKind,
+    satisfied: bool,
+    return_retry_ms: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -22,6 +22,31 @@ pub(super) enum ActivityRequest {
 }
 
 impl Goal {
+    const RETURN_RETRY_MS: u32 = 60_000;
+
+    pub fn restore(kind: GoalKind, satisfied: bool, return_retry_ms: u32) -> Option<Self> {
+        (return_retry_ms <= Self::RETURN_RETRY_MS).then_some(Self {
+            kind,
+            satisfied,
+            return_retry_ms,
+        })
+    }
+    pub fn is_medical(&self) -> bool {
+        self.kind == GoalKind::CarryBandage
+    }
+    pub fn satisfied(&self) -> bool {
+        self.satisfied
+    }
+    pub fn return_retry_ms(&self) -> u32 {
+        self.return_retry_ms
+    }
+    pub fn elapse(&mut self, elapsed_ms: u32) {
+        self.return_retry_ms = self.return_retry_ms.saturating_sub(elapsed_ms);
+    }
+    pub fn activity_started(&mut self) {
+        self.return_retry_ms = 0;
+    }
+
     pub fn new(kind: GoalKind) -> Self {
         Self {
             kind,
@@ -46,7 +71,7 @@ impl Goal {
     ) -> bool {
         let failed = matches!(report.outcome, ActivityOutcome::Failed(_));
         if failed && self.satisfied && report.previous == ActivityState::Returning {
-            self.return_retry_ms = Knowledge::RETRY_MS;
+            self.return_retry_ms = Self::RETURN_RETRY_MS;
         }
         let terminal = matches!(
             report.previous,

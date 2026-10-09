@@ -51,6 +51,3 @@ trip binding; forgetting a source does not mean learning that its item is gone.
 Command numbers span the NPC lifetime, including replacement activities. The
 engine latches movement and asynchronous pickup by command, so restarting an
 activity's counter could mistake old execution state for a new request.
-Activity reports retain the state before advancement: a newly failed return
-arms a retry delay, while observing that same terminal failure again must not
-restart its delay.

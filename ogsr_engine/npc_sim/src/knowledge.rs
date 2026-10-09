@@ -14,12 +14,38 @@ pub struct Source {
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(super) struct Knowledge {
-    pub sources: Vec<Source>,
+    sources: Vec<Source>,
 }
 
 impl Knowledge {
     pub const MAX_SOURCES: usize = 256;
-    pub const RETRY_MS: u32 = 60_000;
+    const SOURCE_RETRY_MS: u32 = 60_000;
+
+    pub fn sources(&self) -> &[Source] {
+        &self.sources
+    }
+
+    pub fn restore(home: Location, sources: Vec<Source>) -> Option<Self> {
+        if sources.len() > Self::MAX_SOURCES {
+            return None;
+        }
+        let mut ranks = [false; Self::MAX_SOURCES];
+        for source in &sources {
+            let rank = source.learned_order as usize;
+            if rank >= sources.len()
+                || ranks[rank]
+                || !source.navigation.valid()
+                || !source.physical.spatially_valid()
+                || source.navigation.level != home.level
+                || source.physical.level != home.level
+                || source.retry_ms > Self::SOURCE_RETRY_MS
+            {
+                return None;
+            }
+            ranks[rank] = true;
+        }
+        Some(Self { sources })
+    }
 
     pub fn available_slot(&self, selected: Option<usize>) -> Option<usize> {
         if self.sources.len() < Self::MAX_SOURCES {
@@ -39,7 +65,7 @@ impl Knowledge {
             .map(|(i, _)| i)
     }
 
-    pub fn accepts(
+    fn accepts(
         &self,
         index: usize,
         home: Location,
@@ -54,7 +80,16 @@ impl Knowledge {
             && physical.level == home.level
     }
 
-    pub fn remember(&mut self, index: usize, navigation: Location, physical: Location) {
+    pub fn remember(
+        &mut self,
+        index: usize,
+        home: Location,
+        navigation: Location,
+        physical: Location,
+    ) -> bool {
+        if !self.accepts(index, home, navigation, physical) {
+            return false;
+        }
         let mut source = Source {
             navigation,
             physical,
@@ -74,6 +109,7 @@ impl Knowledge {
             source.learned_order = self.sources.len() as u32 - 1;
             self.sources[index] = source;
         }
+        true
     }
 
     pub fn elapse(&mut self, elapsed_ms: u32) {
@@ -104,7 +140,7 @@ impl Knowledge {
         ) {
             self.sources[i].failure = reason;
         } else {
-            self.sources[i].retry_ms = Self::RETRY_MS;
+            self.sources[i].retry_ms = Self::SOURCE_RETRY_MS;
         }
     }
 
