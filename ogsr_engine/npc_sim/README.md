@@ -32,6 +32,11 @@ sources must survive that removal so absence is learned on a visit. Conversely,
 inventory ownership is immediately available to the owner in both representations;
 client inventory replication can lag the authoritative server ownership.
 
+Waiting is not a request to refresh world knowledge: it also covers retry
+cooldowns. Re-reporting a source is an explicit new observation and can clear
+that cooldown. Cooldowns can elapse without a known position; unlike travel
+stall timers, they make no inference about movement during that interval.
+
 The C ABI is not a synchronization boundary. Current frame ordering runs script
 updates before deferred A-Life work and joins that work before the next frame.
 Calls on an agent must remain serialized if that ordering changes. Agent allocation belongs to Rust;

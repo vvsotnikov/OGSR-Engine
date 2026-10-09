@@ -84,7 +84,11 @@ return function(cfg)
         if cfg.offline then assert(not server.online,"Offline test activated NPC") end
         if not sampled or now-sampled > 1000 then
             sampled = now
-            log1(string.format("[npc goal fixture] stage=%d phase=%d online=%s distance=%.3f",stage,phase,tostring(server.online),here:distance_to(home)))
+            local enemy = client and client:best_enemy()
+            log1(string.format("[npc goal fixture] stage=%d phase=%d online=%s distance=%.3f action=%s enemy=%s danger=%s",
+                stage,phase,tostring(server.online),here:distance_to(home),
+                tostring(client and client:motivation_action_manager():current_action_id()),
+                tostring(enemy and enemy:id()),tostring(client and client:best_danger() ~= nil)))
         end
         if rival then
             if phase == 3 and alife():supply_trip_phase(rival) == 3 then
@@ -135,6 +139,10 @@ return function(cfg)
             if cfg.scenario == "goal-save" and (phase == 2 or phase == 3) then save(); return end
             if phase == 3 and (not attacked or released) then
                 assert(object(first).parent_id == 65535 and object(second).parent_id == 65535,"Collected despite gift satisfying need")
+                if cfg.scenario == "goal-combat" then
+                    assert(fought and here:distance_to(home) <= 1.6,"Combat did not resume the satisfied goal")
+                    complete(); return
+                end
                 if transfer(gift,donor) then stage = 3; log1("[npc goal fixture] gift_removed") end
             end
         elseif stage == 3 and object(gift).parent_id == donor and phase == 0 then
