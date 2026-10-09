@@ -19,6 +19,7 @@ try {
     $session = & "$PSScriptRoot/Run-NpcTrip.ps1" -InstallRoot $root -Package bin_fixture -Scenario save -PrepareOnly
     $meta = Get-Content "$session/session.json" -Raw | ConvertFrom-Json
     if ($meta.status -ne 'npc-prepared' -or $meta.PSObject.Properties['gamePid']) { throw 'Preparation claimed runtime evidence' }
+    if ($meta.arguments -match '-npc_sim_test') { throw 'Ordinary trip run enabled test-only APIs' }
     if (!(Get-Content "$session/runtime/gamedata/config/misc/items.ltx" -Raw).Contains('npc_planner = supply_trip') -or
         !(Get-Content "$session/fsgame.ltx" -Raw).Contains(($session -replace '/', '\')) -or
         (Get-FileHash "$session/appdata/RegularDriver.lua").Hash -ne (Get-FileHash "$PSScriptRoot/NpcTripDriver.lua").Hash) { throw 'Trip session is not isolated' }
@@ -34,7 +35,8 @@ try {
         (Get-FileHash "$resume/appdata/npc-trip-ids.lua").Hash -ne (Get-FileHash "$session/appdata/npc-trip-ids.lua").Hash) { throw 'Resume did not use the pending save and its bindings' }
     $goal = & "$PSScriptRoot/Run-NpcTrip.ps1" -InstallRoot $root -Package bin_fixture -Scenario goal-save -GoalOffline -PrepareOnly
     $goalMeta = Get-Content "$goal/session.json" -Raw | ConvertFrom-Json
-    if (!$goalMeta.goalOffline -or (Get-FileHash "$goal/appdata/RegularDriver.lua").Hash -ne (Get-FileHash "$PSScriptRoot/NpcGoalDriver.lua").Hash) { throw 'Wrong goal driver or mode' }
+    if (!$goalMeta.goalOffline -or $goalMeta.arguments -notmatch '-npc_sim_test' -or
+        (Get-FileHash "$goal/appdata/RegularDriver.lua").Hash -ne (Get-FileHash "$PSScriptRoot/NpcGoalDriver.lua").Hash) { throw 'Wrong goal driver or mode' }
     $goalMeta.status = 'npc-completed'
     $goalMeta | ConvertTo-Json | Set-Content "$goal/session.json"
     Set-Content "$goal/appdata/savedgames/npc_trip_pending.sav" 'goal'

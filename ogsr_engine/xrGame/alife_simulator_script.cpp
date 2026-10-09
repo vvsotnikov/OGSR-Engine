@@ -50,9 +50,8 @@ bool start_supply_trip(CALifeSimulator* simulator, u16 npc, u16 supply)
 {
     return simulator->initialized() && !simulator->is_unloading() && simulator->npc_simulation().enroll(npc, supply);
 }
-// Offline counterpart of the client's transfer_item: mutate native ownership,
-// never a planner-specific inventory counter. Mixed representations must wait.
-bool transfer_item_offline(CALifeSimulator* simulator, u16 item_id, u16 recipient_id)
+// Native ownership stimulus for isolated gameplay tests; not a gameplay trade API.
+bool npc_sim_test_transfer(CALifeSimulator* simulator, u16 item_id, u16 recipient_id)
 {
     if (!simulator->initialized() || simulator->is_unloading()) return false;
     auto item = static_cast<const CALifeSimulatorBase&>(*simulator).objects().object(item_id, true);
@@ -61,11 +60,12 @@ bool transfer_item_offline(CALifeSimulator* simulator, u16 item_id, u16 recipien
     if (!item || !inventory_item || !recipient || item->m_bOnline || recipient->m_bOnline || recipient->fHealth <= 0) return false;
     if (item->ID_Parent == recipient_id) return true;
     auto owner = item->ID_Parent == u16(-1) ? nullptr : static_cast<const CALifeSimulatorBase&>(*simulator).objects().object(item->ID_Parent, true);
+    const auto transfer_vertex = owner ? owner->m_tGraphID : item->m_tGraphID;
     if ((owner && owner->m_bOnline) || (item->ID_Parent != u16(-1) && !owner) ||
-        !ai().game_graph().valid_vertex_id(item->m_tGraphID) || !ai().game_graph().valid_vertex_id(recipient->m_tGraphID) ||
-        ai().game_graph().vertex(item->m_tGraphID)->level_id() != ai().game_graph().vertex(recipient->m_tGraphID)->level_id()) return false;
+        !ai().game_graph().valid_vertex_id(transfer_vertex) || !ai().game_graph().valid_vertex_id(recipient->m_tGraphID) ||
+        ai().game_graph().vertex(transfer_vertex)->level_id() != ai().game_graph().vertex(recipient->m_tGraphID)->level_id()) return false;
     if (owner) simulator->graph().detach(*owner, inventory_item, owner->m_tGraphID, true);
-    simulator->graph().attach(*recipient, inventory_item, item->m_tGraphID, true);
+    simulator->graph().attach(*recipient, inventory_item, transfer_vertex, true);
     return true;
 }
 
@@ -436,6 +436,7 @@ bool is_unloading(CALifeSimulator* sim) { return sim->is_unloading(); }
 
 void CALifeSimulator::script_register(lua_State* L)
 {
+    if (strstr(Core.Params, "-npc_sim_test")) module(L)[def("npc_sim_test_transfer", &npc_sim_test_transfer)];
     module(L)[(class_<CALifeSimulator>("alife_simulator")
                   .def("valid_object_id", &valid_object_id)
                   .def("level_id", &get_level_id)
@@ -445,7 +446,6 @@ void CALifeSimulator::script_register(lua_State* L)
                   .def("start_supply_trip", &start_supply_trip)
                   .def("start_supply_goal", &start_supply_goal)
                   .def("remember_supply", &remember_supply)
-                  .def("transfer_item_offline", &transfer_item_offline)
                   .def("supply_trip_phase", &supply_trip_phase)
                   .def("object", (CSE_ALifeDynamicObject * (*)(const CALifeSimulator*, ALife::_OBJECT_ID))(alife_object))
                   .def("object", (CSE_ALifeDynamicObject * (*)(const CALifeSimulator*, LPCSTR))(alife_object))

@@ -10,7 +10,7 @@ return function(cfg)
     local function transfer(item_id, recipient_id)
         local item = assert(object(item_id))
         if item.parent_id == recipient_id then return true end
-        if cfg.offline then return alife():transfer_item_offline(item_id,recipient_id) end
+        if cfg.offline then return npc_sim_test_transfer(alife(),item_id,recipient_id) end
         local owner, recipient, client = level.object_by_id(item.parent_id), level.object_by_id(recipient_id), level.object_by_id(item_id)
         if not owner or not recipient or not client then return false end
         owner:transfer_item(client,recipient)

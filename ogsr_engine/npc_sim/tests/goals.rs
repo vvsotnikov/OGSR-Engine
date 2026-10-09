@@ -156,7 +156,7 @@ fn waiting_knowledge_and_each_trip_transition_survive_reload() {
 }
 
 #[test]
-fn repeated_failed_returns_are_not_recreated_while_stocked() {
+fn failed_returns_retry_after_a_persisted_cooldown_without_poisoning_sources() {
     let mut a = agent();
     a.step(observation(0.), 0);
     a.step(observation(4.), 1);
@@ -164,12 +164,54 @@ fn repeated_failed_returns_are_not_recreated_while_stocked() {
     o.elapsed_ms = 60_000;
     assert_eq!(a.step(o, 1).decision.phase, Phase::Failed);
     let failed = a.status();
+    o.elapsed_ms = 10_000;
     for _ in 0..5 {
         assert_eq!(a.step(o, 1), failed);
     }
-    let renewed = a.step(o, 0);
+    let mut restored = Agent::load(&a.save()).unwrap();
+    let retry = restored.step(o, 1);
+    assert_eq!(retry.decision.phase, Phase::Returning);
+    assert!(retry.decision.command > failed.decision.command);
+    let renewed = restored.step(o, 0);
     assert_eq!(renewed.decision.phase, Phase::Outbound);
     assert_eq!(renewed.source, Some(0));
+    assert_eq!(a.sources()[0].failure, FailureReason::None);
+}
+
+#[test]
+fn a_stalled_source_is_temporarily_delayed_not_forgotten() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember(0, point(10.), point(10.));
+    let first = a.step(observation(0.), 0);
+    let mut o = observation(0.);
+    o.elapsed_ms = 60_000;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Waiting);
+    assert_eq!(a.sources()[0].failure, FailureReason::None);
+    o.elapsed_ms = 30_000;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Waiting);
+    let mut a = Agent::load(&a.save()).unwrap();
+    o.interrupted = true;
+    o.elapsed_ms = 120_000;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Waiting);
+    o.interrupted = false;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Waiting);
+    o.elapsed_ms = 29_999;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Waiting);
+    o.elapsed_ms = 1;
+    let retry = a.step(o, 0);
+    assert_eq!(retry.source, Some(0));
+    assert_eq!(retry.decision.action, Action::Travel(point(10.)));
+    assert!(retry.decision.command > first.decision.command);
+}
+
+#[test]
+fn another_source_can_be_tried_while_a_stalled_route_cools_down() {
+    let mut a = agent();
+    a.step(observation(0.), 0);
+    let mut o = observation(0.);
+    o.elapsed_ms = 60_000;
+    let alternative = a.step(o, 0);
+    assert_eq!(alternative.source, Some(1));
     assert_eq!(a.sources()[0].failure, FailureReason::None);
 }
 
@@ -178,6 +220,7 @@ fn fresh_information_replaces_an_active_destination_but_not_a_return_home() {
     let mut a = agent();
     let old = a.step(observation(0.), 0);
     assert!(a.remember(0, point(12.), point(12.)));
+    assert!(a.status().decision.command > old.decision.command);
     let mut a = Agent::load(&a.save()).unwrap();
     let revised = a.step(observation(4.), 0);
     assert_eq!(revised.decision.action, Action::Travel(point(12.)));

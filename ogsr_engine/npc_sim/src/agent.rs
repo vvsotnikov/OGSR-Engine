@@ -6,6 +6,7 @@ pub struct Source {
     pub physical: Location,
     // Knowledge changes only after an attempted visit, own pickup, or explicit news.
     pub failure: FailureReason,
+    retry_ms: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -25,10 +26,13 @@ pub struct Agent {
     command: u64,
     stocked: bool,
     dead: bool,
+    interrupted: bool,
+    return_retry_ms: u32,
 }
 
 impl Agent {
     pub const MAX_SOURCES: usize = 256;
+    const RETRY_MS: u32 = 60_000;
     pub fn medical(identity: u64, home: Location) -> Option<Self> {
         (identity != 0 && home.valid()).then_some(Self {
             identity,
@@ -40,6 +44,8 @@ impl Agent {
             command: 1,
             stocked: false,
             dead: false,
+            interrupted: false,
+            return_retry_ms: 0,
         })
     }
     pub fn assigned(plan: Plan) -> Self {
@@ -51,11 +57,14 @@ impl Agent {
                 navigation: plan.source,
                 physical: plan.remembered_item,
                 failure: FailureReason::None,
+                retry_ms: 0,
             }],
             selected: Some(0),
             command: plan.command,
             stocked: false,
             dead: false,
+            interrupted: false,
+            return_retry_ms: 0,
             trip: Some(plan),
         }
     }
@@ -68,6 +77,7 @@ impl Agent {
     pub fn is_medical(&self) -> bool {
         self.medical_goal
     }
+    // The caller supplies new information, not a periodic world-state refresh.
     pub fn remember(&mut self, index: usize, navigation: Location, physical: Location) -> bool {
         if !self.medical_goal
             || index > self.sources.len()
@@ -83,18 +93,28 @@ impl Agent {
             navigation,
             physical,
             failure: FailureReason::None,
+            retry_ms: 0,
+        };
+        let replace_trip = self.selected == Some(index)
+            && self
+                .trip
+                .as_ref()
+                .is_some_and(|trip| matches!(trip.phase, Phase::Outbound | Phase::Collecting));
+        let command = if replace_trip {
+            let Some(command) = self.command.checked_add(1) else {
+                return false;
+            };
+            command
+        } else {
+            self.command
         };
         if index == self.sources.len() {
             self.sources.push(source);
         } else {
             self.sources[index] = source;
         }
-        if self.selected == Some(index)
-            && self
-                .trip
-                .as_ref()
-                .is_some_and(|trip| matches!(trip.phase, Phase::Outbound | Phase::Collecting))
-        {
+        if replace_trip {
+            self.command = command;
             self.trip = None;
             self.selected = None;
         }
@@ -114,6 +134,7 @@ impl Agent {
             trip.phase = Phase::Returning;
         }
         self.command = command;
+        self.return_retry_ms = 0;
         self.selected = source;
         self.trip = Some(trip);
         true
@@ -169,6 +190,16 @@ impl Agent {
         if self.dead {
             return self.status();
         }
+        let elapsed = if self.interrupted || o.interrupted {
+            0
+        } else {
+            o.elapsed_ms
+        };
+        self.interrupted = o.interrupted;
+        self.return_retry_ms = self.return_retry_ms.saturating_sub(elapsed);
+        for source in &mut self.sources {
+            source.retry_ms = source.retry_ms.saturating_sub(elapsed);
+        }
         let stocked = bandages != 0;
         let inventory_changed = stocked != self.stocked;
         self.stocked = stocked;
@@ -190,11 +221,22 @@ impl Agent {
             let failed = trip.phase == Phase::Failed;
             if pursuing_source && failed && !stocked && trip.reason != FailureReason::LostSupply {
                 if let Some(i) = self.selected {
-                    self.sources[i].failure = trip.reason;
+                    if matches!(
+                        trip.reason,
+                        FailureReason::SupplyUnavailable | FailureReason::SupplyMoved
+                    ) {
+                        self.sources[i].failure = trip.reason;
+                    } else {
+                        self.sources[i].retry_ms = Self::RETRY_MS;
+                    }
                 }
             }
-            // A stocked NPC must not endlessly recreate a failed return route.
-            if (failed && !stocked) || (terminal && inventory_changed) {
+            if failed && stocked && !terminal {
+                self.return_retry_ms = Self::RETRY_MS;
+            }
+            if (failed && (!stocked || self.return_retry_ms == 0))
+                || (terminal && inventory_changed)
+            {
                 self.trip = None;
                 self.selected = None;
             } else {
@@ -222,7 +264,7 @@ impl Agent {
                 .sources
                 .iter()
                 .enumerate()
-                .filter(|(_, s)| s.failure == FailureReason::None)
+                .filter(|(_, s)| s.failure == FailureReason::None && s.retry_ms == 0)
                 .min_by(|(a, x), (b, y)| {
                     o.current
                         .distance(x.navigation)
@@ -242,7 +284,7 @@ impl Agent {
     pub fn save(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(b"NPCG");
-        put(&mut bytes, 1);
+        put(&mut bytes, 2);
         bytes.extend_from_slice(&self.identity.to_le_bytes());
         bytes.extend_from_slice(&self.command.to_le_bytes());
         put_location(&mut bytes, self.home);
@@ -250,14 +292,17 @@ impl Agent {
             &mut bytes,
             u32::from(self.medical_goal)
                 | (u32::from(self.stocked) << 1)
-                | (u32::from(self.dead) << 2),
+                | (u32::from(self.dead) << 2)
+                | (u32::from(self.interrupted) << 3),
         );
+        put(&mut bytes, self.return_retry_ms);
         put(&mut bytes, self.selected.map_or(u32::MAX, |i| i as u32));
         put(&mut bytes, self.sources.len() as u32);
         for source in &self.sources {
             put_location(&mut bytes, source.navigation);
             put_location(&mut bytes, source.physical);
             put(&mut bytes, source.failure as u32);
+            put(&mut bytes, source.retry_ms);
         }
         if let Some(trip) = &self.trip {
             bytes.extend(trip.save());
@@ -270,7 +315,7 @@ impl Agent {
             return Plan::load(bytes).map(Self::assigned);
         }
         let mut r = Reader(bytes);
-        if r.take::<4>()? != *b"NPCG" || r.u32()? != 1 {
+        if r.take::<4>()? != *b"NPCG" || r.u32()? != 2 {
             return None;
         }
         let identity = u64::from_le_bytes(r.take()?);
@@ -278,15 +323,22 @@ impl Agent {
         let home = r.location()?;
         let mut agent = Self::medical(identity, home)?;
         let flags = r.u32()?;
+        let return_retry_ms = r.u32()?;
         let selected = r.u32()?;
         let count = r.u32()? as usize;
-        if command == 0 || flags > 7 || count > Self::MAX_SOURCES {
+        if command == 0
+            || flags > 15
+            || count > Self::MAX_SOURCES
+            || return_retry_ms > Self::RETRY_MS
+        {
             return None;
         }
         agent.command = command;
         agent.medical_goal = flags & 1 != 0;
         agent.stocked = flags & 2 != 0;
         agent.dead = flags & 4 != 0;
+        agent.interrupted = flags & 8 != 0;
+        agent.return_retry_ms = return_retry_ms;
         for _ in 0..count {
             let navigation = r.location()?;
             let physical = r.location()?;
@@ -303,10 +355,12 @@ impl Agent {
                 9 => FailureReason::CounterExhausted,
                 _ => return None,
             };
+            let retry_ms = r.u32()?;
             if !navigation.valid()
                 || !physical.spatially_valid()
                 || navigation.level != home.level
                 || physical.level != home.level
+                || retry_ms > Self::RETRY_MS
             {
                 return None;
             }
@@ -314,6 +368,7 @@ impl Agent {
                 navigation,
                 physical,
                 failure,
+                retry_ms,
             });
         }
         if selected != u32::MAX {
