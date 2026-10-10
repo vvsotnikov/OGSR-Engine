@@ -18,14 +18,6 @@ return function(cfg)
             home = level.vertex_position(home_node)
             get_console():execute("g_god on")
             level.disable_input()
-            actor_position = home
-            if cfg.scenario ~= "natural" then
-                -- Exercise the assigned trip without a nearby actor holding meet control.
-                local actor_node = level.vertex_in_direction(home_node,vector():set(-1,0,0),25)
-                actor_position = level.vertex_position(actor_node)
-            end
-            db.actor:set_actor_position(vector():set(actor_position.x,actor_position.y+1.1,actor_position.z))
-            if cfg.scenario == "natural" then alife():set_switch_distance(5) end
             local home_graph = cross_table():vertex(home_node):game_vertex_id()
             local best = 6
             for _, direction in ipairs({{1,0},{-1,0},{0,1},{0,-1}}) do
@@ -48,6 +40,31 @@ return function(cfg)
                 end
             end
             assert(source_node, "No clear supply-trip route")
+            -- Keep greeting away from both ends of the selected trip.
+            local clearance, switch_radius = 15, nil
+            local graph = game_graph()
+            local map = graph:vertex(home_graph):level_id()
+            local factor = system_ini():r_float("alife", "switch_factor")
+            for id=0,graph:vertex_count()-1 do
+                local vertex = graph:vertex(id)
+                if vertex:level_id() == map and graph:accessible(id) then
+                    local position = level.vertex_position(vertex:level_vertex_id())
+                    local home_distance = position:distance_to(home)
+                    local source_distance = position:distance_to(level.vertex_position(source_node))
+                    local gap = math.min(home_distance,source_distance)
+                    -- Natural switching must cross both hysteresis thresholds.
+                    local lower = (home_distance+2)/(1-factor)
+                    local upper = (source_distance-2)/(1+factor)
+                    if gap > clearance and home_distance <= 60 and
+                        (cfg.scenario ~= "natural" or lower < upper) then
+                        actor_position,clearance = position,gap
+                        switch_radius = (lower+upper)/2
+                    end
+                end
+            end
+            assert(actor_position, "No actor position clear of the trip endpoints")
+            if cfg.scenario == "natural" then alife():set_switch_distance(switch_radius) end
+            db.actor:set_actor_position(vector():set(actor_position.x,actor_position.y+1.1,actor_position.z))
             if not npc_id then
                 local source = level.vertex_position(source_node)
                 if cfg.scenario == "elevated" then source.y = source.y + 2.4 end
