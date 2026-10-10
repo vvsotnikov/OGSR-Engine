@@ -169,6 +169,7 @@ return function(cfg)
                     finish()
                 end
             elseif phase==3 and (not consumed or object(item).parent_id==npc) then
+                if cfg.scenario=="corpse-revisit" and not consumed and object(extra).parent_id==npc then item,extra=extra,item end
                 assert(object(item).parent_id==npc and here:distance_to(home)<=1.6,"No real corpse loot/return")
                 if cfg.scenario=="corpse-revisit" and not consumed then
                     assert(object(extra).parent_id==body,"Both bandages taken in one search")
