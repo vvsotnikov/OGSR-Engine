@@ -248,7 +248,8 @@ NpcDecision CNpcSimulation::observe(Entry& entry, const Fvector& here, u32 graph
     if (before.source < entry.supplies.size())
         if (auto supply = entry.supplies[before.source])
         {
-            if (npc_agent_source_kind(entry.plan, before.source) == 1)
+            const bool body = npc_agent_source_kind(entry.plan, before.source) == 1;
+            if (body)
             {
                 const auto corpse = smart_cast<CSE_ALifeHumanAbstract*>(supply);
                 input.supply = corpse && corpse->fHealth <= 0 ? 1 : 0;
@@ -257,7 +258,7 @@ NpcDecision CNpcSimulation::observe(Entry& entry, const Fvector& here, u32 graph
             else input.supply = supply->ID_Parent == entry.npc->ID ? 2 : supply->ID_Parent == u16(-1) ? 1 : 3;
             input.supply_location = location(*supply);
             input.representation_ready = supply->m_bOnline == entry.npc->m_bOnline;
-            if (input.representation_ready && entry.npc->m_bOnline && npc_agent_source_kind(entry.plan, before.source) == 1)
+            if (input.representation_ready && entry.npc->m_bOnline && body)
             {
                 auto corpse = smart_cast<CAI_Stalker*>(Level().Objects.net_Find(supply->ID));
                 input.representation_ready = corpse && !corpse->g_Alive();
@@ -309,7 +310,7 @@ void CNpcSimulation::inspect(Entry& entry, CAI_Stalker* client, const NpcDecisio
     if (!client)
         for (const auto id : entry.npc->children)
             if (auto owned = smart_cast<CSE_ALifeInventoryItem*>(objects().object(id, true))) mass += owned->m_fMass;
-    LPCSTR refusal = "representation";
+    u32 representation_waits = 0, inventory_refusals = 0, mass_refusals = 0;
     for (const auto id : corpse->children)
         if (auto item = objects().object(id, true); item && item->ID_Parent == corpse->ID && item->m_tClassID == CLSID_IITEM_BANDAGE &&
             READ_IF_EXISTS(pSettings, r_bool, item->name(), "can_take", TRUE))
@@ -317,32 +318,41 @@ void CNpcSimulation::inspect(Entry& entry, CAI_Stalker* client, const NpcDecisio
             // Temporarily refused items remain possible future supplies, but
             // must not hide another item that can be taken during this visit.
             ++count;
-            if (item->m_bOnline != entry.npc->m_bOnline) continue;
+            if (item->m_bOnline != entry.npc->m_bOnline)
+            {
+                ++representation_waits;
+                continue;
+            }
             if (client)
             {
                 auto live = smart_cast<CInventoryItem*>(Level().Objects.net_Find(id));
                 if (!live || live->object().H_Parent() != owner)
                 {
-                    refusal = "representation";
+                    ++representation_waits;
                     continue;
                 }
                 if (!client->inventory().CanTakeItem(live))
                 {
-                    refusal = "inventory";
+                    ++inventory_refusals;
                     continue;
                 }
             }
             else if (mass + smart_cast<CSE_ALifeInventoryItem*>(item)->m_fMass > entry.npc->m_fMaxItemMass)
             {
-                refusal = "mass";
+                ++mass_refusals;
                 continue;
             }
             if (!selected || item->ID < selected->ID) selected = item;
         }
     if (!selected && count)
     {
+        // An item still being replicated may become acceptable next tick.
+        // Leave the command unlatched: retry inspection under Plan's existing
+        // active-trip deadline, without teaching an inventory refusal.
+        if (representation_waits) return;
         R_ASSERT(npc_agent_search_rejected(entry.plan, decision.command));
-        Msg("[npc search] rejected npc=%u corpse=%u online=%u reason=%s", entry.npc->ID, corpse->ID, u32(entry.npc->m_bOnline), refusal);
+        Msg("[npc search] rejected npc=%u corpse=%u online=%u reason=acceptance inventory=%u mass=%u", entry.npc->ID, corpse->ID,
+            u32(entry.npc->m_bOnline), inventory_refusals, mass_refusals);
         return;
     }
     if (selected)
