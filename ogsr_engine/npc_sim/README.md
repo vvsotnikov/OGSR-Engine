@@ -70,7 +70,8 @@ Visual memory can be squad-shared, restored, or populated fictitiously by combat
 logic. Only a successful personal visibility update is a new sighting. Offline
 execution consumes remembered sources; it has no visual discovery channel.
 Repeated sightings of the same stationary item must not renew its trip or retry
-budget. Reusing a memory slot for a different item is different information even
+budget. Sightings refresh eviction recency without changing those budgets or
+the remembered navigation point. Reusing a memory slot for a different item is different information even
 at the same position; the native binding supplies that identity distinction.
 
 Waiting is not a request to refresh world knowledge: it also covers retry

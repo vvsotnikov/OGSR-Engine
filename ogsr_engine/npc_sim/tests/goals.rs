@@ -610,3 +610,32 @@ fn seeing_a_previously_moved_item_back_at_its_old_position_is_fresh_evidence() {
         Action::Travel(point(10.))
     );
 }
+
+#[test]
+fn sightings_refresh_eviction_recency_across_save_without_restarting_the_trip() {
+    use npc_sim::SourceObservation::Unchanged;
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    for index in 0..Agent::MAX_SOURCES {
+        let source = point(10. + index as f32 * 10.);
+        assert!(a.remember(index, source, source));
+    }
+    let trip = a.step(observation(0.), 0);
+    assert_eq!(trip.source, Some(0));
+    assert_eq!(a.available_source_slot(), Some(1)); // selected source cannot be evicted
+    assert_eq!(a.observe_source(1, point(20.), point(20.)), Unchanged);
+    assert_eq!(a.status(), trip);
+    assert_eq!(a.available_source_slot(), Some(2));
+    let mut a = Agent::load(&a.save()).unwrap();
+    assert_eq!(a.status(), trip);
+    assert_eq!(a.available_source_slot(), Some(2));
+    assert_eq!(a.observe_source(2, point(30.), point(30.)), Unchanged);
+    assert_eq!(a.available_source_slot(), Some(3));
+    // Repeated observations of the newest source need no rank changes.
+    let before = a.save();
+    assert_eq!(a.observe_source(2, point(30.), point(30.)), Unchanged);
+    assert_eq!(a.save(), before);
+    let mut stalled = observation(0.);
+    stalled.elapsed_ms = 60_000;
+    a.step(stalled, 0);
+    assert_ne!(a.status().source, Some(0)); // sightings did not renew travel time
+}

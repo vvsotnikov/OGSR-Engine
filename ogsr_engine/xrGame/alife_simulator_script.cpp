@@ -54,7 +54,8 @@ bool start_supply_trip(CALifeSimulator* simulator, u16 npc, u16 supply)
 {
     return simulator->initialized() && !simulator->is_unloading() && simulator->npc_simulation().enroll(npc, supply);
 }
-// Exercise the production non-personal memory insertion paths without a sighting.
+// Exercise non-personal insertion and reload the entire visual memory, including
+// other entries' timestamps. Only used by the isolated -npc_sim_test fixture.
 bool npc_sim_test_nonpersonal_memory(CALifeSimulator* simulator, u16 npc_id, u16 item_id)
 {
     if (!simulator->initialized() || simulator->is_unloading() || !simulator->npc_simulation().owns(npc_id)) return false;

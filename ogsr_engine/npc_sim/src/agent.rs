@@ -124,13 +124,16 @@ impl Agent {
         if let Some(source) = self.sources().get(index) {
             // Physics settling and repeated visibility must not restart travel or
             // erase a failed route's retry delay. Navigation snapping is not
-            // physical movement. Compare to the stored sighting,
+            // physical movement; navigation changes only with physical news.
+            // Recency still follows sightings, independently of trip/retry state.
+            // Compare to the stored sighting,
             // so a sequence of small movements eventually becomes new information.
             if source.failure == FailureReason::None
                 && source
                     .physical
                     .near(physical, crate::SOURCE_MOVEMENT_TOLERANCE)
             {
+                self.knowledge.observe_again(index);
                 return SourceObservation::Unchanged;
             }
         }

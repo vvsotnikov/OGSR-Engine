@@ -249,6 +249,11 @@ pub unsafe extern "C" fn npc_agent_observe_source(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn npc_agent_accepts_sightings(plan: *const Agent) -> bool {
+    unsafe { plan.as_ref() }.is_some_and(Agent::is_medical)
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn npc_agent_available_source_slot(plan: *const Agent) -> u32 {
     unsafe { plan.as_ref() }
         .and_then(Agent::available_source_slot)
@@ -313,6 +318,12 @@ mod tests {
         };
         unsafe {
             let agent = npc_agent_create_goal(19, &home);
+            assert!(npc_agent_accepts_sightings(agent));
+            assert!(!npc_agent_accepts_sightings(std::ptr::null()));
+            let assigned = npc_agent_create(20, &home, &home, &home);
+            assert!(!assigned.is_null());
+            assert!(!npc_agent_accepts_sightings(assigned));
+            npc_agent_destroy(assigned);
             assert_eq!(npc_agent_observe_source(agent, 0, &home, &home), Updated);
             let before = (*agent).save();
             assert_eq!(npc_agent_observe_source(agent, 0, &home, &home), Unchanged);

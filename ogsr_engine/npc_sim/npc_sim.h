@@ -41,6 +41,7 @@ enum class NpcSourceObservation : std::uint32_t { Rejected = 0, Unchanged = 1, U
 // Only for the same bound item. A replacement at the same position would retain
 // the old retry state; new identities replacing a slot must use remember.
 NpcSourceObservation npc_agent_observe_source(NpcAgent*, std::uint32_t index, const NpcLocation* navigation, const NpcLocation* physical);
+bool npc_agent_accepts_sightings(const NpcAgent*);
 // UINT32_MAX if unavailable. Query and remember belong to one serialized operation.
 std::uint32_t npc_agent_available_source_slot(const NpcAgent*);
 std::size_t npc_agent_source_count(const NpcAgent*);
