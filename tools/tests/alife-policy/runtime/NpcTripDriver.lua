@@ -44,7 +44,10 @@ return function(cfg)
             local clearance, switch_radius = 15, nil
             local graph = game_graph()
             local map = graph:vertex(home_graph):level_id()
+            -- Isolated sessions retain the configured factor; do not override it after load.
             local factor = system_ini():r_float("alife", "switch_factor")
+            local online = cfg.mode == "distance" and cfg.scenario ~= "natural" and cfg.scenario ~= "offline"
+                and alife():switch_distance()*(1-factor)
             for id=0,graph:vertex_count()-1 do
                 local vertex = graph:vertex(id)
                 if vertex:level_id() == map and graph:accessible(id) then
@@ -56,20 +59,17 @@ return function(cfg)
                     local lower = (home_distance+2)/(1-factor)
                     local upper = (source_distance-2)/(1+factor)
                     if gap > clearance and home_distance <= 60 and
+                        (not online or (home_distance+2 < online and source_distance+2 < online)) and
                         (cfg.scenario ~= "natural" or lower < upper) then
                         actor_position,clearance = position,gap
                         switch_radius = (lower+upper)/2
                     end
                 end
             end
-            assert(actor_position, "No actor position clear of the trip endpoints")
+            assert(actor_position, online and
+                "No actor position clear of greeting and inside the distance-mode online range" or
+                "No actor position clear of the trip endpoints")
             if cfg.scenario == "natural" then alife():set_switch_distance(switch_radius) end
-            if cfg.mode == "distance" and cfg.scenario ~= "natural" and cfg.scenario ~= "offline" then
-                local online = alife():switch_distance()*(1-factor)
-                assert(actor_position:distance_to(home)+2 < online and
-                    actor_position:distance_to(level.vertex_position(source_node))+2 < online,
-                    "Distance-mode setup would switch the trip offline; increase switch_distance")
-            end
             db.actor:set_actor_position(vector():set(actor_position.x,actor_position.y+1.1,actor_position.z))
             if not npc_id then
                 local source = level.vertex_position(source_node)
