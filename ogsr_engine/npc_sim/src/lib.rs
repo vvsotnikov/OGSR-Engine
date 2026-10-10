@@ -7,7 +7,7 @@ mod goal;
 mod knowledge;
 pub use activity::Plan;
 pub use agent::{Agent, AgentDecision, SourceObservation};
-pub use knowledge::Source;
+pub use knowledge::{Source, SourceKind};
 
 const SOURCE_MOVEMENT_TOLERANCE: f32 = 1.0;
 
@@ -92,6 +92,7 @@ pub enum Action {
     Wait,
     Travel(Location),
     Collect,
+    Inspect,
 }
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Decision {

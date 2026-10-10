@@ -1,8 +1,16 @@
 use crate::activity::{ActivityOutcome, ActivityReport, ActivityState};
 use crate::{valid_source, FailureReason, Location, Plan};
 
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SourceKind {
+    LooseItem = 0,
+    Corpse = 1,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Source {
+    pub kind: SourceKind,
     pub navigation: Location,
     pub physical: Location,
     // Knowledge changes only after an attempted visit, own pickup, or explicit news.
@@ -104,6 +112,16 @@ impl Knowledge {
         true
     }
 
+    pub fn set_kind(&mut self, index: usize, kind: SourceKind) {
+        self.sources[index].kind = kind;
+    }
+
+    pub fn searched(&mut self, index: usize, exhausted: bool) {
+        if exhausted {
+            self.sources[index].failure = FailureReason::SupplyUnavailable;
+        }
+    }
+
     pub(super) fn observe_again(&mut self, index: usize) {
         let newest = self.sources.len() as u32 - 1;
         let old_order = self.sources[index].learned_order;
@@ -168,6 +186,7 @@ impl Knowledge {
 impl Source {
     fn new(navigation: Location, physical: Location, learned_order: u32) -> Self {
         Self {
+            kind: SourceKind::LooseItem,
             navigation,
             physical,
             learned_order,

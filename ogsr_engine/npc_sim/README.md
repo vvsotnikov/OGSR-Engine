@@ -95,3 +95,16 @@ trip binding; forgetting a source does not mean learning that its item is gone.
 Command numbers span the NPC lifetime, including replacement activities. The
 engine latches movement and asynchronous pickup by command, so restarting an
 activity's counter could mistake old execution state for a new request.
+
+Seeing a body establishes a possible search location, not knowledge of its
+inventory. Only inspection at the body may enumerate its contents. Moving a
+searched body or seeing it again does not reveal replenishment; exhausted-source
+knowledge survives those sightings and save/reload. Offline execution uses the
+same remembered location and search result, without discovering unseen bodies.
+
+Corpse looting commits authoritative server ownership before another NPC can
+inspect the same inventory. Online reject/take packets replicate that transfer;
+they are not two independent attempts to acquire a still-available item. A body
+and its looter must share a representation. Corpses remain online on the loaded
+map under the existing engine policy, so off-map inspection is validated through
+an actual level transition, not by forcing only the looter offline.

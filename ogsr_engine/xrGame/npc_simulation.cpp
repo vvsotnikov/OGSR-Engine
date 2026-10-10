@@ -24,6 +24,9 @@
 #include "clsid_game.h"
 #include "script_engine.h"
 #include "script_binder_object.h"
+#include "xrServer.h"
+#include "inventory.h"
+#include "inventory_item.h"
 
 extern u16 script_server_object_version();
 
@@ -194,7 +197,10 @@ bool CNpcSimulation::remember(u16 npc_id, u16 supply_id)
 
 void CNpcSimulation::see_item(CAI_Stalker& observer, const CGameObject& item)
 {
-    if (m_entries.empty() || item.CLS_ID != CLSID_IITEM_BANDAGE || item.H_Parent() || item.getDestroy()) return;
+    if (m_entries.empty() || item.H_Parent() || item.getDestroy()) return;
+    const auto body = smart_cast<const CAI_Stalker*>(&item);
+    const bool corpse = body && !body->g_Alive();
+    if (!corpse && item.CLS_ID != CLSID_IITEM_BANDAGE) return;
     auto entry = find(smart_cast<CSE_ALifeMonsterAbstract*>(objects().object(observer.ID(), true)));
     if (!entry || !npc_agent_accepts_sightings(entry->plan)) return;
     auto supply = objects().object(item.ID(), true);
@@ -205,7 +211,8 @@ void CNpcSimulation::see_item(CAI_Stalker& observer, const CGameObject& item)
     if (index == u32(-1)) return;
     const auto navigation = navigation_location(*supply), physical = location(*supply);
     const auto result = known ? npc_agent_observe_source(entry->plan, index, &navigation, &physical) :
-        (npc_agent_remember(entry->plan, index, &navigation, &physical) ? NpcSourceObservation::Updated : NpcSourceObservation::Rejected);
+        ((corpse ? npc_agent_remember_corpse(entry->plan, index, &navigation, &physical) :
+            npc_agent_remember(entry->plan, index, &navigation, &physical)) ? NpcSourceObservation::Updated : NpcSourceObservation::Rejected);
     if (result != NpcSourceObservation::Updated) return;
     if (index == entry->supplies.size()) entry->supplies.push_back(supply);
     else entry->supplies[index] = supply;
@@ -241,7 +248,13 @@ NpcDecision CNpcSimulation::observe(Entry& entry, const Fvector& here, u32 graph
     if (before.source < entry.supplies.size())
         if (auto supply = entry.supplies[before.source])
         {
-            input.supply = supply->ID_Parent == entry.npc->ID ? 2 : supply->ID_Parent == u16(-1) ? 1 : 3;
+            if (npc_agent_source_kind(entry.plan, before.source) == 1)
+            {
+                const auto corpse = smart_cast<CSE_ALifeHumanAbstract*>(supply);
+                input.supply = corpse && corpse->fHealth <= 0 ? 1 : 0;
+                // A seen body reveals no inventory facts. Inspection owns that query.
+            }
+            else input.supply = supply->ID_Parent == entry.npc->ID ? 2 : supply->ID_Parent == u16(-1) ? 1 : 3;
             input.supply_location = location(*supply);
             input.representation_ready = supply->m_bOnline == entry.npc->m_bOnline;
         }
@@ -271,6 +284,49 @@ void CNpcSimulation::collect(Entry& entry, CAI_Stalker* client, const NpcDecisio
     }
     else
         m_alife.graph().attach(*entry.npc, smart_cast<CSE_ALifeInventoryItem*>(supply), supply->m_tGraphID, true);
+}
+
+void CNpcSimulation::inspect(Entry& entry, CAI_Stalker* client, const NpcDecision& decision)
+{
+    if (decision.source >= entry.supplies.size() || entry.pickup_command == decision.command) return;
+    auto corpse = smart_cast<CSE_ALifeHumanAbstract*>(entry.supplies[decision.source]);
+    if (!corpse || corpse->fHealth > 0 || corpse->m_bOnline != entry.npc->m_bOnline) return;
+    const auto here = location(*entry.npc), there = location(*corpse);
+    const Fvector delta = Fvector().set(here.position[0]-there.position[0], here.position[1]-there.position[1], here.position[2]-there.position[2]);
+    if (here.level != there.level || delta.square_magnitude() > 6.25f) return;
+    CSE_ALifeDynamicObject* selected = nullptr;
+    u32 count = 0;
+    for (const auto id : corpse->children)
+        if (auto item = objects().object(id, true); item && item->ID_Parent == corpse->ID && item->m_tClassID == CLSID_IITEM_BANDAGE)
+        {
+            ++count;
+            if (!selected || item->ID < selected->ID) selected = item;
+        }
+    if (selected)
+    {
+        if (selected->m_bOnline != entry.npc->m_bOnline) return;
+        if (client)
+        {
+            auto item = smart_cast<CInventoryItem*>(Level().Objects.net_Find(selected->ID));
+            auto owner = smart_cast<CAI_Stalker*>(Level().Objects.net_Find(corpse->ID));
+            if (!item || !owner || owner->g_Alive() || item->object().H_Parent() != owner || !client->inventory().CanTakeItem(item)) return;
+            // Commit server ownership synchronously before another planner can
+            // search this corpse; packets only replicate the committed transfer.
+            NET_Packet reject, take;
+            m_alife.server().Perform_transfer(reject, take, selected, corpse, entry.npc);
+            m_alife.server().SendBroadcast(BroadcastCID, reject, net_flags(TRUE, TRUE));
+            m_alife.server().SendBroadcast(BroadcastCID, take, net_flags(TRUE, TRUE));
+        }
+        else
+        {
+            auto item = smart_cast<CSE_ALifeInventoryItem*>(selected);
+            m_alife.graph().detach(*corpse, item, corpse->m_tGraphID, true);
+            m_alife.graph().attach(*entry.npc, item, entry.npc->m_tGraphID, true);
+        }
+    }
+    entry.pickup_command = decision.command;
+    R_ASSERT(npc_agent_searched(entry.plan, decision.command, count <= 1));
+    Msg("[npc search] npc=%u corpse=%u item=%u remaining=%u", entry.npc->ID, corpse->ID, selected ? selected->ID : u16(-1), selected ? count-1 : 0);
 }
 
 bool CNpcSimulation::update_online(CAI_Stalker& client, bool interrupted)
@@ -326,6 +382,7 @@ bool CNpcSimulation::update_online(CAI_Stalker& client, bool interrupted)
     {
         client.movement().set_movement_type(MonsterSpace::eMovementTypeStand);
         if (decision.action == 2) collect(*entry, &client, decision);
+        if (decision.action == 3) inspect(*entry, &client, decision);
     }
     return true;
 }
@@ -349,6 +406,7 @@ bool CNpcSimulation::update_offline(CSE_ALifeMonsterAbstract* object)
     {
         movement.path_type(MovementManager::ePathTypeNoPath);
         if (decision.action == 2) collect(*entry, nullptr, decision);
+        if (decision.action == 3) inspect(*entry, nullptr, decision);
     }
     return true;
 }
@@ -497,11 +555,11 @@ void CNpcSimulation::load(IReader& source)
         {
             const u16 item_id = chunk->r_u16();
             auto supply = item_id == u16(-1) ? nullptr : objects().object(item_id, true);
-            R_ASSERT(item_id == u16(-1) || (supply && smart_cast<CSE_ALifeInventoryItem*>(supply)));
+            R_ASSERT(item_id == u16(-1) || (supply && (smart_cast<CSE_ALifeInventoryItem*>(supply) || smart_cast<CSE_ALifeHumanAbstract*>(supply))));
             supplies.push_back(supply);
         }
         const u32 size = chunk->r_u32();
-        R_ASSERT(npc && m_entries.find(npc) == m_entries.end() && size <= chunk->elapsed() && size <= 16384);
+        R_ASSERT(npc && m_entries.find(npc) == m_entries.end() && size <= chunk->elapsed() && size <= 32768);
         xr_vector<u8> bytes(size);
         chunk->r(bytes.data(), size);
         xr_vector<u8> binder_data;
@@ -520,6 +578,10 @@ void CNpcSimulation::load(IReader& source)
         R_ASSERT(npc_agent_source_count(plan) == supplies.size());
         for (u32 i = 0; i < supplies.size(); ++i)
         {
+            const auto kind = npc_agent_source_kind(plan, i);
+            R_ASSERT(kind <= 1);
+            if (supplies[i]) R_ASSERT(kind == 1 ? smart_cast<CSE_ALifeHumanAbstract*>(supplies[i]) != nullptr :
+                smart_cast<CSE_ALifeInventoryItem*>(supplies[i]) != nullptr);
             NpcLocation remembered{};
             R_ASSERT(npc_agent_source(plan, i, &remembered));
             R_ASSERT(ai().game_graph().valid_vertex_id(GameGraph::_GRAPH_ID(remembered.game_vertex)));

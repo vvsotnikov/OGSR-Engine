@@ -1,6 +1,6 @@
 use crate::activity::ActivityState;
 use crate::goal::{ActivityRequest, Goal, GoalKind};
-use crate::knowledge::{Knowledge, Source};
+use crate::knowledge::{Knowledge, Source, SourceKind};
 use crate::{
     Action, Decision, FailureReason, Location, Observation, Phase, Plan, ScriptControl, Supply,
 };
@@ -111,6 +111,30 @@ impl Agent {
         }
         true
     }
+    pub fn remember_corpse(
+        &mut self,
+        index: usize,
+        navigation: Location,
+        physical: Location,
+    ) -> bool {
+        if !self.remember(index, navigation, physical) {
+            return false;
+        }
+        self.knowledge.set_kind(index, SourceKind::Corpse);
+        true
+    }
+
+    /// Result of the currently issued search, after a real inventory inspection.
+    pub fn searched(&mut self, command: u64, exhausted: bool) -> bool {
+        let status = self.status();
+        if status.decision.command != command || status.decision.action != Action::Inspect {
+            return false;
+        }
+        let index = self.selected.unwrap();
+        self.knowledge.searched(index, exhausted);
+        true
+    }
+
     /// A personal sighting of the same bound object, not a replacement identity.
     pub fn observe_source(
         &mut self,
@@ -127,7 +151,9 @@ impl Agent {
             // physical movement; navigation changes only with physical news.
             // Recency still follows sightings, independently of trip/retry state.
             // Compare to the stored sighting so cumulative movement becomes news.
-            if source.failure == FailureReason::None
+            if (source.failure == FailureReason::None
+                || (source.kind == SourceKind::Corpse
+                    && source.failure == FailureReason::SupplyUnavailable))
                 && source
                     .physical
                     .near(physical, crate::SOURCE_MOVEMENT_TOLERANCE)
@@ -136,7 +162,19 @@ impl Agent {
                 return SourceObservation::Unchanged;
             }
         }
+        let kind = self
+            .sources()
+            .get(index)
+            .map(|s| s.kind)
+            .unwrap_or(SourceKind::LooseItem);
+        let exhausted = self.sources().get(index).is_some_and(|s| {
+            s.kind == SourceKind::Corpse && s.failure == FailureReason::SupplyUnavailable
+        });
         if self.remember(index, navigation, physical) {
+            self.knowledge.set_kind(index, kind);
+            if exhausted {
+                self.knowledge.searched(index, true);
+            }
             SourceObservation::Updated
         } else {
             SourceObservation::Rejected
@@ -166,6 +204,20 @@ impl Agent {
         self.selected = source;
         true
     }
+    fn result(&self, mut decision: Decision) -> AgentDecision {
+        if decision.action == Action::Collect
+            && self
+                .selected
+                .is_some_and(|i| self.sources()[i].kind == SourceKind::Corpse)
+        {
+            decision.action = Action::Inspect;
+        }
+        AgentDecision {
+            decision,
+            source: self.selected,
+        }
+    }
+
     pub fn status(&self) -> AgentDecision {
         let decision = if self.dead {
             Decision {
@@ -196,10 +248,7 @@ impl Agent {
                 action: Action::Wait,
             }
         };
-        AgentDecision {
-            decision,
-            source: self.selected,
-        }
+        self.result(decision)
     }
     pub fn step_controlled(
         &mut self,
@@ -243,6 +292,12 @@ impl Agent {
         self.goal.elapse(elapsed);
         self.knowledge.elapse(elapsed);
         let inventory_changed = self.goal.observe_inventory(bandages);
+        if self.selected.is_some_and(|i| {
+            self.sources()[i].kind == SourceKind::Corpse
+                && self.sources()[i].failure == FailureReason::SupplyUnavailable
+        }) {
+            o.supply = Supply::Missing;
+        }
         if let Some(activity) = self.activity.as_mut() {
             if o.supply == Supply::Owned {
                 self.knowledge.acquired(self.selected);
@@ -258,10 +313,7 @@ impl Agent {
                 self.activity = None;
                 self.selected = None;
             } else {
-                return AgentDecision {
-                    decision: report.decision,
-                    source: self.selected,
-                };
+                return self.result(report.decision);
             }
         }
         if let Some(request) = self.goal.select(o.current, &self.knowledge) {

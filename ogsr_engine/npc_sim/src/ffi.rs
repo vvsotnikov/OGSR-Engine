@@ -48,6 +48,7 @@ impl From<AgentDecision> for Output {
         match decision.action {
             Action::Wait => {}
             Action::Collect => output.action = 2,
+            Action::Inspect => output.action = 3,
             Action::Travel(location) => {
                 output.action = 1;
                 output.game_vertex = location.game_vertex;
@@ -303,10 +304,92 @@ pub unsafe extern "C" fn npc_agent_locations(
     true
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn npc_agent_remember_corpse(
+    plan: *mut Agent,
+    index: u32,
+    navigation: *const Location,
+    physical: *const Location,
+) -> bool {
+    let (Some(plan), Some(navigation), Some(physical)) = (
+        unsafe { plan.as_mut() },
+        unsafe { navigation.as_ref() },
+        unsafe { physical.as_ref() },
+    ) else {
+        return false;
+    };
+    plan.remember_corpse(index as usize, *navigation, *physical)
+}
+#[no_mangle]
+pub unsafe extern "C" fn npc_agent_source_kind(plan: *const Agent, index: u32) -> u32 {
+    unsafe { plan.as_ref() }
+        .and_then(|p| p.sources().get(index as usize))
+        .map_or(u32::MAX, |s| s.kind as u32)
+}
+#[no_mangle]
+pub unsafe extern "C" fn npc_agent_searched(
+    plan: *mut Agent,
+    command: u64,
+    exhausted: bool,
+) -> bool {
+    unsafe { plan.as_mut() }.is_some_and(|p| p.searched(command, exhausted))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    #[test]
+    fn corpse_abi_requires_a_valid_binding_and_arrival() {
+        let home = Location {
+            game_vertex: 1,
+            level_vertex: 2,
+            level: 0,
+            position: [0.0; 3],
+        };
+        let body = Location {
+            position: [10.0, 0.0, 0.0],
+            ..home
+        };
+        unsafe {
+            let agent = npc_agent_create_goal(7, &home);
+            assert!(!agent.is_null());
+            assert!(!npc_agent_remember_corpse(
+                agent,
+                0,
+                std::ptr::null(),
+                &body
+            ));
+            assert!(!npc_agent_remember_corpse(agent, 1, &body, &body));
+            assert_eq!(npc_agent_source_kind(agent, 0), u32::MAX);
+            assert!(npc_agent_remember_corpse(agent, 0, &body, &body));
+            assert_eq!(npc_agent_source_kind(agent, 0), 1);
+            let mut output = Output::default();
+            let mut input = Input {
+                current: home,
+                supply_location: body,
+                supply: 1,
+                representation_ready: 1,
+                pickup_pending: 0,
+                path_blocked: 0,
+                elapsed_ms: 0,
+                edge_distance: 0.0,
+                interrupted: 0,
+                alive: 1,
+                bandages: 0,
+            };
+            assert!(npc_agent_step(agent, &input, &mut output, 0));
+            assert!(!npc_agent_searched(agent, output.command, true));
+            input.current = body;
+            assert!(npc_agent_step(agent, &input, &mut output, 0));
+            assert_eq!(output.action, 3);
+            assert!(!npc_agent_searched(agent, output.command - 1, true));
+            assert!(npc_agent_searched(agent, output.command, true));
+            assert!(npc_agent_step(agent, &input, &mut output, 0));
+            assert_eq!(output.phase, Phase::Waiting as u32);
+            npc_agent_destroy(agent);
+        }
+    }
     #[test]
     fn sighting_abi_rejects_bad_inputs_without_changing_knowledge() {
         use crate::SourceObservation::{Rejected, Unchanged, Updated};

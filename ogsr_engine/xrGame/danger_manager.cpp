@@ -361,6 +361,11 @@ void CDangerManager::add(const CDangerObject& object)
     OBJECTS::iterator I = std::find_if(m_objects.begin(), m_objects.end(), CFindPredicate(object));
     if (I != m_objects.end())
     {
+        // Seeing the same body again is not a new danger event. Keeping its
+        // first observation time lets the existing danger response expire.
+        if (object.type() == CDangerObject::eDangerTypeFreshEntityCorpse)
+            return;
+
         *I = object;
         return;
     }

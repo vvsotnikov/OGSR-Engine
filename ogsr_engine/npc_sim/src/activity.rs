@@ -195,7 +195,7 @@ impl Plan {
                     decision = self.decision();
                 }
             }
-            Action::Collect => {
+            Action::Collect | Action::Inspect => {
                 if !o.representation_ready || unknown_item {
                     self.unavailable_ms = self
                         .unavailable_ms
