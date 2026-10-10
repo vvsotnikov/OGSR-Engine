@@ -104,7 +104,7 @@ impl Knowledge {
         true
     }
 
-    pub fn observe_again(&mut self, index: usize) {
+    pub(super) fn observe_again(&mut self, index: usize) {
         let newest = self.sources.len() as u32 - 1;
         let old_order = self.sources[index].learned_order;
         if old_order == newest {

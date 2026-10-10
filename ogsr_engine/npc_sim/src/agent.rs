@@ -126,8 +126,7 @@ impl Agent {
             // erase a failed route's retry delay. Navigation snapping is not
             // physical movement; navigation changes only with physical news.
             // Recency still follows sightings, independently of trip/retry state.
-            // Compare to the stored sighting,
-            // so a sequence of small movements eventually becomes new information.
+            // Compare to the stored sighting so cumulative movement becomes news.
             if source.failure == FailureReason::None
                 && source
                     .physical

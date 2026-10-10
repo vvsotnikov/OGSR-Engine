@@ -7,7 +7,7 @@ return function(cfg)
     local saw_online, saw_offline, mismatch_started, mismatch_released, elevated
     -- Navigable anchor in the installed vanilla Bar geometry, shared with the seed.
     local home_node, source_node = 34548, nil
-    local home
+    local home, actor_position
     local function path(name) return getFS():update_path("$app_data_root$", name) end
     local function tick()
         if finished or not db.actor or not app_ready() or device().precache_frame ~= 0 then return end
@@ -18,8 +18,8 @@ return function(cfg)
             home = level.vertex_position(home_node)
             get_console():execute("g_god on")
             level.disable_input()
-            local actor_position = home
-            if cfg.scenario == "basic" then
+            actor_position = home
+            if cfg.scenario ~= "natural" then
                 -- Exercise the assigned trip without a nearby actor holding meet control.
                 local actor_node = level.vertex_in_direction(home_node,vector():set(-1,0,0),25)
                 actor_position = level.vertex_position(actor_node)
@@ -92,7 +92,7 @@ return function(cfg)
             return
         end
         assert(phase >= 0 and phase <= 3, "Planner failed or NPC died: " .. phase)
-        if client and cfg.scenario == "basic" then
+        if client and cfg.scenario ~= "interrupt" and cfg.scenario ~= "spawn-combat" and cfg.scenario ~= "death" then
             assert(client:is_talk_enabled(), "Planner disabled ordinary dialogs")
         end
         if server.online then saw_online = true elseif saw_online then saw_offline = true end
@@ -178,6 +178,7 @@ return function(cfg)
                 assert(fought, "Combat interruption was not observed")
                 client:set_enemy_callback(function() return false end)
                 client:set_relation(game_object.neutral,db.actor)
+                db.actor:set_actor_position(vector():set(actor_position.x,actor_position.y+1.1,actor_position.z))
                 released_enemy = true
                 log1("[npc fixture] combat_observed")
             end
