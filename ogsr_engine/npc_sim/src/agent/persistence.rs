@@ -4,7 +4,7 @@ impl Agent {
     pub fn save(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(b"NPCG");
-        put(&mut bytes, 4);
+        put(&mut bytes, 6);
         bytes.extend_from_slice(&self.identity.to_le_bytes());
         bytes.extend_from_slice(&self.command.to_le_bytes());
         put_location(&mut bytes, self.home);
@@ -25,6 +25,8 @@ impl Agent {
             put(&mut bytes, source.failure as u32);
             put(&mut bytes, source.retry_ms);
             put(&mut bytes, source.learned_order);
+            put(&mut bytes, source.kind as u32);
+            put(&mut bytes, source.rejection_delay_ms);
         }
         if let Some(trip) = &self.activity {
             bytes.extend(trip.save());
@@ -41,7 +43,7 @@ impl Agent {
             return None;
         }
         let version = r.u32()?;
-        if version != 2 && version != 3 && version != 4 {
+        if !(2..=6).contains(&version) {
             return None;
         }
         let identity = u64::from_le_bytes(r.take()?);
@@ -52,7 +54,7 @@ impl Agent {
         let return_retry_ms = r.u32()?;
         let selected = r.u32()?;
         let count = r.u32()? as usize;
-        if command == 0 || flags > if version == 4 { 31 } else { 15 } || count > Self::MAX_SOURCES {
+        if command == 0 || flags > if version >= 4 { 31 } else { 15 } || count > Self::MAX_SOURCES {
             return None;
         }
         agent.command = command;
@@ -84,11 +86,23 @@ impl Agent {
             };
             let retry_ms = r.u32()?;
             let learned_order = if version >= 3 { r.u32()? } else { index as u32 };
+            let kind = if version >= 5 {
+                match r.u32()? {
+                    0 => SourceKind::LooseItem,
+                    1 => SourceKind::Corpse,
+                    _ => return None,
+                }
+            } else {
+                SourceKind::LooseItem
+            };
+            let rejection_delay_ms = if version >= 6 { r.u32()? } else { 0 };
             sources.push(Source {
+                kind,
                 navigation,
                 physical,
                 failure,
                 retry_ms,
+                rejection_delay_ms,
                 learned_order,
             });
         }
@@ -110,7 +124,10 @@ impl Agent {
             return None;
         }
         if !agent.is_medical()
-            && (count != 1 || agent.selected != Some(0) || agent.activity.is_none())
+            && (count != 1
+                || agent.sources()[0].kind != SourceKind::LooseItem
+                || agent.selected != Some(0)
+                || agent.activity.is_none())
         {
             return None;
         }

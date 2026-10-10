@@ -355,12 +355,12 @@ fn source_recency_migrates_and_rejects_duplicate_or_out_of_range_ranks() {
     // NPCG v2 has the same header but omits the final rank word of each source.
     let mut previous = saved[..64].to_vec();
     previous[4..8].copy_from_slice(&2u32.to_le_bytes());
-    for source in saved[64..].chunks_exact(60) {
+    for source in saved[64..].chunks_exact(68) {
         previous.extend_from_slice(&source[..56]);
     }
     assert_eq!(Agent::load(&previous).unwrap(), a);
     let mut duplicate = saved.clone();
-    duplicate[64 + 60 + 56..64 + 60 + 60].copy_from_slice(&0u32.to_le_bytes());
+    duplicate[64 + 68 + 56..64 + 68 + 60].copy_from_slice(&0u32.to_le_bytes());
     assert!(Agent::load(&duplicate).is_none());
     let mut outside = saved;
     outside[64 + 56..64 + 60].copy_from_slice(&2u32.to_le_bytes());
@@ -395,7 +395,7 @@ fn old_goal_saves_default_to_no_script_owner() {
     use npc_sim::ScriptControl;
     let mut a = agent();
     a.step_controlled(observation(0.), 0, ScriptControl::Released);
-    let mut bytes = a.save();
+    let mut bytes = legacy_v4(&a.save());
     bytes[4..8].copy_from_slice(&3u32.to_le_bytes());
     let mut restored = Agent::load(&bytes).unwrap();
     assert_eq!(
@@ -406,7 +406,7 @@ fn old_goal_saves_default_to_no_script_owner() {
         Action::Travel(point(10.))
     );
     a.step_controlled(observation(0.), 0, ScriptControl::Owned);
-    let mut invalid_old = a.save();
+    let mut invalid_old = legacy_v4(&a.save());
     invalid_old[4..8].copy_from_slice(&3u32.to_le_bytes());
     assert!(Agent::load(&invalid_old).is_none());
 }
@@ -638,4 +638,299 @@ fn sightings_refresh_eviction_recency_across_save_without_restarting_the_trip() 
     stalled.elapsed_ms = 60_000;
     a.step(stalled, 0);
     assert_ne!(a.status().source, Some(0)); // sightings did not renew travel time
+}
+
+fn legacy_v4(bytes: &[u8]) -> Vec<u8> {
+    let count = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
+    let mut old = bytes[..64].to_vec();
+    old[4..8].copy_from_slice(&4u32.to_le_bytes());
+    for source in bytes[64..64 + count * 68].chunks_exact(68) {
+        old.extend_from_slice(&source[..60]);
+    }
+    old.extend_from_slice(&bytes[64 + count * 68..]);
+    old
+}
+
+#[test]
+fn version_four_sources_restore_as_loose_items() {
+    let a = agent();
+    assert_eq!(Agent::load(&legacy_v4(&a.save())).unwrap(), a);
+}
+
+#[test]
+fn corpse_search_requires_arrival_and_survives_save_and_interruption() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    assert!(a.remember_corpse(0, point(10.), point(10.)));
+    let travel = a.step(observation(0.), 0).decision;
+    assert_eq!(travel.action, Action::Travel(point(10.)));
+    assert!(!a.searched(travel.command, true));
+    a = Agent::load(&a.save()).unwrap();
+    let mut combat = observation(10.);
+    combat.interrupted = true;
+    assert_eq!(a.step(combat, 0).decision.action, Action::Wait);
+    assert!(!a.searched(a.status().decision.command, true));
+    let search = a.step(observation(10.), 0).decision;
+    assert_eq!(search.action, Action::Inspect);
+    assert!(!a.searched(search.command - 1, true));
+    assert!(a.searched(search.command, true));
+    let returned = a.step(observation(10.), 1).decision;
+    assert_eq!(returned.action, Action::Travel(point(0.)));
+    assert_eq!(a.step(observation(0.), 1).decision.phase, Phase::Complete);
+}
+
+#[test]
+fn empty_search_is_remembered_across_sightings_and_reload() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let search = a.step(observation(10.), 0).decision;
+    assert!(a.searched(search.command, true));
+    a = Agent::load(&a.save()).unwrap();
+    a.observe_source(0, point(10.), point(10.));
+    assert_eq!(a.step(observation(10.), 0).decision.phase, Phase::Waiting);
+    for _ in 0..5 {
+        a.observe_source(0, point(10.), point(10.));
+        assert_eq!(a.step(observation(10.), 0).decision.phase, Phase::Waiting);
+    }
+    // Another corpse can reuse the same slot, but it is explicit new identity.
+    a.remember_corpse(0, point(10.), point(10.));
+    a.step(observation(10.), 0);
+    assert_eq!(a.step(observation(10.), 0).decision.action, Action::Inspect);
+}
+
+#[test]
+fn corpse_and_item_share_execution_but_have_distinct_interactions() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let search = a.step(observation(10.), 0).decision;
+    a.searched(search.command, true);
+    a.remember(1, point(20.), point(20.));
+    assert_eq!(a.step(observation(10.), 0).source, Some(1));
+    let mut o = observation(20.);
+    o.supply_location = point(20.);
+    assert_eq!(a.step(o, 0).decision.action, Action::Collect);
+}
+
+#[test]
+fn unseen_corpse_loss_is_learned_only_at_destination() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let mut o = observation(3.);
+    o.supply = Supply::Missing;
+    assert_eq!(a.step(o, 0).decision.action, Action::Travel(point(10.)));
+    o.current = point(10.);
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Waiting);
+}
+
+#[test]
+fn remaining_corpse_supply_can_be_used_after_inventory_is_consumed() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let search = a.step(observation(10.), 0).decision;
+    assert!(a.searched(search.command, false));
+    assert_eq!(a.step(observation(10.), 1).decision.phase, Phase::Returning);
+    assert_eq!(a.step(observation(0.), 1).decision.phase, Phase::Complete);
+    a = Agent::load(&a.save()).unwrap();
+    assert_eq!(a.step(observation(0.), 0).decision.phase, Phase::Outbound);
+    let again = a.step(observation(10.), 0).decision;
+    assert_eq!(again.action, Action::Inspect);
+    assert!(again.command > search.command);
+    assert!(!a.searched(search.command, true));
+    assert!(a.searched(again.command, true));
+    a.step(observation(10.), 1);
+    a.step(observation(0.), 1);
+    assert_eq!(a.step(observation(0.), 0).decision.phase, Phase::Waiting);
+}
+
+#[test]
+fn corpse_snapshot_rejects_unknown_kind_and_truncated_source() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    let saved = a.save();
+    for end in 0..saved.len() {
+        assert!(Agent::load(&saved[..end]).is_none());
+    }
+    let mut invalid = saved.clone();
+    invalid[124..128].copy_from_slice(&2u32.to_le_bytes());
+    assert!(Agent::load(&invalid).is_none());
+    assert_eq!(Agent::load(&saved).unwrap(), a);
+}
+
+#[test]
+fn moving_an_empty_body_does_not_reveal_new_contents() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let search = a.step(observation(10.), 0).decision;
+    assert!(a.searched(search.command, true));
+    a.step(observation(10.), 0);
+    a.observe_source(0, point(20.), point(20.));
+    assert_eq!(a.sources()[0].physical, point(20.));
+    assert_eq!(a.step(observation(10.), 0).decision.phase, Phase::Waiting);
+}
+
+#[test]
+fn rejected_search_releases_execution_and_retries_after_cooldown() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let search = a.step(observation(10.), 0).decision;
+    assert!(!a.search_rejected(search.command - 1));
+    assert!(a.search_rejected(search.command));
+    assert_eq!(a.status().decision.phase, Phase::Waiting);
+    assert_eq!(a.sources()[0].failure, FailureReason::None);
+    assert!(!a.search_rejected(search.command));
+    a = Agent::load(&a.save()).unwrap();
+    a.observe_source(0, point(10.), point(10.));
+    let mut o = observation(10.);
+    o.elapsed_ms = 59_999;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Waiting);
+    o.elapsed_ms = 1;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Outbound);
+    let retry = a.step(o, 0).decision;
+    assert_eq!(retry.action, Action::Inspect);
+    assert!(retry.command > search.command);
+}
+
+#[test]
+fn known_loose_bandage_is_preferred_to_a_closer_body_search() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    a.remember(1, point(30.), point(30.));
+    assert_eq!(a.step(observation(0.), 0).source, Some(1));
+}
+
+#[test]
+fn unseen_moved_corpse_is_learned_at_arrival_and_a_new_sighting_relocates_it() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let mut o = observation(3.);
+    o.supply_location = point(20.);
+    assert_eq!(a.step(o, 0).decision.action, Action::Travel(point(10.)));
+    o.current = point(10.);
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Waiting);
+    assert_eq!(a.sources()[0].failure, FailureReason::SupplyMoved);
+    a.observe_source(0, point(20.), point(20.));
+    assert_eq!(a.sources()[0].kind, npc_sim::SourceKind::Corpse);
+    assert_eq!(a.step(o, 0).decision.action, Action::Travel(point(20.)));
+}
+
+#[test]
+fn repeated_rejections_back_off_across_movement_and_save_then_reset_on_success() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let mut o = observation(10.);
+    let mut search = a.step(o, 0).decision;
+    for delay in [60_000, 120_000, 240_000, 480_000, 900_000, 900_000] {
+        assert_eq!(search.action, Action::Inspect);
+        assert!(a.search_rejected(search.command));
+        o.current = point(o.current.position[0] + 2.);
+        o.supply_location = o.current;
+        a.observe_source(0, o.current, o.current);
+        a = Agent::load(&a.save()).unwrap();
+        o.elapsed_ms = delay - 1;
+        assert_eq!(a.step(o, 0).decision.phase, Phase::Waiting);
+        o.elapsed_ms = 1;
+        assert_eq!(a.step(o, 0).decision.phase, Phase::Outbound);
+        search = a.step(o, 0).decision;
+    }
+    assert!(a.searched(search.command, false));
+    // A successful search ends the refusal streak, even if inventory was
+    // consumed before the next observation.
+    let next = a.step(o, 0).decision;
+    let next = if next.action == Action::Inspect {
+        next
+    } else {
+        a.step(o, 0).decision
+    };
+    assert!(a.search_rejected(next.command));
+    o.elapsed_ms = 60_000;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Outbound);
+}
+
+#[test]
+fn version_five_corpse_saves_default_to_no_rejection_streak() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    let saved = a.save();
+    let mut previous = saved[..64].to_vec();
+    previous[4..8].copy_from_slice(&5u32.to_le_bytes());
+    previous.extend_from_slice(&saved[64..128]);
+    assert_eq!(Agent::load(&previous).unwrap(), a);
+    let mut invalid = saved;
+    invalid[128..132].copy_from_slice(&900_001u32.to_le_bytes());
+    assert!(Agent::load(&invalid).is_none());
+}
+
+#[test]
+fn moved_corpse_reopens_a_stalled_route_but_loose_saves_cannot_have_search_backoff() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let mut stalled = observation(0.);
+    stalled.elapsed_ms = 60_000;
+    assert_eq!(a.step(stalled, 0).decision.phase, Phase::Waiting);
+    a.observe_source(0, point(20.), point(20.));
+    assert_eq!(
+        a.step(observation(0.), 0).decision.action,
+        Action::Travel(point(20.))
+    );
+    let mut loose = agent().save();
+    loose[116..120].copy_from_slice(&60_001u32.to_le_bytes());
+    assert!(Agent::load(&loose).is_none());
+    loose[116..120].copy_from_slice(&0u32.to_le_bytes());
+    loose[128..132].copy_from_slice(&60_000u32.to_le_bytes());
+    assert!(Agent::load(&loose).is_none());
+}
+
+#[test]
+fn failed_return_to_a_refused_body_preserves_the_rejection_streak() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let search = a.step(observation(10.), 0).decision;
+    assert!(a.search_rejected(search.command));
+    let mut o = observation(0.);
+    o.elapsed_ms = 60_000;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Outbound);
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Waiting); // route stalls
+    a = Agent::load(&a.save()).unwrap();
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Outbound);
+    o = observation(10.);
+    let search = a.step(o, 0).decision;
+    assert!(a.search_rejected(search.command));
+    o.elapsed_ms = 119_999;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Waiting);
+    o.elapsed_ms = 1;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Outbound);
+}
+
+#[test]
+fn corpse_representation_timeout_survives_save_and_does_not_create_refusal_history() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let mut o = observation(10.);
+    o.representation_ready = false;
+    assert_eq!(a.step(o, 0).decision.action, Action::Wait);
+    o.elapsed_ms = 299_999;
+    assert_eq!(a.step(o, 0).decision.action, Action::Wait);
+    a = Agent::load(&a.save()).unwrap();
+    o.elapsed_ms = 1;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Waiting);
+    assert_eq!(a.sources()[0].failure, FailureReason::None);
+    o.representation_ready = true;
+    o.elapsed_ms = 60_000;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Outbound);
+    o.elapsed_ms = 0;
+    let search = a.step(o, 0).decision;
+    assert_eq!(search.action, Action::Inspect);
+    assert!(a.search_rejected(search.command));
+    o.elapsed_ms = 60_000;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Outbound);
 }

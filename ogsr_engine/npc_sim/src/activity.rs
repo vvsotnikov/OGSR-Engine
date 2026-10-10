@@ -223,6 +223,7 @@ impl Plan {
                     }
                 }
             }
+            Action::Inspect => unreachable!("Only Agent translates a collection into inspection"),
             Action::Wait => {}
         }
         decision

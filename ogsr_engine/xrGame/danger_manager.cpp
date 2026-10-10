@@ -16,6 +16,7 @@
 #include "actor.h"
 #include "object_broker.h"
 #include "script_game_object.h"
+#include "npc_simulation.h"
 
 struct CDangerPredicate
 {
@@ -361,6 +362,17 @@ void CDangerManager::add(const CDangerObject& object)
     OBJECTS::iterator I = std::find_if(m_objects.begin(), m_objects.end(), CFindPredicate(object));
     if (I != m_objects.end())
     {
+        // Owned planners must finish the initial reaction before inspecting a
+        // body. Retain its event time but keep tracking its physical position.
+        if (object.type() == CDangerObject::eDangerTypeFreshEntityCorpse)
+        {
+            if (auto simulation = CNpcSimulation::active(); simulation && simulation->owns(m_object->ID()))
+            {
+                *I = CDangerObject(object.object(), object.position(), I->time(), object.type(), object.perceive_type(), object.dependent_object());
+                return;
+            }
+        }
+
         *I = object;
         return;
     }

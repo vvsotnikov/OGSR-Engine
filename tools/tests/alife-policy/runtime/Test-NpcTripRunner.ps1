@@ -63,6 +63,17 @@ try {
     $perceptionResume = & "$PSScriptRoot/Run-NpcTrip.ps1" -InstallRoot $root -Package bin_fixture -Scenario perception-resume -ResumeSession $perception -PrepareOnly
     if ((Get-Content "$perceptionResume/appdata/savedgames/npc_trip_pending.sav" -Raw).Trim() -ne 'perception' -or
         (Get-FileHash "$perceptionResume/appdata/npc-trip-ids.lua").Hash -ne (Get-FileHash "$perception/appdata/npc-trip-ids.lua").Hash) { throw 'Perception resume lost the actual learned save' }
+    $corpse = & "$PSScriptRoot/Run-NpcTrip.ps1" -InstallRoot $root -Package bin_fixture -Scenario corpse-save -PrepareOnly
+    $corpseMeta = Get-Content "$corpse/session.json" -Raw | ConvertFrom-Json
+    if ($corpseMeta.arguments -match '-npc_sim_test' -or
+        (Get-FileHash "$corpse/appdata/RegularDriver.lua").Hash -ne (Get-FileHash "$PSScriptRoot/NpcCorpseDriver.lua").Hash) { throw 'Corpse discovery must use personal vision' }
+    $corpseMeta.status = 'npc-completed'
+    $corpseMeta | ConvertTo-Json | Set-Content "$corpse/session.json"
+    Set-Content "$corpse/appdata/savedgames/npc_trip_pending.sav" 'corpse'
+    Set-Content "$corpse/appdata/npc-trip-ids.lua" 'return {npc=1,body=2,item=3,stage=5,x=1,y=2,z=3}'
+    $corpseResume = & "$PSScriptRoot/Run-NpcTrip.ps1" -InstallRoot $root -Package bin_fixture -Scenario corpse-resume -ResumeSession $corpse -PrepareOnly
+    if ((Get-Content "$corpseResume/appdata/savedgames/npc_trip_pending.sav" -Raw).Trim() -ne 'corpse' -or
+        (Get-FileHash "$corpseResume/appdata/npc-trip-ids.lua").Hash -ne (Get-FileHash "$corpse/appdata/npc-trip-ids.lua").Hash) { throw 'Corpse resume lost saved bindings' }
     $after = @($paths | ForEach-Object { (Get-FileHash "$root/$_").Hash })
     if (($before -join ',') -ne ($after -join ',')) { throw 'Original inputs modified' }
 } finally {

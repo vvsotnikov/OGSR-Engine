@@ -95,3 +95,30 @@ trip binding; forgetting a source does not mean learning that its item is gone.
 Command numbers span the NPC lifetime, including replacement activities. The
 engine latches movement and asynchronous pickup by command, so restarting an
 activity's counter could mistake old execution state for a new request.
+
+Seeing a body establishes a possible search location, not knowledge of its
+inventory. Only inspection at the body may enumerate its contents. Moving a
+searched body or seeing it again does not reveal replenishment; exhausted-source
+knowledge survives those sightings and save/reload until that source is evicted.
+Known loose bandages take priority over body searches, then distance breaks ties.
+Offline execution uses the
+same remembered location and search result, without discovering unseen bodies.
+
+Corpse looting commits authoritative server ownership before another NPC can
+inspect the same inventory. Online reject/take packets replicate that transfer;
+they are not two independent attempts to acquire a still-available item. A body
+and its looter must share a representation. Corpses remain online on the loaded
+map under the existing engine policy, so off-map inspection is validated through
+an actual level transition, not by forcing only the looter offline.
+
+Corpse searches skip statically untakeable items. Online searches respect native
+inventory acceptance; offline searches use the ALife mass budget, which cannot
+represent dynamic weapon weights or equipment bonuses. These are search rules;
+loose-item pickup retains its existing engine path.
+A body with only temporarily refused items is not known to be empty. Selection
+must try other acceptable items before deferring the body. Backoff is per source:
+one refusal does not establish that every other body holds equally heavy items.
+A refusal ends the current attempt and retains the source with exponential retry
+backoff, capped at fifteen minutes. Sightings, body movement and saves preserve
+that backoff; a successful search resets it. A refusal
+must not mark the body empty or hold execution until the trip deadline.

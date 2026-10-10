@@ -35,6 +35,7 @@ class CNpcSimulation
 
     NpcDecision observe(Entry&, const Fvector&, u32 game_vertex, bool interrupted, bool alive, bool failed, NpcScriptControl);
     void collect(Entry&, CAI_Stalker* client, const NpcDecision&);
+    void inspect(Entry&, CAI_Stalker* client, const NpcDecision&);
     Entry* find(CSE_ALifeMonsterAbstract*);
     const CALifeObjectRegistry& objects() const;
 

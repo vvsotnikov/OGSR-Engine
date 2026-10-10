@@ -1,6 +1,6 @@
 use crate::activity::ActivityState;
 use crate::goal::{ActivityRequest, Goal, GoalKind};
-use crate::knowledge::{Knowledge, Source};
+use crate::knowledge::{Knowledge, Source, SourceKind};
 use crate::{
     Action, Decision, FailureReason, Location, Observation, Phase, Plan, ScriptControl, Supply,
 };
@@ -82,6 +82,15 @@ impl Agent {
     }
     // The caller supplies new information, not a periodic world-state refresh.
     pub fn remember(&mut self, index: usize, navigation: Location, physical: Location) -> bool {
+        self.update_source(index, navigation, physical, Some(SourceKind::LooseItem))
+    }
+    fn update_source(
+        &mut self,
+        index: usize,
+        navigation: Location,
+        physical: Location,
+        replacement: Option<SourceKind>,
+    ) -> bool {
         if !self.is_medical() {
             return false;
         }
@@ -98,10 +107,15 @@ impl Agent {
         } else {
             self.command
         };
-        if !self
-            .knowledge
-            .remember(index, self.home, navigation, physical)
-        {
+        let accepted = match replacement {
+            Some(kind) => self
+                .knowledge
+                .remember(index, self.home, navigation, physical, kind),
+            None => self
+                .knowledge
+                .relocate(index, self.home, navigation, physical),
+        };
+        if !accepted {
             return false;
         }
         if replace_activity {
@@ -109,6 +123,42 @@ impl Agent {
             self.activity = None;
             self.selected = None;
         }
+        true
+    }
+    pub fn remember_corpse(
+        &mut self,
+        index: usize,
+        navigation: Location,
+        physical: Location,
+    ) -> bool {
+        self.update_source(index, navigation, physical, Some(SourceKind::Corpse))
+    }
+
+    /// Result of the currently issued search, after a real inventory inspection.
+    pub fn searched(&mut self, command: u64, exhausted: bool) -> bool {
+        let status = self.status();
+        if status.decision.command != command || status.decision.action != Action::Inspect {
+            return false;
+        }
+        let index = self.selected.unwrap();
+        self.knowledge.searched(index, exhausted);
+        if exhausted {
+            self.activity = None;
+            self.selected = None;
+        }
+        true
+    }
+
+    /// A real inspection could not acquire its item. Keep the source knowledge
+    /// but end this attempt, with a persistent, capped exponential backoff.
+    pub fn search_rejected(&mut self, command: u64) -> bool {
+        let status = self.status();
+        if status.decision.command != command || status.decision.action != Action::Inspect {
+            return false;
+        }
+        self.knowledge.defer(self.selected.unwrap());
+        self.activity = None;
+        self.selected = None;
         true
     }
     /// A personal sighting of the same bound object, not a replacement identity.
@@ -127,7 +177,9 @@ impl Agent {
             // physical movement; navigation changes only with physical news.
             // Recency still follows sightings, independently of trip/retry state.
             // Compare to the stored sighting so cumulative movement becomes news.
-            if source.failure == FailureReason::None
+            if (source.failure == FailureReason::None
+                || (source.kind == SourceKind::Corpse
+                    && source.failure == FailureReason::SupplyUnavailable))
                 && source
                     .physical
                     .near(physical, crate::SOURCE_MOVEMENT_TOLERANCE)
@@ -136,7 +188,7 @@ impl Agent {
                 return SourceObservation::Unchanged;
             }
         }
-        if self.remember(index, navigation, physical) {
+        if self.update_source(index, navigation, physical, None) {
             SourceObservation::Updated
         } else {
             SourceObservation::Rejected
@@ -166,6 +218,20 @@ impl Agent {
         self.selected = source;
         true
     }
+    fn result(&self, mut decision: Decision) -> AgentDecision {
+        if decision.action == Action::Collect
+            && self
+                .selected
+                .is_some_and(|i| self.sources()[i].kind == SourceKind::Corpse)
+        {
+            decision.action = Action::Inspect;
+        }
+        AgentDecision {
+            decision,
+            source: self.selected,
+        }
+    }
+
     pub fn status(&self) -> AgentDecision {
         let decision = if self.dead {
             Decision {
@@ -196,10 +262,7 @@ impl Agent {
                 action: Action::Wait,
             }
         };
-        AgentDecision {
-            decision,
-            source: self.selected,
-        }
+        self.result(decision)
     }
     pub fn step_controlled(
         &mut self,
@@ -258,10 +321,7 @@ impl Agent {
                 self.activity = None;
                 self.selected = None;
             } else {
-                return AgentDecision {
-                    decision: report.decision,
-                    source: self.selected,
-                };
+                return self.result(report.decision);
             }
         }
         if let Some(request) = self.goal.select(o.current, &self.knowledge) {
