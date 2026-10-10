@@ -78,8 +78,9 @@ try {
     }
     if (!$rejected) { throw 'Launch failure did not propagate' }
     $failed = @(Get-ChildItem "$root/captures" -Directory | Where-Object FullName -ne $session)
+    if ($failed.Count -ne 1) { throw 'Expected exactly one failed launch capture' }
     $meta = Get-Content "$($failed[0].FullName)/session.json" -Raw | ConvertFrom-Json
-    if ($failed.Count -ne 1 -or $meta.status -ne 'physics-failed' -or
+    if ($meta.status -ne 'physics-failed' -or
         $meta.failure -ne 'Fixture prevented process launch') { throw 'Launch failure was not recorded' }
     $after = @($originals | ForEach-Object { (Get-FileHash "$root/$_").Hash })
     if (($hashes -join ',') -ne ($after -join ',')) { throw 'Preparation modified original inputs' }

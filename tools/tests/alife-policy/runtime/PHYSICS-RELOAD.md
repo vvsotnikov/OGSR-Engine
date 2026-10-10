@@ -1,3 +1,5 @@
+# Physics reload regression
+
 The seed must start in the Bar and contain a previously visited Cordon with
 partly broken physics objects. An intact new game cannot exercise saved partial
 bone masks. Keep the same seed for control and fixed builds; session metadata
@@ -15,3 +17,7 @@ Debug control reproduces the singular-transform assertion during splitting.
 
 The runner uses the existing isolated A-Life runtime harness to cross maps;
 the regression itself is independent of the selected A-Life switching policy.
+
+Harness reuse is intentional: its policy-banner check corroborates the three
+loads in whole-map mode and rejects accidental whole-map activation in distance
+mode. The shell checks run in either mode.
