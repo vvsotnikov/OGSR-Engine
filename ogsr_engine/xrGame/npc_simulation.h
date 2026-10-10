@@ -5,6 +5,7 @@ class CSE_ALifeDynamicObject;
 class CSE_ALifeMonsterAbstract;
 class CSE_ALifeHumanAbstract;
 class CAI_Stalker;
+class CGameObject;
 class CALifeSimulatorBase;
 class CALifeObjectRegistry;
 class CScriptBinderObject;
@@ -44,6 +45,7 @@ public:
     static bool configured(LPCSTR section);
     bool enroll(u16 npc, u16 supply, bool medical_goal = false);
     bool remember(u16 npc, u16 supply);
+    void see_item(CAI_Stalker& observer, const CGameObject& item);
     bool owns(CSE_ALifeMonsterAbstract*) const;
     bool owns(u16 id) const;
     bool update_offline(CSE_ALifeMonsterAbstract*);

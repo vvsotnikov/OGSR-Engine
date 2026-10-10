@@ -192,6 +192,26 @@ bool CNpcSimulation::remember(u16 npc_id, u16 supply_id)
     return true;
 }
 
+void CNpcSimulation::see_item(CAI_Stalker& observer, const CGameObject& item)
+{
+    if (m_entries.empty() || item.CLS_ID != CLSID_IITEM_BANDAGE || item.H_Parent() || item.getDestroy()) return;
+    auto entry = find(smart_cast<CSE_ALifeMonsterAbstract*>(objects().object(observer.ID(), true)));
+    auto supply = objects().object(item.ID(), true);
+    if (!entry || !supply || !supply->m_bOnline || supply->ID_Parent != u16(-1) || !navigable_here(*supply)) return;
+    const auto found = std::find(entry->supplies.begin(), entry->supplies.end(), supply);
+    const bool known = found != entry->supplies.end();
+    const auto index = known ? u32(found - entry->supplies.begin()) : npc_agent_available_source_slot(entry->plan);
+    if (index == u32(-1)) return;
+    const auto navigation = navigation_location(*supply), physical = location(*supply);
+    const auto result = known ? npc_agent_observe_source(entry->plan, index, &navigation, &physical) :
+        (npc_agent_remember(entry->plan, index, &navigation, &physical) ? NpcSourceObservation::Updated : NpcSourceObservation::Rejected);
+    if (result != NpcSourceObservation::Updated) return;
+    if (index == entry->supplies.size()) entry->supplies.push_back(supply);
+    else entry->supplies[index] = supply;
+    Msg("[npc perception] npc=%u item=%u source=%u position=%.3f,%.3f,%.3f", observer.ID(), item.ID(), index,
+        physical.position[0], physical.position[1], physical.position[2]);
+}
+
 NpcDecision CNpcSimulation::observe(Entry& entry, const Fvector& here, u32 graph, bool interrupted, bool alive, bool blocked, NpcScriptControl control)
 {
     NpcDecision before{}, after{};

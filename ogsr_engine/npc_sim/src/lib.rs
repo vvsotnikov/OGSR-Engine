@@ -6,7 +6,7 @@ mod ffi;
 mod goal;
 mod knowledge;
 pub use activity::Plan;
-pub use agent::{Agent, AgentDecision};
+pub use agent::{Agent, AgentDecision, SourceObservation};
 pub use knowledge::Source;
 
 #[repr(C)]

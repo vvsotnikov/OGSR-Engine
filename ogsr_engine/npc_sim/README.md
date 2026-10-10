@@ -66,9 +66,16 @@ sources must survive that removal so absence is learned on a visit. Conversely,
 inventory ownership is immediately available to the owner in both representations;
 client inventory replication can lag the authoritative server ownership.
 
+Visual memory can be squad-shared, restored, or populated fictitiously by combat
+logic. Only a successful personal visibility update is a new sighting. Offline
+execution consumes remembered sources; it has no visual discovery channel.
+Repeated sightings of the same stationary item must not renew its trip or retry
+budget. Reusing a memory slot for a different item is different information even
+at the same position; the native binding supplies that identity distinction.
+
 Waiting is not a request to refresh world knowledge: it also covers retry
-cooldowns. Re-reporting a source is an explicit new observation and can clear
-that cooldown. Cooldowns can elapse without a known position; unlike travel
+cooldowns. Explicit `remember_supply` news can clear that cooldown; recurring
+sightings of an unchanged source cannot. Cooldowns can elapse without a known position; unlike travel
 stall timers, they make no inference about movement during that interval.
 
 The C ABI is not a synchronization boundary. Current frame ordering runs script

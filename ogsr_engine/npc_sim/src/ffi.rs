@@ -232,6 +232,23 @@ pub unsafe extern "C" fn npc_agent_remember(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn npc_agent_observe_source(
+    plan: *mut Agent,
+    index: u32,
+    navigation: *const Location,
+    physical: *const Location,
+) -> crate::SourceObservation {
+    let (Some(plan), Some(navigation), Some(physical)) = (
+        unsafe { plan.as_mut() },
+        unsafe { navigation.as_ref() },
+        unsafe { physical.as_ref() },
+    ) else {
+        return crate::SourceObservation::Rejected;
+    };
+    plan.observe_source(index as usize, *navigation, *physical)
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn npc_agent_available_source_slot(plan: *const Agent) -> u32 {
     unsafe { plan.as_ref() }
         .and_then(Agent::available_source_slot)
@@ -284,6 +301,49 @@ pub unsafe extern "C" fn npc_agent_locations(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sighting_abi_rejects_bad_inputs_without_changing_knowledge() {
+        use crate::SourceObservation::{Rejected, Unchanged, Updated};
+        let home = Location {
+            game_vertex: 1,
+            level_vertex: 2,
+            level: 0,
+            position: [0.; 3],
+        };
+        unsafe {
+            let agent = npc_agent_create_goal(19, &home);
+            assert_eq!(npc_agent_observe_source(agent, 0, &home, &home), Updated);
+            let before = (*agent).save();
+            assert_eq!(npc_agent_observe_source(agent, 0, &home, &home), Unchanged);
+            assert_eq!(
+                npc_agent_observe_source(std::ptr::null_mut(), 0, &home, &home),
+                Rejected
+            );
+            assert_eq!(
+                npc_agent_observe_source(agent, 0, std::ptr::null(), &home),
+                Rejected
+            );
+            assert_eq!(
+                npc_agent_observe_source(agent, 0, &home, std::ptr::null()),
+                Rejected
+            );
+            assert_eq!(
+                npc_agent_observe_source(agent, u32::MAX, &home, &home),
+                Rejected
+            );
+            let invalid = Location {
+                level: u32::MAX,
+                ..home
+            };
+            assert_eq!(
+                npc_agent_observe_source(agent, 0, &invalid, &home),
+                Rejected
+            );
+            assert_eq!((*agent).save(), before);
+            npc_agent_destroy(agent);
+        }
+    }
 
     #[test]
     fn goal_memory_round_trips_through_host_owned_buffers() {

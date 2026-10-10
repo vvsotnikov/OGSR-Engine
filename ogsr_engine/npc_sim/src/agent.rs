@@ -6,6 +6,14 @@ use crate::{
 };
 mod persistence;
 
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SourceObservation {
+    Rejected = 0,
+    Unchanged = 1,
+    Updated = 2,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct AgentDecision {
     pub decision: Decision,
@@ -102,6 +110,33 @@ impl Agent {
             self.selected = None;
         }
         true
+    }
+    /// A personal sighting of the same bound object, not a replacement identity.
+    pub fn observe_source(
+        &mut self,
+        index: usize,
+        navigation: Location,
+        physical: Location,
+    ) -> SourceObservation {
+        if !self.is_medical() || !crate::valid_source(self.home, navigation, physical) {
+            return SourceObservation::Rejected;
+        }
+        if let Some(source) = self.sources().get(index) {
+            // Physics settling and repeated visibility must not restart travel or
+            // erase a failed route's retry delay. Compare to the stored sighting,
+            // so a sequence of small movements eventually becomes new information.
+            if source.failure == FailureReason::None
+                && source.navigation.near(navigation, 0.25)
+                && source.physical.near(physical, 0.25)
+            {
+                return SourceObservation::Unchanged;
+            }
+        }
+        if self.remember(index, navigation, physical) {
+            SourceObservation::Updated
+        } else {
+            SourceObservation::Rejected
+        }
     }
     fn start_activity(&mut self, request: ActivityRequest, interrupted: bool) -> bool {
         let Some(command) = self.command.checked_add(1) else {

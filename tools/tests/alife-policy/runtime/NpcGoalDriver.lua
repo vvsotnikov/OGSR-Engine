@@ -66,6 +66,8 @@ return function(cfg)
                 donor = cfg.offline and spawn("npc_trip_stalker",34548) or db.actor:id()
                 gift = spawn("bandage",34548,donor)
                 first,second,third = spawn("bandage",a),spawn("bandage",b),spawn("bandage",b)
+                -- This is later news, not an item available to initial perception.
+                alife():set_switch_online(third,false)
                 assert(alife():start_supply_goal(npc))
                 assert(alife():remember_supply(npc,first) and alife():remember_supply(npc,second))
                 if cfg.scenario == "goal-competition" then
@@ -178,6 +180,7 @@ return function(cfg)
             waited = waited or now
             if now-waited > 3000 then
                 if cfg.scenario == "goal-wait-save" then save(); return end
+                if not cfg.offline then alife():set_switch_online(third,true) end
                 assert(alife():remember_supply(npc,third))
                 stage = 6; log1("[npc goal fixture] new_information")
             end

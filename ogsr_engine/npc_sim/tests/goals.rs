@@ -499,3 +499,71 @@ fn saving_a_new_script_owner_does_not_advance_the_activity() {
         Action::Travel(point(10.))
     );
 }
+
+#[test]
+fn personal_sightings_discover_sources_without_resetting_travel_or_retry() {
+    use npc_sim::SourceObservation::{Unchanged, Updated};
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    assert_eq!(a.step(observation(0.), 0).decision.phase, Phase::Waiting);
+    assert_eq!(a.observe_source(0, point(10.), point(10.)), Updated);
+    let first = a.step(observation(0.), 0);
+    assert_eq!(first.decision.action, Action::Travel(point(10.)));
+    let mut o = observation(0.);
+    o.elapsed_ms = 10_000;
+    for _ in 0..6 {
+        let before = a.save();
+        assert_eq!(a.observe_source(0, point(10.1), point(10.1)), Unchanged);
+        assert_eq!(a.save(), before);
+        a.step(o, 0);
+    }
+    assert_eq!(a.status().decision.phase, Phase::Waiting);
+    let mut a = Agent::load(&a.save()).unwrap();
+    for _ in 0..5 {
+        assert_eq!(a.observe_source(0, point(10.), point(10.)), Unchanged);
+        assert_eq!(a.step(o, 0).decision.phase, Phase::Waiting);
+    }
+    assert_eq!(a.observe_source(0, point(10.), point(10.)), Unchanged);
+    let retry = a.step(o, 0);
+    assert_eq!(retry.decision.phase, Phase::Outbound);
+    assert!(retry.decision.command > first.decision.command);
+}
+
+#[test]
+fn seen_movement_is_news_but_unseen_movement_is_not_a_destination() {
+    use npc_sim::SourceObservation::Updated;
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    assert_eq!(a.observe_source(0, point(10.), point(10.)), Updated);
+    let first = a.step(observation(0.), 0);
+    let mut o = observation(2.);
+    o.supply_location = point(20.);
+    assert_eq!(a.step(o, 0).decision.action, Action::Travel(point(10.)));
+    assert_eq!(a.observe_source(0, point(20.), point(20.)), Updated);
+    let moved = a.step(o, 0);
+    assert_eq!(moved.decision.action, Action::Travel(point(20.)));
+    assert!(moved.decision.command > first.decision.command);
+    let a = Agent::load(&a.save()).unwrap();
+    assert_eq!(a.sources()[0].physical, point(20.));
+    assert_eq!(a.status(), moved);
+}
+
+#[test]
+fn actual_rediscovery_reopens_an_unavailable_source_and_rejects_invalid_news() {
+    use npc_sim::SourceObservation::{Rejected, Updated};
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.observe_source(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let mut absent = observation(10.);
+    absent.supply = Supply::Missing;
+    a.step(absent, 0);
+    assert_eq!(a.sources()[0].failure, FailureReason::SupplyUnavailable);
+    assert_eq!(a.observe_source(0, point(10.), point(10.)), Updated);
+    assert_eq!(a.sources()[0].failure, FailureReason::None);
+    let before = a.save();
+    assert_eq!(a.observe_source(2, point(10.), point(10.)), Rejected);
+    let mut invalid = point(10.);
+    invalid.position[0] = f32::NAN;
+    assert_eq!(a.observe_source(0, invalid, point(10.)), Rejected);
+    assert_eq!(a.save(), before);
+    let mut assigned = Agent::assigned(Plan::new(8, point(0.), point(10.), point(10.)).unwrap());
+    assert_eq!(assigned.observe_source(0, point(20.), point(20.)), Rejected);
+}
