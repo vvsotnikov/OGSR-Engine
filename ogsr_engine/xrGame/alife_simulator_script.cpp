@@ -69,6 +69,19 @@ bool npc_sim_test_transfer(CALifeSimulator* simulator, u16 item_id, u16 recipien
     return true;
 }
 
+// Exercise a real queued spawn cancellation without relying on frame timing.
+// Registered only under the existing isolated-gameplay-test command line flag.
+u16 npc_sim_test_cancel_spawn(CALifeSimulator* simulator, u16 id)
+{
+    if (!simulator->initialized() || simulator->is_unloading()) return u16(-1);
+    auto npc = smart_cast<CSE_ALifeHumanAbstract*>(static_cast<const CALifeSimulatorBase&>(*simulator).objects().object(id, true));
+    if (!npc || npc->m_bOnline || !simulator->npc_simulation().owns(npc) ||
+        Level().Objects.net_Find(id) || ai().game_graph().vertex(npc->m_tGraphID)->level_id() != ai().level_graph().level_id()) return u16(-1);
+    simulator->switch_online(npc);
+    R_ASSERT(!Level().Objects.net_Find(npc->ID));
+    simulator->switch_offline(npc);
+    return npc->ID;
+}
 bool start_supply_goal(CALifeSimulator* simulator, u16 npc)
 {
     return simulator->initialized() && !simulator->is_unloading() && simulator->npc_simulation().enroll(npc, u16(-1), true);
@@ -436,7 +449,8 @@ bool is_unloading(CALifeSimulator* sim) { return sim->is_unloading(); }
 
 void CALifeSimulator::script_register(lua_State* L)
 {
-    if (strstr(Core.Params, "-npc_sim_test")) module(L)[def("npc_sim_test_transfer", &npc_sim_test_transfer)];
+    if (strstr(Core.Params, "-npc_sim_test"))
+        module(L)[def("npc_sim_test_transfer", &npc_sim_test_transfer), def("npc_sim_test_cancel_spawn", &npc_sim_test_cancel_spawn)];
     module(L)[(class_<CALifeSimulator>("alife_simulator")
                   .def("valid_object_id", &valid_object_id)
                   .def("level_id", &get_level_id)

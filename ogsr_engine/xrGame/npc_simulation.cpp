@@ -336,14 +336,15 @@ void CNpcSimulation::before_offline(CSE_ALifeDynamicObject* object)
 {
     auto entry = find(smart_cast<CSE_ALifeMonsterAbstract*>(object));
     if (!entry) return;
-    // A save-time copy may predate subsequent online script changes. Never
-    // reuse it if the current client cannot supply a fresh offline snapshot.
-    entry->binder_data.clear();
+    // An online save copy can be stale, but a snapshot awaiting first client
+    // activation is still authoritative if that queued spawn gets cancelled.
+    if (!entry->binder_pending_activation) entry->binder_data.clear();
     auto client = smart_cast<CAI_Stalker*>(Level().Objects.net_Find(object->ID));
     if (!client || client->getDestroy()) return;
     NET_Packet packet;
     // The save wrapper captures the Lua bytes and ownership in this entry.
     client->CScriptBinder::save(packet);
+    entry->binder_pending_activation = true;
 }
 
 void CNpcSimulation::capture_binder(u16 id, const u8* data, u32 size)
@@ -356,12 +357,16 @@ void CNpcSimulation::capture_binder(u16 id, const u8* data, u32 size)
     R_ASSERT(npc_agent_script_control(entry->plan, script_control(id)));
     entry->binder_version = script_server_object_version();
     entry->binder_data.assign(data, data + size);
+    entry->binder_pending_activation = false;
 }
 
 void CNpcSimulation::discard_binder(u16 id)
 {
     if (auto entry = find(smart_cast<CSE_ALifeMonsterAbstract*>(objects().object(id, true))))
+    {
         entry->binder_data.clear();
+        entry->binder_pending_activation = false;
+    }
 }
 
 void CNpcSimulation::restore_binder(u16 id, CScriptBinderObject& binder)
@@ -381,6 +386,7 @@ void CNpcSimulation::restore_binder(u16 id, CScriptBinderObject& binder)
     binder.load(&reader);
     R_ASSERT2(reader.elapsed() == 0, "NPC binder did not consume its saved payload");
     entry->binder_data.clear();
+    entry->binder_pending_activation = false;
 }
 
 void CNpcSimulation::remove(CSE_ALifeDynamicObject* object)
@@ -516,6 +522,7 @@ void CNpcSimulation::load(IReader& source)
         entry.plan = plan;
         entry.binder_data = std::move(binder_data);
         entry.binder_version = binder_version;
+        entry.binder_pending_activation = true;
         m_entries.emplace(npc, std::move(entry));
         Msg("[npc trip] restore identity=%llu npc=%u phase=%u", status.identity, npc->ID, status.phase);
     }

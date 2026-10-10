@@ -20,6 +20,7 @@ class CNpcSimulation
         NpcAgent* plan{};
         xr_vector<u8> binder_data;
         u16 binder_version = 0;
+        bool binder_pending_activation = false;
         u64 pickup_command = 0;
         u64 online_path_command = 0;
         u32 last_observation = 0;

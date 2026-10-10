@@ -8,20 +8,24 @@ combat and state transitions alone must not strand an offline goal. Custom
 binders with a different activity model must adapt that bridge. Uninitialized
 binders report no observation, not a release. A missing bridge or invalid control
 tag rejects enrollment and pauses existing goals conservatively; it must not
-turn an unknown owner into permission to act or prevent saving the game.
+turn an unknown owner into permission to act or prevent saving the game. This
+pause survives saving: repairing the bridge releases it only when the NPC is
+online and a valid report confirms that no script section owns it.
 
 A persistent script section cannot finish offline because Lua schemes do not
 execute there. Its ownership survives saves and representation changes until
 the script releases the section (`active = nil`). Planner-compatible ordinary
 logic must therefore have no active section; a standing `walker` or `remark`
 job deliberately retains control, even when it has nothing to do. Temporary
-reactions end at the representation boundary; they do not claim persistent script ownership.
+reactions end at the representation boundary; they do not claim persistent
+script ownership.
 
 Opt-in still requires a dedicated section and excludes story/group/smart-terrain
 assignments. The shipped smart-terrain registration goes through the native
 brain selector, which excludes planner sections before enrollment. Its Lua
 spawn-time gulag setup reads that same native ID; it does not independently
-assign a job. Custom scripts must respect that ownership boundary. Only enrolled NPCs retain binder snapshots.
+assign a job. Custom scripts must respect that ownership boundary. Only enrolled NPCs retain
+binder snapshots.
 The separate NPC save chunk retains that Lua payload without retaining native
 client memory, conditions or inventory-owner state, which can become stale while
 offline. It is consumed before binder net_spawn, where the saved scheme is
@@ -30,6 +34,9 @@ report an older input version, which would misparse freshly saved dialog data.
 ClientSave captures the same fallback before level-change autosaves: that path
 does not call switch_offline. Normal online loads consume the fallback after
 loading the standard client payload, so the binder is never loaded twice.
+A queued client spawn can be cancelled before binder restoration. Its pending
+snapshot must survive; unlike an online save copy, it cannot have gone stale
+through later client updates. This distinction is transient, not a save field.
 Capturing ownership during save must not advance goal time or issue actions.
 Old binderless saves carry a marker so the newly enabled binder initializes
 without parsing missing Lua data. This is not a migration of campaign jobs.

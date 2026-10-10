@@ -59,7 +59,7 @@ $fs[$lines[0]] = '$app_data_root$ = true| false| ' + ("$session/appdata/" -repla
 $fs | Set-Content "$session/fsgame.ltx" -Encoding ascii
 $meta.arguments = '-fsltx ..\fsgame.ltx'
 if ($Mode -eq 'whole-map') { $meta.arguments += ' -alife_whole_map' }
-if ($Scenario.StartsWith('goal-')) { $meta.arguments += ' -npc_sim_test' }
+if ($Scenario.StartsWith('goal-') -or $Scenario -eq 'control-resume') { $meta.arguments += ' -npc_sim_test' }
 $meta.arguments += " -start server($save/single/alife/load) client(localhost)"
 $luaConfig = "return {scenario='$Scenario',offline=$(([bool]$GoalOffline).ToString().ToLowerInvariant())}"
 if ($Scenario -in @('resume','fallback','goal-resume','goal-wait-resume','control-resume')) {

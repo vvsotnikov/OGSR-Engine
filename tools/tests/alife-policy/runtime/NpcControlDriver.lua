@@ -95,8 +95,16 @@ return function(cfg)
             assert(server.position:distance_to(anchor) < 0.1,"Reload lost script suspension")
             assert(alife():object(item).parent_id == 65535)
             if now-since > 4000 then
+                npc=npc_sim_test_cancel_spawn(alife(),npc)
+                assert(npc ~= 65535,"Could not cancel queued client spawn")
+                log1("[npc control] cancelled_pending_spawn")
+                stage,since=14,now
+            end
+        elseif stage == 14 then
+            assert(not server.online and not client)
+            if now-since > 4000 then
                 alife():set_switch_online(npc,true)
-                stage = 5
+                stage=5
             end
         elseif stage == 5 and client and db.storage[npc] then
             assert(client:money() == 1234567,"Stale native client snapshot overwrote offline money")
