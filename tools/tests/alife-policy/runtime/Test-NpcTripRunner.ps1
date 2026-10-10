@@ -19,6 +19,10 @@ try {
     $session = & "$PSScriptRoot/Run-NpcTrip.ps1" -InstallRoot $root -Package bin_fixture -Scenario save -PrepareOnly
     $meta = Get-Content "$session/session.json" -Raw | ConvertFrom-Json
     if ($meta.status -ne 'npc-prepared' -or $meta.PSObject.Properties['gamePid']) { throw 'Preparation claimed runtime evidence' }
+    if (!(Get-Content "$session/appdata/regular-config.lua" -Raw).Contains("mode='whole-map'")) { throw 'Whole-map mode missing from driver config' }
+    $distance = & "$PSScriptRoot/Run-NpcTrip.ps1" -InstallRoot $root -Package bin_fixture -Scenario mismatch -Mode distance -PrepareOnly
+    if ((Get-Content "$distance/session.json" -Raw | ConvertFrom-Json).arguments -match '-alife_whole_map' -or
+        !(Get-Content "$distance/appdata/regular-config.lua" -Raw).Contains("mode='distance'")) { throw 'Distance mode disagrees with engine arguments' }
     if ($meta.arguments -match '-npc_sim_test') { throw 'Ordinary trip run enabled test-only APIs' }
     if (!(Get-Content "$session/runtime/gamedata/config/misc/items.ltx" -Raw).Contains('npc_planner = supply_trip') -or
         !(Get-Content "$session/fsgame.ltx" -Raw).Contains(($session -replace '/', '\')) -or
@@ -30,7 +34,8 @@ try {
     $meta | ConvertTo-Json | Set-Content "$session/session.json"
     Set-Content "$session/appdata/savedgames/npc_trip_pending.sav" 'pending'
     Set-Content "$session/appdata/npc-trip-ids.lua" 'return {npc=1,supply=2}'
-    $resume = & "$PSScriptRoot/Run-NpcTrip.ps1" -InstallRoot $root -Package bin_fixture -Scenario resume -ResumeSession $session -PrepareOnly
+    $resume = & "$PSScriptRoot/Run-NpcTrip.ps1" -InstallRoot $root -Package bin_fixture -Scenario resume -ResumeSession $session -Mode distance -PrepareOnly
+    if (!(Get-Content "$resume/appdata/regular-config.lua" -Raw).Contains("ids.mode='distance'")) { throw 'Resume lost requested distance mode' }
     if ((Get-Content "$resume/appdata/savedgames/npc_trip_pending.sav" -Raw).Trim() -ne 'pending' -or
         (Get-FileHash "$resume/appdata/npc-trip-ids.lua").Hash -ne (Get-FileHash "$session/appdata/npc-trip-ids.lua").Hash) { throw 'Resume did not use the pending save and its bindings' }
     $goal = & "$PSScriptRoot/Run-NpcTrip.ps1" -InstallRoot $root -Package bin_fixture -Scenario goal-save -GoalOffline -PrepareOnly

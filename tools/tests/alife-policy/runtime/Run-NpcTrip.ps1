@@ -61,10 +61,10 @@ $meta.arguments = '-fsltx ..\fsgame.ltx'
 if ($Mode -eq 'whole-map') { $meta.arguments += ' -alife_whole_map' }
 if ($Scenario.StartsWith('goal-') -or $Scenario -in @('control-resume','perception-memory')) { $meta.arguments += ' -npc_sim_test' }
 $meta.arguments += " -start server($save/single/alife/load) client(localhost)"
-$luaConfig = "return {scenario='$Scenario',offline=$(([bool]$GoalOffline).ToString().ToLowerInvariant())}"
+$luaConfig = "return {scenario='$Scenario',mode='$Mode',offline=$(([bool]$GoalOffline).ToString().ToLowerInvariant())}"
 if ($Scenario -in @('resume','fallback','goal-resume','goal-wait-resume','control-resume','perception-resume')) {
     Copy-Item "$ResumeSession/appdata/npc-trip-ids.lua" "$session/appdata/npc-trip-ids.lua"
-    $luaConfig = "local ids=dofile(getFS():update_path(`"`$app_data_root`$`",`"npc-trip-ids.lua`")); ids.scenario='$Scenario'; return ids"
+    $luaConfig = "local ids=dofile(getFS():update_path(`"`$app_data_root`$`",`"npc-trip-ids.lua`")); ids.scenario='$Scenario'; ids.mode='$Mode'; return ids"
 }
 Set-Content "$session/appdata/regular-config.lua" $luaConfig -Encoding ascii
 $driver = if ($Scenario.StartsWith('perception')) { 'NpcPerceptionDriver.lua' } elseif ($Scenario -eq 'control-transition') { 'NpcControlTransitionDriver.lua' } elseif ($Scenario.StartsWith('control-')) { 'NpcControlDriver.lua' } elseif ($Scenario.StartsWith('goal-')) { 'NpcGoalDriver.lua' } else { 'NpcTripDriver.lua' }

@@ -64,6 +64,12 @@ return function(cfg)
             end
             assert(actor_position, "No actor position clear of the trip endpoints")
             if cfg.scenario == "natural" then alife():set_switch_distance(switch_radius) end
+            if cfg.mode == "distance" and cfg.scenario ~= "natural" and cfg.scenario ~= "offline" then
+                local online = alife():switch_distance()*(1-factor)
+                assert(actor_position:distance_to(home)+2 < online and
+                    actor_position:distance_to(level.vertex_position(source_node))+2 < online,
+                    "Distance-mode setup would switch the trip offline; increase switch_distance")
+            end
             db.actor:set_actor_position(vector():set(actor_position.x,actor_position.y+1.1,actor_position.z))
             if not npc_id then
                 local source = level.vertex_position(source_node)
