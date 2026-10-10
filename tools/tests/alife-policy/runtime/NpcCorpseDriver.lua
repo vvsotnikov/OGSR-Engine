@@ -9,12 +9,13 @@ return function(cfg)
     end
     local npc,body,item,rival = cfg.npc,cfg.body,cfg.item,cfg.rival
     local stage,started,since,finished = cfg.stage or 0,nil,nil,false
-    local home,node,moved,sampled,attacked,fought,released
+    local home,node,moved,attacked,fought,released,actor_position,corpse_time,reacted
     local function object(id) return id and alife():object(id) end
     local function spawn(section,vertex,parent)
         return assert(alife():create(section,level.vertex_position(vertex),vertex,cross_table():vertex(vertex):game_vertex_id(),parent or 65535)).id
     end
     local function finish()
+        if cfg.scenario=="corpse" or cfg.scenario=="corpse-empty" then assert(reacted,"Missing initial corpse danger reaction") end
         log1("[npc fixture] complete scenario=" .. cfg.scenario)
         finished=true; get_console():execute("quit")
     end
@@ -33,7 +34,24 @@ return function(cfg)
             home=level.vertex_position(34548)
             node=level.vertex_in_direction(34548,vector():set(1,0,0),8)
             get_console():execute("g_god on"); level.disable_input()
-            local p=level.vertex_position(level.vertex_in_direction(34548,vector():set(-1,0,0),60))
+            local graph=game_graph()
+            local map=graph:vertex(cross_table():vertex(34548):game_vertex_id()):level_id()
+            local clearance=15
+            local radius=cfg.mode=="distance" and alife():switch_distance()*(1-system_ini():r_float("alife","switch_factor"))
+            for id=0,graph:vertex_count()-1 do
+                local vertex=graph:vertex(id)
+                if vertex:level_id()==map and graph:accessible(id) then
+                    local candidate=level.vertex_position(vertex:level_vertex_id())
+                    local from_home=candidate:distance_to(home)
+                    local from_body=candidate:distance_to(level.vertex_position(node))
+                    local gap=math.min(from_home,from_body)
+                    if gap>clearance and from_home<=60 and (not radius or (from_home+2<radius and from_body+2<radius)) then
+                        actor_position,clearance=candidate,gap
+                    end
+                end
+            end
+            assert(actor_position,"No actor position clear of greeting and within the requested online range")
+            local p=actor_position
             db.actor:set_actor_position(vector():set(p.x,p.y+1.1,p.z))
             if not body then body=spawn("stalker",node)
             else log1("[npc fixture] restored_pending") end
@@ -41,6 +59,13 @@ return function(cfg)
         end
         assert(now-started<180000,"Corpse scenario timed out stage="..stage)
         local corpse=body and level.object_by_id(body)
+        local observer=npc and level.object_by_id(npc)
+        local danger=observer and observer:best_danger()
+        if danger and danger:type()==danger_object.entity_corpse and danger:object() and danger:object():id()==body then
+            assert(not corpse_time or corpse_time==danger:time(),"Repeated sight renewed the same corpse danger")
+            corpse_time=danger:time()
+            if observer:motivation_action_manager():current_action_id()==stalker_ids.action_danger_planner then reacted=true end
+        end
         if stage==0 and corpse then
             corpse:kill(corpse); stage=1; since=now
         elseif stage==1 and now-since>4000 then
@@ -61,11 +86,6 @@ return function(cfg)
             if client and corpse then client:set_sight(corpse) end
             if rival and corpse and level.object_by_id(rival) then level.object_by_id(rival):set_sight(corpse) end
             local phase=alife():supply_trip_phase(npc)
-            if client and (not sampled or now-sampled>3000) then
-                sampled=now
-                log1(string.format("[npc corpse fixture] sample phase=%d action=%d danger=%s enemy=%s distance=%.2f",phase,
-                    client:motivation_action_manager():current_action_id(),tostring(client:best_danger() and (tostring(client:best_danger():type()).."/"..client:best_danger():time().."/"..tostring(client:best_danger():object() and client:best_danger():object():id()))),tostring(client:best_enemy()),client:position():distance_to(home)))
-            end
             if phase==0 or phase==1 then
                 log1("[npc corpse fixture] discovered")
                 if cfg.scenario=="corpse-removed" then
@@ -85,17 +105,6 @@ return function(cfg)
             local server=assert(object(npc))
             local client=level.object_by_id(npc)
             local phase=alife():supply_trip_phase(npc)
-            if client and (not sampled or now-sampled>3000) then
-                sampled=now
-                log1(string.format("[npc corpse fixture] sample phase=%d action=%d danger=%s enemy=%s distance=%.2f",phase,
-                    client:motivation_action_manager():current_action_id(),tostring(client:best_danger() and (tostring(client:best_danger():type()).."/"..client:best_danger():time().."/"..tostring(client:best_danger():object() and client:best_danger():object():id()))),tostring(client:best_enemy()),client:position():distance_to(home)))
-            end
-            if not client and (not sampled or now-sampled>3000) then
-                sampled=now
-                log1(string.format("[npc corpse fixture] offline phase=%d body_online=%s item_online=%s parent=%s distance=%.2f",phase,
-                    tostring(object(body) and object(body).online),tostring(object(item) and object(item).online),
-                    tostring(object(item) and object(item).parent_id),object(body) and server.position:distance_to(object(body).position) or -1))
-            end
             if cfg.scenario=="corpse-combat" and client then
                 if not attacked then
                     attacked=now
@@ -113,8 +122,7 @@ return function(cfg)
                     assert(fought,"No real combat interruption")
                     client:set_enemy_callback(function() return false end)
                     client:set_relation(game_object.neutral,db.actor)
-                    local away=level.vertex_position(0)
-                    assert(away:distance_to(client:position())>40,"Actor retreat is too close")
+                    local away=actor_position
                     db.actor:set_actor_position(vector():set(away.x,away.y+1.1,away.z))
                     released=true; log1("[npc fixture] combat_observed")
                 end
