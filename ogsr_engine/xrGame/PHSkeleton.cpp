@@ -96,6 +96,9 @@ bool CPHSkeleton::Spawn(CSE_Abstract* D)
             if (k)
             {
                 k->LL_SetBoneRoot(po->saved_bones.root_bone);
+                // Shell construction filters collision geometry and fractures by
+                // visible bones. Restoring this later leaves hidden parts active.
+                k->LL_SetBonesVisible(po->saved_bones.bones_mask);
             }
         }
 
@@ -128,8 +131,6 @@ bool CPHSkeleton::Spawn(CSE_Abstract* D)
                     obj->PPhysicsShell()->SetIgnoreSmall();
                 }
             }
-
-            k->LL_SetBonesVisible(po->saved_bones.bones_mask);
         }
     }
     return false;
