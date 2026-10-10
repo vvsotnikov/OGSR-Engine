@@ -19,6 +19,7 @@
 #include "stalker_danger_planner.h"
 #include "stalker_alife_actions.h"
 #include "stalker_combat_planner.h"
+#include "npc_simulation.h"
 //#include "stalker_combat_planner_new.h"
 
 //#define GOAP_DEBUG
@@ -83,6 +84,10 @@ void CStalkerPlanner::update(u32 time_delta)
         set_target_state(m_dead_goal);
 
     inherited::update();
+
+    if (auto simulation = CNpcSimulation::active(); simulation && simulation->owns(m_object->ID()))
+        if (!initialized() || current_action_id() != eWorldOperatorALifePlanner)
+            simulation->update_online(*m_object, true);
 
 #ifdef GOAP_DEBUG
     if (m_failed)

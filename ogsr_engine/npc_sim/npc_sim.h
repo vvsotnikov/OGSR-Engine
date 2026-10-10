@@ -3,6 +3,7 @@
 #include <cstdint>
 
 struct NpcAgent;
+enum class NpcScriptControl : std::uint32_t { Unobserved = 0, Released = 1, Owned = 2 };
 struct NpcLocation
 {
     std::uint32_t game_vertex, level_vertex, level;
@@ -41,7 +42,8 @@ std::uint32_t npc_agent_available_source_slot(const NpcAgent*);
 std::size_t npc_agent_source_count(const NpcAgent*);
 bool npc_agent_source(const NpcAgent*, std::uint32_t index, NpcLocation* navigation);
 void npc_agent_destroy(NpcAgent*);
-bool npc_agent_step(NpcAgent*, const NpcObservation*, NpcDecision*);
+bool npc_agent_step(NpcAgent*, const NpcObservation*, NpcDecision*, NpcScriptControl);
+bool npc_agent_script_control(NpcAgent*, NpcScriptControl);
 bool npc_agent_status(const NpcAgent*, NpcDecision*);
 bool npc_agent_locations(const NpcAgent*, NpcLocation* home, NpcLocation* source);
 std::size_t npc_agent_save(const NpcAgent*, std::uint8_t* output, std::size_t capacity);

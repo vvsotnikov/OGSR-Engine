@@ -19,7 +19,7 @@
 
 namespace
 {
-// A planner-owned client has native save data but no Lua binder payload. Keep
+// Older planner saves have native data but no Lua binder payload. Keep
 // that distinction across offline saves and configuration changes: a newly
 // enabled binder must initialize normally, not parse nonexistent script state.
 constexpr u8 no_planner_binder[] = {'N', 'P', 'C', '_', 'N', 'O', '_', 'B', 'I', 'N', 'D', 'E', 'R', 0, 0, 1};
@@ -59,9 +59,6 @@ void CScriptBinder::reload(LPCSTR section)
     if (!pSettings->line_exist(section, "script_binding"))
         return;
 
-    // Explicit planner-owned NPCs use native ordinary activity instead of a
-    // second Lua task owner. Combat/danger remain in the native stalker planner.
-    if (CNpcSimulation::configured(section)) return;
     auto script_func_name = pSettings->r_string(section, "script_binding");
     luabind::functor<void> lua_function;
     if (!ai().script_engine().functor(script_func_name, lua_function))
@@ -91,6 +88,7 @@ BOOL CScriptBinder::net_Spawn(CSE_Abstract* DC)
     CSE_ALifeObject* object = smart_cast<CSE_ALifeObject*>(abstract);
     if (object && m_object)
     {
+        if (auto simulation = CNpcSimulation::active()) simulation->restore_binder(abstract->ID, *m_object);
         return (BOOL)m_object->net_Spawn(object);
     }
     return TRUE;
@@ -129,7 +127,11 @@ void CScriptBinder::save(NET_Packet& output_packet)
 {
     if (m_object)
     {
+        const auto start = output_packet.w_tell();
         m_object->save(&output_packet);
+        if (auto simulation = CNpcSimulation::active())
+            if (auto object = smart_cast<CGameObject*>(this))
+                simulation->capture_binder(object->ID(), output_packet.B.data + start, output_packet.w_tell() - start);
     }
     else if (auto object = smart_cast<CGameObject*>(this); object && CNpcSimulation::configured(object->cNameSect().c_str()))
     {
@@ -150,6 +152,10 @@ void CScriptBinder::load(IReader& input_packet)
     if (m_object)
     {
         m_object->load(&input_packet);
+        // The standard client payload already restored Lua state. Consume its
+        // fallback copy so net_Spawn cannot load the same binder a second time.
+        if (auto simulation = CNpcSimulation::active())
+            if (auto object = smart_cast<CGameObject*>(this)) simulation->discard_binder(object->ID());
     }
 }
 

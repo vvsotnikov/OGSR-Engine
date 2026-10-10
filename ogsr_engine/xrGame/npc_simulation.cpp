@@ -22,10 +22,43 @@
 #include "game_level_cross_table.h"
 #include "xrMessages.h"
 #include "clsid_game.h"
+#include "script_engine.h"
+#include "script_binder_object.h"
+
+extern u16 script_server_object_version();
 
 namespace
 {
 constexpr u32 planner_chunk = 0x4e504331; // NPC1; optional root chunk, independent of legacy registry order.
+bool read_script_control(u16 id, NpcScriptControl& control)
+{
+    luabind::functor<u32> query;
+    if (ai().script_engine().functor("npc_sim_bridge.script_control", query))
+    {
+        const u32 value = query(id);
+        if (value <= u32(NpcScriptControl::Owned))
+        {
+            control = NpcScriptControl(value);
+            return true;
+        }
+    }
+    // A missing ownership report cannot authorize movement. Keep saves usable
+    // and diagnose once rather than flooding the log on every NPC/frame.
+    static bool reported = false;
+    if (!reported)
+    {
+        Msg("! [npc trip] npc_sim_bridge.script_control missing or invalid; enrollment rejected and existing goals paused until it is repaired");
+        reported = true;
+    }
+    control = NpcScriptControl::Owned;
+    return false;
+}
+NpcScriptControl script_control(u16 id)
+{
+    NpcScriptControl control;
+    read_script_control(id, control);
+    return control;
+}
 NpcLocation location(const CSE_ALifeDynamicObject& object)
 {
     const u32 level = ai().game_graph().valid_vertex_id(object.m_tGraphID) ? ai().game_graph().vertex(object.m_tGraphID)->level_id() : u32(-1);
@@ -119,6 +152,8 @@ bool CNpcSimulation::enroll(u16 npc_id, u16 supply_id, bool medical_goal)
         auto client = smart_cast<CAI_Stalker*>(Level().Objects.net_Find(npc_id));
         if (!client || client->GetScriptControl()) return false;
     }
+    NpcScriptControl control;
+    if (!read_script_control(npc_id, control)) return false;
     if (!navigable_here(*npc)) return false;
     if (!medical_goal && (!supply || !smart_cast<CSE_ALifeInventoryItem*>(supply) ||
         supply->ID_Parent != u16(-1) || !navigable_here(*supply))) return false;
@@ -157,7 +192,7 @@ bool CNpcSimulation::remember(u16 npc_id, u16 supply_id)
     return true;
 }
 
-NpcDecision CNpcSimulation::observe(Entry& entry, const Fvector& here, u32 graph, bool interrupted, bool alive, bool blocked)
+NpcDecision CNpcSimulation::observe(Entry& entry, const Fvector& here, u32 graph, bool interrupted, bool alive, bool blocked, NpcScriptControl control)
 {
     NpcDecision before{}, after{};
     R_ASSERT(npc_agent_status(entry.plan, &before));
@@ -191,11 +226,11 @@ NpcDecision CNpcSimulation::observe(Entry& entry, const Fvector& here, u32 graph
         }
     // World facts are distinct from knowledge: Rust decides what can be learned
     // at the remembered destination and owns arrival, waiting and failure policy.
-    R_ASSERT(npc_agent_step(entry.plan, &input, &after));
-    if (before.phase != after.phase || before.command != after.command || entry.interrupted != interrupted)
+    R_ASSERT(npc_agent_step(entry.plan, &input, &after, control));
+    if (before.phase != after.phase || before.command != after.command || entry.interrupted != bool(after.interrupted))
         Msg("[npc trip] identity=%llu npc=%u command=%llu phase=%u reason=%u interrupted=%u online=%u source=%u bandages=%u", after.identity,
             entry.npc->ID, after.command, after.phase, after.reason, after.interrupted, u32(entry.npc->m_bOnline), after.source, input.bandages);
-    entry.interrupted = interrupted;
+    entry.interrupted = bool(after.interrupted);
     return after;
 }
 
@@ -227,7 +262,7 @@ bool CNpcSimulation::update_online(CAI_Stalker& client, bool interrupted)
     const bool path_failed = !entry->interrupted && entry->online_path_command == status.command &&
         client.movement().path_type() == MovementManager::ePathTypeLevelPath && client.movement().level_path().failed();
     if (interrupted) entry->online_path_command = 0;
-    const auto decision = observe(*entry, client.Position(), client.ai_location().game_vertex_id(), interrupted, client.g_Alive(), path_failed);
+    const auto decision = observe(*entry, client.Position(), client.ai_location().game_vertex_id(), interrupted, client.g_Alive(), path_failed, script_control(client.ID()));
     if (interrupted || !client.g_Alive()) return true; // existing immediate planner owns movement now
     if (decision.action == 1)
     {
@@ -280,7 +315,7 @@ bool CNpcSimulation::update_offline(CSE_ALifeMonsterAbstract* object)
     if (!entry) return false;
     if (object->m_bOnline) return true;
     entry->online_path_command = 0;
-    const auto decision = observe(*entry, object->o_Position, object->m_tGraphID, false, object->fHealth > 0, false);
+    const auto decision = observe(*entry, object->o_Position, object->m_tGraphID, false, object->fHealth > 0, false, NpcScriptControl::Unobserved);
     auto& movement = object->brain().movement();
     if (decision.action == 1)
     {
@@ -295,6 +330,63 @@ bool CNpcSimulation::update_offline(CSE_ALifeMonsterAbstract* object)
         if (decision.action == 2) collect(*entry, nullptr, decision);
     }
     return true;
+}
+
+void CNpcSimulation::before_offline(CSE_ALifeDynamicObject* object)
+{
+    auto entry = find(smart_cast<CSE_ALifeMonsterAbstract*>(object));
+    if (!entry) return;
+    // An online save copy can be stale, but a snapshot awaiting first client
+    // activation is still authoritative if that queued spawn gets cancelled.
+    if (!entry->binder_pending_activation) entry->binder_data.clear();
+    auto client = smart_cast<CAI_Stalker*>(Level().Objects.net_Find(object->ID));
+    if (!client || client->getDestroy()) return;
+    NET_Packet packet;
+    // The save wrapper captures the Lua bytes and ownership in this entry.
+    client->CScriptBinder::save(packet);
+    entry->binder_pending_activation = true;
+}
+
+void CNpcSimulation::capture_binder(u16 id, const u8* data, u32 size)
+{
+    if (m_entries.empty()) return;
+    auto entry = find(smart_cast<CSE_ALifeMonsterAbstract*>(objects().object(id, true)));
+    if (!entry) return;
+    // ClientSave also reaches this path before a level-change autosave, where
+    // switch_offline is not called. Saving must not advance goal time or actions.
+    R_ASSERT(npc_agent_script_control(entry->plan, script_control(id)));
+    entry->binder_version = script_server_object_version();
+    entry->binder_data.assign(data, data + size);
+    entry->binder_pending_activation = false;
+}
+
+void CNpcSimulation::discard_binder(u16 id)
+{
+    if (auto entry = find(smart_cast<CSE_ALifeMonsterAbstract*>(objects().object(id, true))))
+    {
+        entry->binder_data.clear();
+        entry->binder_pending_activation = false;
+    }
+}
+
+void CNpcSimulation::restore_binder(u16 id, CScriptBinderObject& binder)
+{
+    auto entry = find(smart_cast<CSE_ALifeMonsterAbstract*>(objects().object(id, true)));
+    if (!entry || entry->binder_data.empty()) return;
+    IReader reader(entry->binder_data.data(), entry->binder_data.size());
+    // Legacy binder loaders consult the server's input format version. A new
+    // in-memory snapshot uses today's writer even when that entity is older.
+    struct RestoreVersion
+    {
+        CSE_Abstract& object;
+        u16 previous;
+        ~RestoreVersion() { object.m_script_version = previous; }
+    } restore{*entry->npc, entry->npc->m_script_version};
+    entry->npc->m_script_version = entry->binder_version;
+    binder.load(&reader);
+    R_ASSERT2(reader.elapsed() == 0, "NPC binder did not consume its saved payload");
+    entry->binder_data.clear();
+    entry->binder_pending_activation = false;
 }
 
 void CNpcSimulation::remove(CSE_ALifeDynamicObject* object)
@@ -318,7 +410,7 @@ void CNpcSimulation::remove(CSE_ALifeDynamicObject* object)
 void CNpcSimulation::died(CSE_ALifeDynamicObject* object)
 {
     if (auto entry = find(smart_cast<CSE_ALifeMonsterAbstract*>(object)))
-        observe(*entry, object->o_Position, object->m_tGraphID, false, false, false);
+        observe(*entry, object->o_Position, object->m_tGraphID, false, false, false, NpcScriptControl::Unobserved);
 }
 
 int CNpcSimulation::phase(u16 id) const
@@ -333,7 +425,7 @@ int CNpcSimulation::phase(u16 id) const
 void CNpcSimulation::save(IWriter& stream) const
 {
     stream.open_chunk(planner_chunk);
-    stream.w_u32(2);
+    stream.w_u32(3);
     stream.w_u64(m_next_identity);
     stream.w_u32(u32(m_entries.size()));
     xr_map<u64, const Entry*> ordered;
@@ -354,6 +446,9 @@ void CNpcSimulation::save(IWriter& stream) const
         R_ASSERT(npc_agent_save(entry.plan, bytes.data(), bytes.size()) == size);
         stream.w_u32(u32(size));
         stream.w(bytes.data(), u32(size));
+        stream.w_u16(entry.binder_version);
+        stream.w_u32(u32(entry.binder_data.size()));
+        if (!entry.binder_data.empty()) stream.w(entry.binder_data.data(), u32(entry.binder_data.size()));
     }
     stream.close_chunk();
 }
@@ -365,7 +460,7 @@ void CNpcSimulation::load(IReader& source)
     if (!chunk) return; // Existing saves enroll nobody.
     R_ASSERT(chunk->length() >= 16);
     const u32 version = chunk->r_u32();
-    R_ASSERT2(version == 1 || version == 2, "Unsupported NPC planner save");
+    R_ASSERT2(version == 1 || version == 2 || version == 3, "Unsupported NPC planner save");
     m_next_identity = chunk->r_u64();
     const u32 count = chunk->r_u32();
     R_ASSERT(count <= objects().objects().size() && m_next_identity != 0);
@@ -388,6 +483,17 @@ void CNpcSimulation::load(IReader& source)
         R_ASSERT(npc && m_entries.find(npc) == m_entries.end() && size <= chunk->elapsed() && size <= 16384);
         xr_vector<u8> bytes(size);
         chunk->r(bytes.data(), size);
+        xr_vector<u8> binder_data;
+        u16 binder_version = 0;
+        if (version >= 3)
+        {
+            R_ASSERT(chunk->elapsed() >= 6);
+            binder_version = chunk->r_u16();
+            const u32 binder_size = chunk->r_u32();
+            R_ASSERT(binder_size <= chunk->elapsed() && binder_size <= NET_PacketSizeLimit);
+            binder_data.resize(binder_size);
+            if (binder_size) chunk->r(binder_data.data(), binder_size);
+        }
         NpcAgent* plan = npc_agent_load(bytes.data(), bytes.size());
         R_ASSERT2(plan, "Invalid NPC planner state");
         R_ASSERT(npc_agent_source_count(plan) == supplies.size());
@@ -414,6 +520,9 @@ void CNpcSimulation::load(IReader& source)
         entry.npc = npc;
         entry.supplies = std::move(supplies);
         entry.plan = plan;
+        entry.binder_data = std::move(binder_data);
+        entry.binder_version = binder_version;
+        entry.binder_pending_activation = true;
         m_entries.emplace(npc, std::move(entry));
         Msg("[npc trip] restore identity=%llu npc=%u phase=%u", status.identity, npc->ID, status.phase);
     }

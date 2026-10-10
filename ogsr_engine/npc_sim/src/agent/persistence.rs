@@ -4,7 +4,7 @@ impl Agent {
     pub fn save(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(b"NPCG");
-        put(&mut bytes, 3);
+        put(&mut bytes, 4);
         bytes.extend_from_slice(&self.identity.to_le_bytes());
         bytes.extend_from_slice(&self.command.to_le_bytes());
         put_location(&mut bytes, self.home);
@@ -13,7 +13,8 @@ impl Agent {
             u32::from(self.is_medical())
                 | (u32::from(self.goal.satisfied()) << 1)
                 | (u32::from(self.dead) << 2)
-                | (u32::from(self.interrupted) << 3),
+                | (u32::from(self.interrupted) << 3)
+                | (u32::from(self.script_suspended) << 4),
         );
         put(&mut bytes, self.goal.return_retry_ms());
         put(&mut bytes, self.selected.map_or(u32::MAX, |i| i as u32));
@@ -40,7 +41,7 @@ impl Agent {
             return None;
         }
         let version = r.u32()?;
-        if version != 2 && version != 3 {
+        if version != 2 && version != 3 && version != 4 {
             return None;
         }
         let identity = u64::from_le_bytes(r.take()?);
@@ -51,7 +52,7 @@ impl Agent {
         let return_retry_ms = r.u32()?;
         let selected = r.u32()?;
         let count = r.u32()? as usize;
-        if command == 0 || flags > 15 || count > Self::MAX_SOURCES {
+        if command == 0 || flags > if version == 4 { 31 } else { 15 } || count > Self::MAX_SOURCES {
             return None;
         }
         agent.command = command;
@@ -63,6 +64,7 @@ impl Agent {
         agent.goal = Goal::restore(kind, flags & 2 != 0, return_retry_ms)?;
         agent.dead = flags & 4 != 0;
         agent.interrupted = flags & 8 != 0;
+        agent.script_suspended = flags & 16 != 0;
         let mut sources = Vec::with_capacity(count);
         for index in 0..count {
             let navigation = r.location()?;
@@ -81,7 +83,7 @@ impl Agent {
                 _ => return None,
             };
             let retry_ms = r.u32()?;
-            let learned_order = if version == 3 { r.u32()? } else { index as u32 };
+            let learned_order = if version >= 3 { r.u32()? } else { index as u32 };
             sources.push(Source {
                 navigation,
                 physical,

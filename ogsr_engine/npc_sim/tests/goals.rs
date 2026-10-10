@@ -366,3 +366,136 @@ fn source_recency_migrates_and_rejects_duplicate_or_out_of_range_ranks() {
     outside[64 + 56..64 + 60].copy_from_slice(&2u32.to_le_bytes());
     assert!(Agent::load(&outside).is_none());
 }
+
+#[test]
+fn script_control_survives_unobserved_intervals_and_reload_until_explicit_release() {
+    use npc_sim::ScriptControl;
+    let mut a = agent();
+    a.step_controlled(observation(0.), 0, ScriptControl::Released);
+    let mut o = observation(4.);
+    o.elapsed_ms = 90_000;
+    for control in [ScriptControl::Owned, ScriptControl::Unobserved] {
+        let d = a.step_controlled(o, 0, control).decision;
+        assert_eq!(d.action, Action::Wait);
+        assert!(d.interrupted);
+        assert_eq!(d.phase, Phase::Outbound);
+        a = Agent::load(&a.save()).unwrap();
+    }
+    let gift = a.step_controlled(o, 1, ScriptControl::Unobserved).decision;
+    assert_eq!(gift.phase, Phase::Returning);
+    assert_eq!(gift.action, Action::Wait);
+    a = Agent::load(&a.save()).unwrap();
+    let resumed = a.step_controlled(o, 1, ScriptControl::Released).decision;
+    assert_eq!(resumed.action, Action::Travel(point(0.)));
+    assert_eq!(resumed.reason, FailureReason::None);
+}
+
+#[test]
+fn old_goal_saves_default_to_no_script_owner() {
+    use npc_sim::ScriptControl;
+    let mut a = agent();
+    a.step_controlled(observation(0.), 0, ScriptControl::Released);
+    let mut bytes = a.save();
+    bytes[4..8].copy_from_slice(&3u32.to_le_bytes());
+    let mut restored = Agent::load(&bytes).unwrap();
+    assert_eq!(
+        restored
+            .step_controlled(observation(0.), 0, ScriptControl::Unobserved)
+            .decision
+            .action,
+        Action::Travel(point(10.))
+    );
+    a.step_controlled(observation(0.), 0, ScriptControl::Owned);
+    let mut invalid_old = a.save();
+    invalid_old[4..8].copy_from_slice(&3u32.to_le_bytes());
+    assert!(Agent::load(&invalid_old).is_none());
+}
+
+#[test]
+fn assigned_trip_also_honors_persisted_script_control() {
+    use npc_sim::ScriptControl;
+    let mut original = agent();
+    original.step(observation(0.), 0);
+    // The legacy activity snapshot is the final activity bytes of the envelope.
+    let bytes = original.save();
+    let mut a = Agent::load(&bytes[bytes.len() - Plan::SNAPSHOT_SIZE..]).unwrap();
+    assert!(!a.is_medical());
+    a.step_controlled(observation(0.), 0, ScriptControl::Owned);
+    a = Agent::load(&a.save()).unwrap();
+    assert_eq!(
+        a.step_controlled(observation(0.), 0, ScriptControl::Unobserved)
+            .decision
+            .action,
+        Action::Wait
+    );
+    assert_eq!(
+        a.step_controlled(observation(0.), 0, ScriptControl::Released)
+            .decision
+            .action,
+        Action::Travel(point(10.))
+    );
+}
+
+#[test]
+fn temporary_reaction_does_not_suspend_offline_travel() {
+    use npc_sim::ScriptControl;
+    let mut a = agent();
+    a.step_controlled(observation(0.), 0, ScriptControl::Released);
+    let mut meet = observation(4.);
+    meet.interrupted = true;
+    assert_eq!(
+        a.step_controlled(meet, 0, ScriptControl::Released)
+            .decision
+            .action,
+        Action::Wait
+    );
+    a = Agent::load(&a.save()).unwrap();
+    assert_eq!(
+        a.step_controlled(observation(4.), 0, ScriptControl::Unobserved)
+            .decision
+            .action,
+        Action::Travel(point(10.))
+    );
+}
+
+#[test]
+fn script_released_during_combat_can_continue_offline() {
+    use npc_sim::ScriptControl;
+    let mut a = agent();
+    a.step_controlled(observation(0.), 0, ScriptControl::Owned);
+    let mut combat = observation(4.);
+    combat.interrupted = true;
+    assert_eq!(
+        a.step_controlled(combat, 0, ScriptControl::Released)
+            .decision
+            .action,
+        Action::Wait
+    );
+    assert_eq!(
+        a.step_controlled(observation(4.), 0, ScriptControl::Unobserved)
+            .decision
+            .action,
+        Action::Travel(point(10.))
+    );
+}
+
+#[test]
+fn saving_a_new_script_owner_does_not_advance_the_activity() {
+    use npc_sim::ScriptControl;
+    let mut a = agent();
+    let before = a.step(observation(0.), 0).decision;
+    a.report_script_control(ScriptControl::Owned);
+    assert_eq!(a.status().decision, before);
+    let mut restored = Agent::load(&a.save()).unwrap();
+    let paused = restored
+        .step_controlled(observation(4.), 0, ScriptControl::Unobserved)
+        .decision;
+    assert_eq!(paused.phase, Phase::Outbound);
+    assert_eq!(paused.action, Action::Wait);
+    restored.report_script_control(ScriptControl::Released);
+    let mut released = Agent::load(&restored.save()).unwrap();
+    assert_eq!(
+        released.step(observation(4.), 0).decision.action,
+        Action::Travel(point(10.))
+    );
+}

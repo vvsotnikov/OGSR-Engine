@@ -18,6 +18,7 @@
 #include "game_level_cross_table.h"
 #include "game_graph.h"
 #include "xrServer.h"
+#include "npc_simulation.h"
 
 void CSE_ALifeDynamicObject::on_spawn()
 {
@@ -56,6 +57,7 @@ void CSE_ALifeDynamicObject::switch_online()
 void CSE_ALifeDynamicObject::switch_offline()
 {
     R_ASSERT(m_bOnline);
+    if (auto simulation = CNpcSimulation::active()) simulation->before_offline(this);
     m_bOnline = false;
     alife().remove_online(this);
 #ifdef DEBUG

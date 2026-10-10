@@ -1,7 +1,9 @@
 use crate::activity::ActivityState;
 use crate::goal::{ActivityRequest, Goal, GoalKind};
 use crate::knowledge::{Knowledge, Source};
-use crate::{Action, Decision, FailureReason, Location, Observation, Phase, Plan, Supply};
+use crate::{
+    Action, Decision, FailureReason, Location, Observation, Phase, Plan, ScriptControl, Supply,
+};
 mod persistence;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -21,6 +23,7 @@ pub struct Agent {
     command: u64,
     dead: bool,
     interrupted: bool,
+    script_suspended: bool,
 }
 
 impl Agent {
@@ -36,6 +39,7 @@ impl Agent {
             command: 1,
             dead: false,
             interrupted: false,
+            script_suspended: false,
         })
     }
     pub fn assigned(plan: Plan) -> Self {
@@ -49,6 +53,7 @@ impl Agent {
             command: plan.command(),
             dead: false,
             interrupted: false,
+            script_suspended: false,
             activity: Some(plan),
         }
     }
@@ -157,7 +162,24 @@ impl Agent {
             source: self.selected,
         }
     }
-    pub fn step(&mut self, o: Observation, bandages: u32) -> AgentDecision {
+    pub fn step_controlled(
+        &mut self,
+        o: Observation,
+        bandages: u32,
+        control: ScriptControl,
+    ) -> AgentDecision {
+        self.report_script_control(control);
+        self.step(o, bandages)
+    }
+    pub fn report_script_control(&mut self, control: ScriptControl) {
+        match control {
+            ScriptControl::Released => self.script_suspended = false,
+            ScriptControl::Owned => self.script_suspended = true,
+            ScriptControl::Unobserved => {}
+        }
+    }
+    pub fn step(&mut self, mut o: Observation, bandages: u32) -> AgentDecision {
+        o.interrupted |= self.script_suspended;
         if !self.is_medical() {
             let activity = self.activity.as_mut().unwrap();
             let decision = activity.step(o);

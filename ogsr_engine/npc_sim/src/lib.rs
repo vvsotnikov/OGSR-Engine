@@ -107,3 +107,11 @@ fn valid_source(home: Location, navigation: Location, physical: Location) -> boo
         && navigation.level == home.level
         && physical.level == home.level
 }
+
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScriptControl {
+    Unobserved = 0,
+    Released = 1,
+    Owned = 2,
+}

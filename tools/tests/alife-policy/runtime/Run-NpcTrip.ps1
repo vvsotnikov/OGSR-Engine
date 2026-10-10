@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory)][string]$InstallRoot,
     [Parameter(Mandatory)][ValidatePattern('^bin_[a-zA-Z0-9_]+$')][string]$Package,
     [ValidateSet('Release','Debug')][string]$Configuration = 'Debug',
-    [ValidateSet('basic','interrupt','offline','switch','missing','death','mismatch','natural','elevated','boundary','far','moved','spawn-combat','save','resume','fallback','goal-cycle','goal-displaced','goal-combat','goal-switch','goal-competition','goal-save','goal-resume','goal-wait-save','goal-wait-resume')][string]$Scenario = 'basic',
+    [ValidateSet('basic','interrupt','offline','switch','missing','death','mismatch','natural','elevated','boundary','far','moved','spawn-combat','save','resume','fallback','goal-cycle','goal-displaced','goal-combat','goal-switch','goal-competition','goal-save','goal-resume','goal-wait-save','goal-wait-resume','control-save','control-resume','control-meet','control-transition')][string]$Scenario = 'basic',
     [ValidateSet('whole-map','distance')][string]$Mode = 'whole-map',
     [string]$ResumeSession = '',
     [switch]$GoalOffline,
@@ -19,10 +19,10 @@ $engine = Join-Path $InstallRoot "$Package/xrEngine.exe"
 $build = Read-ValidationPackage $engine -Configuration $Configuration
 $seed = 'seeds/bar-2026-10-03'
 $save = 'bar_center'
-if ($Scenario -in @('resume','fallback','goal-resume','goal-wait-resume')) {
+if ($Scenario -in @('resume','fallback','goal-resume','goal-wait-resume','control-resume')) {
     if (!$ResumeSession) { throw 'Resume requires the completed save scenario' }
     $previous = Get-Content "$ResumeSession/session.json" -Raw | ConvertFrom-Json
-    if ($previous.status -ne 'npc-completed' -or $previous.scenario -ne $(if ($Scenario -eq 'goal-resume') { 'goal-save' } elseif ($Scenario -eq 'goal-wait-resume') { 'goal-wait-save' } else { 'save' })) { throw 'Invalid resume source' }
+    if ($previous.status -ne 'npc-completed' -or $previous.scenario -ne $(if ($Scenario -eq 'goal-resume') { 'goal-save' } elseif ($Scenario -eq 'goal-wait-resume') { 'goal-wait-save' } elseif ($Scenario -eq 'control-resume') { 'control-save' } else { 'save' })) { throw 'Invalid resume source' }
     if ($Scenario.StartsWith('goal-')) { $GoalOffline = [bool]$previous.goalOffline }
     $resumePath = (Resolve-Path $ResumeSession).Path
     $prefix = $InstallRoot.TrimEnd('\') + '\'
@@ -37,6 +37,8 @@ $meta | Add-Member scenario $Scenario
 $meta | Add-Member goalOffline ([bool]$GoalOffline)
 $runtime = New-Item -ItemType Directory "$session/runtime"
 Copy-Item "$InstallRoot/gamedata" "$runtime/gamedata" -Recurse
+New-Item -ItemType Directory "$runtime/gamedata/scripts" -Force | Out-Null
+Copy-Item "$PSScriptRoot/../../../../Game/Resources_SoC_1.0006/gamedata/scripts/npc_sim_bridge.script" "$runtime/gamedata/scripts/npc_sim_bridge.script"
 Get-ChildItem $InstallRoot -Filter 'gamedata.db*' -File | ForEach-Object {
     New-Item -ItemType HardLink -Path "$runtime/$($_.Name)" -Target $_.FullName | Out-Null
 }
@@ -45,6 +47,11 @@ if ((Get-Content $config -Raw).Contains('[npc_trip_stalker]')) { throw 'Fixture 
 Add-Content $config "`n[npc_trip_stalker]:stalker" -Encoding ascii
 if ($Scenario -ne 'fallback') { Add-Content $config 'npc_planner = supply_trip' -Encoding ascii }
 if ($Scenario -eq 'elevated') { Add-Content $config "`n[npc_trip_elevated_bandage]:bandage`nuse_ai_locations = false" -Encoding ascii }
+if ($Scenario.StartsWith('control-')) {
+    Add-Content $config 'custom_data = scripts\npc_control.ltx' -Encoding ascii
+    New-Item -ItemType Directory "$runtime/gamedata/config/scripts" -Force | Out-Null
+    Copy-Item "$PSScriptRoot/npc_control.ltx" "$runtime/gamedata/config/scripts/npc_control.ltx"
+}
 $fs = @(Get-Content "$session/fsgame.ltx")
 $lines = @(0..($fs.Count-1) | Where-Object { $fs[$_] -match '^\s*\$app_data_root\$\s*=' })
 if ($lines.Count -ne 1) { throw 'Expected one appdata root' }
@@ -52,15 +59,15 @@ $fs[$lines[0]] = '$app_data_root$ = true| false| ' + ("$session/appdata/" -repla
 $fs | Set-Content "$session/fsgame.ltx" -Encoding ascii
 $meta.arguments = '-fsltx ..\fsgame.ltx'
 if ($Mode -eq 'whole-map') { $meta.arguments += ' -alife_whole_map' }
-if ($Scenario.StartsWith('goal-')) { $meta.arguments += ' -npc_sim_test' }
+if ($Scenario.StartsWith('goal-') -or $Scenario -eq 'control-resume') { $meta.arguments += ' -npc_sim_test' }
 $meta.arguments += " -start server($save/single/alife/load) client(localhost)"
 $luaConfig = "return {scenario='$Scenario',offline=$(([bool]$GoalOffline).ToString().ToLowerInvariant())}"
-if ($Scenario -in @('resume','fallback','goal-resume','goal-wait-resume')) {
+if ($Scenario -in @('resume','fallback','goal-resume','goal-wait-resume','control-resume')) {
     Copy-Item "$ResumeSession/appdata/npc-trip-ids.lua" "$session/appdata/npc-trip-ids.lua"
     $luaConfig = "local ids=dofile(getFS():update_path(`"`$app_data_root`$`",`"npc-trip-ids.lua`")); ids.scenario='$Scenario'; return ids"
 }
 Set-Content "$session/appdata/regular-config.lua" $luaConfig -Encoding ascii
-$driver = if ($Scenario.StartsWith('goal-')) { 'NpcGoalDriver.lua' } else { 'NpcTripDriver.lua' }
+$driver = if ($Scenario -eq 'control-transition') { 'NpcControlTransitionDriver.lua' } elseif ($Scenario.StartsWith('control-')) { 'NpcControlDriver.lua' } elseif ($Scenario.StartsWith('goal-')) { 'NpcGoalDriver.lua' } else { 'NpcTripDriver.lua' }
 Copy-Item "$PSScriptRoot/$driver" "$session/appdata/RegularDriver.lua"
 $meta.status = 'npc-prepared'
 $meta | ConvertTo-Json -Depth 8 | Set-Content "$session/session.json" -Encoding utf8
@@ -77,12 +84,12 @@ try {
     if ($logs.Count -ne 1) { throw 'Expected one log' }
     $log = [IO.File]::ReadAllText($logs[0].FullName)
     Assert-ValidationLogHealthy $log
-    Assert-PolicyMessages $log $Mode 1 $false
+    Assert-PolicyMessages $log $Mode $(if ($Scenario -eq 'control-transition') { 4 } else { 1 }) $false
     if ($game.ExitCode -ne 0 -or $log -match '\[npc fixture\] FAILED') { throw 'NPC scenario failed' }
-    if ($Scenario -in @('save','goal-save','goal-wait-save')) {
+    if ($Scenario -in @('save','goal-save','goal-wait-save','control-save')) {
         if ($log -notmatch '\[npc fixture\] saved_pending' -or $log -notmatch 'Game npc_trip_pending\.sav is successfully saved' -or !(Test-Path "$session/appdata/savedgames/npc_trip_pending.sav")) { throw 'Pending trip save was not acknowledged' }
     } elseif ($log -notmatch "\[npc fixture\] complete scenario=$Scenario\b") { throw 'Missing completed trip' }
-    if ($Scenario -in @('resume','goal-resume','goal-wait-resume') -and $log -notmatch '\[npc trip\] restore identity=') { throw 'Missing native planner restore' }
+    if ($Scenario -in @('resume','goal-resume','goal-wait-resume','control-resume') -and $log -notmatch '\[npc trip\] restore identity=') { throw 'Missing native planner restore' }
     if ($Scenario -in @('interrupt','spawn-combat','goal-combat') -and ($log -notmatch '\[npc fixture\] combat_observed' -or $log -notmatch '\[npc trip\].*interrupted=1')) { throw 'Missing real planner interruption' }
     if ($Scenario -eq 'goal-switch' -and ($log -notmatch '\[npc goal fixture\] observed_offline' -or $log -notmatch '\[npc goal fixture\] returned_online')) { throw 'Missing goal representation round trip' }
     if ($Scenario -eq 'moved' -and $log -notmatch '\[npc trip\].*phase=4 reason=2') { throw 'Missing SupplyMoved failure reason' }
