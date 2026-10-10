@@ -909,3 +909,28 @@ fn failed_return_to_a_refused_body_preserves_the_rejection_streak() {
     o.elapsed_ms = 1;
     assert_eq!(a.step(o, 0).decision.phase, Phase::Outbound);
 }
+
+#[test]
+fn corpse_representation_timeout_survives_save_and_does_not_create_refusal_history() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let mut o = observation(10.);
+    o.representation_ready = false;
+    assert_eq!(a.step(o, 0).decision.action, Action::Wait);
+    o.elapsed_ms = 299_999;
+    assert_eq!(a.step(o, 0).decision.action, Action::Wait);
+    a = Agent::load(&a.save()).unwrap();
+    o.elapsed_ms = 1;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Waiting);
+    assert_eq!(a.sources()[0].failure, FailureReason::None);
+    o.representation_ready = true;
+    o.elapsed_ms = 60_000;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Outbound);
+    o.elapsed_ms = 0;
+    let search = a.step(o, 0).decision;
+    assert_eq!(search.action, Action::Inspect);
+    assert!(a.search_rejected(search.command));
+    o.elapsed_ms = 60_000;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Outbound);
+}

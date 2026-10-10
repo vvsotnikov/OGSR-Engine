@@ -104,7 +104,8 @@ try {
     if ($Scenario.StartsWith('corpse') -and $Scenario -notin @('corpse-save','corpse-removed','corpse-rejected','corpse-rejected-offline') -and $log -notmatch '\[npc search\]') { throw 'Missing actual corpse inspection' }
     if ($Scenario -in @('corpse-rejected','corpse-rejected-offline')) {
         $representation = if ($Scenario -eq 'corpse-rejected-offline') { 0 } else { 1 }
-        if ([regex]::Matches($log, "\[npc search\] rejected .*online=$representation reason=").Count -lt 2) { throw 'Missing native rejection in the required representation' }
+        $cause = if ($representation -eq 0) { 'mass' } else { 'inventory' }
+        if ([regex]::Matches($log, "\[npc search\] rejected .*online=$representation .*\b$cause=[1-9][0-9]*").Count -lt 2) { throw 'Missing native rejection in the required representation' }
     }
     if ($Scenario -eq 'corpse-mixed' -and $log -notmatch '\[npc search\].*remaining=1') { throw 'Temporarily locked loot was forgotten' }
     if ($Scenario -eq 'corpse-static' -and $log -notmatch '\[npc search\].*remaining=0') { throw 'Statically untakeable loot remained a candidate' }

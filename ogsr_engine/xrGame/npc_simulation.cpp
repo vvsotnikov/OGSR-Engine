@@ -33,6 +33,25 @@ extern u16 script_server_object_version();
 namespace
 {
 constexpr u32 planner_chunk = 0x4e504331; // NPC1; optional root chunk, independent of legacy registry order.
+bool searchable_bandage(const CSE_ALifeDynamicObject* item, const CSE_ALifeHumanAbstract& corpse)
+{
+    return item && item->ID_Parent == corpse.ID && item->m_tClassID == CLSID_IITEM_BANDAGE &&
+        READ_IF_EXISTS(pSettings, r_bool, item->name(), "can_take", TRUE);
+}
+bool corpse_inventory_ready(const CALifeObjectRegistry& objects, const CSE_ALifeHumanAbstract& corpse, CAI_Stalker* owner)
+{
+    for (const auto id : corpse.children)
+        if (auto item = objects.object(id, true); searchable_bandage(item, corpse))
+        {
+            if (item->m_bOnline != corpse.m_bOnline) return false;
+            if (owner)
+            {
+                auto live = smart_cast<CInventoryItem*>(Level().Objects.net_Find(id));
+                if (!live || live->object().H_Parent() != owner) return false;
+            }
+        }
+    return true;
+}
 bool read_script_control(u16 id, NpcScriptControl& control)
 {
     luabind::functor<u32> query;
@@ -258,10 +277,17 @@ NpcDecision CNpcSimulation::observe(Entry& entry, const Fvector& here, u32 graph
             else input.supply = supply->ID_Parent == entry.npc->ID ? 2 : supply->ID_Parent == u16(-1) ? 1 : 3;
             input.supply_location = location(*supply);
             input.representation_ready = supply->m_bOnline == entry.npc->m_bOnline;
-            if (input.representation_ready && entry.npc->m_bOnline && body)
+            if (input.representation_ready && body && input.supply == 1)
             {
-                auto corpse = smart_cast<CAI_Stalker*>(Level().Objects.net_Find(supply->ID));
-                input.representation_ready = corpse && !corpse->g_Alive();
+                auto owner = entry.npc->m_bOnline ? smart_cast<CAI_Stalker*>(Level().Objects.net_Find(supply->ID)) : nullptr;
+                input.representation_ready = !entry.npc->m_bOnline || (owner && !owner->g_Alive());
+                // Contents are examined only at inspection range, never while
+                // travelling to a remembered body. Readiness is an execution
+                // fact, handled by Rust's ordinary representation timeout.
+                const auto& target = input.supply_location;
+                const Fvector position = Fvector().set(target.position[0], target.position[1], target.position[2]);
+                if (input.representation_ready && level == target.level && here.distance_to_sqr(position) <= 6.25f)
+                    input.representation_ready = corpse_inventory_ready(objects(), *smart_cast<CSE_ALifeHumanAbstract*>(supply), owner);
             }
         }
     // World facts are distinct from knowledge: Rust decides what can be learned
@@ -312,8 +338,7 @@ void CNpcSimulation::inspect(Entry& entry, CAI_Stalker* client, const NpcDecisio
             if (auto owned = smart_cast<CSE_ALifeInventoryItem*>(objects().object(id, true))) mass += owned->m_fMass;
     u32 representation_waits = 0, inventory_refusals = 0, mass_refusals = 0;
     for (const auto id : corpse->children)
-        if (auto item = objects().object(id, true); item && item->ID_Parent == corpse->ID && item->m_tClassID == CLSID_IITEM_BANDAGE &&
-            READ_IF_EXISTS(pSettings, r_bool, item->name(), "can_take", TRUE))
+        if (auto item = objects().object(id, true); searchable_bandage(item, *corpse))
         {
             // Temporarily refused items remain possible future supplies, but
             // must not hide another item that can be taken during this visit.
@@ -346,9 +371,8 @@ void CNpcSimulation::inspect(Entry& entry, CAI_Stalker* client, const NpcDecisio
         }
     if (!selected && count)
     {
-        // An item still being replicated may become acceptable next tick.
-        // Leave the command unlatched: retry inspection under Plan's existing
-        // active-trip deadline, without teaching an inventory refusal.
+        // observe() routes incomplete replication through the bounded
+        // representation wait. This guard must not create refusal history.
         if (representation_waits) return;
         R_ASSERT(npc_agent_search_rejected(entry.plan, decision.command));
         Msg("[npc search] rejected npc=%u corpse=%u online=%u reason=acceptance inventory=%u mass=%u", entry.npc->ID, corpse->ID,
