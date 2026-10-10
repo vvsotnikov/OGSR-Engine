@@ -16,6 +16,7 @@ pub struct Source {
     // Knowledge changes only after an attempted visit, own pickup, or explicit news.
     pub failure: FailureReason,
     pub(super) retry_ms: u32,
+    pub(super) rejection_delay_ms: u32,
     // Dense ranks keep observation recency bounded without a lifetime counter.
     pub(super) learned_order: u32,
 }
@@ -28,6 +29,7 @@ pub(super) struct Knowledge {
 impl Knowledge {
     pub const MAX_SOURCES: usize = 256;
     const SOURCE_RETRY_MS: u32 = 60_000;
+    const MAX_REJECTION_DELAY_MS: u32 = 900_000;
 
     pub fn from_assigned_trip(trip: &Plan) -> Self {
         // Plan's private state can only originate from its validated constructor
@@ -52,7 +54,8 @@ impl Knowledge {
             if rank >= sources.len()
                 || ranks[rank]
                 || !valid_source(home, source.navigation, source.physical)
-                || source.retry_ms > Self::SOURCE_RETRY_MS
+                || source.retry_ms > Self::MAX_REJECTION_DELAY_MS
+                || source.rejection_delay_ms > Self::MAX_REJECTION_DELAY_MS
             {
                 return None;
             }
@@ -126,19 +129,26 @@ impl Knowledge {
         if !self.remember(index, home, navigation, physical, kind) {
             return false;
         }
-        if previous.is_some_and(|s| {
-            s.kind == SourceKind::Corpse && s.failure == FailureReason::SupplyUnavailable
-        }) {
-            self.sources[index].failure = FailureReason::SupplyUnavailable;
+        if let Some(previous) = previous.filter(|s| s.kind == SourceKind::Corpse) {
+            let source = &mut self.sources[index];
+            if previous.failure == FailureReason::SupplyUnavailable {
+                source.failure = previous.failure;
+            }
+            source.retry_ms = previous.retry_ms;
+            source.rejection_delay_ms = previous.rejection_delay_ms;
         }
         true
     }
 
     pub fn defer(&mut self, index: usize) {
-        self.sources[index].retry_ms = Self::SOURCE_RETRY_MS;
+        let source = &mut self.sources[index];
+        source.rejection_delay_ms = (source.rejection_delay_ms * 2)
+            .clamp(Self::SOURCE_RETRY_MS, Self::MAX_REJECTION_DELAY_MS);
+        source.retry_ms = source.rejection_delay_ms;
     }
 
     pub fn searched(&mut self, index: usize, exhausted: bool) {
+        self.sources[index].rejection_delay_ms = 0;
         if exhausted {
             self.sources[index].failure = FailureReason::SupplyUnavailable;
         }
@@ -196,8 +206,8 @@ impl Knowledge {
             .enumerate()
             .filter(|(_, s)| s.failure == FailureReason::None && s.retry_ms == 0)
             .min_by(|(a, x), (b, y)| {
-                (x.kind as u32)
-                    .cmp(&(y.kind as u32))
+                (x.kind == SourceKind::Corpse)
+                    .cmp(&(y.kind == SourceKind::Corpse))
                     .then_with(|| {
                         current
                             .distance(x.navigation)
@@ -218,6 +228,7 @@ impl Source {
             learned_order,
             failure: FailureReason::None,
             retry_ms: 0,
+            rejection_delay_ms: 0,
         }
     }
 }

@@ -355,12 +355,12 @@ fn source_recency_migrates_and_rejects_duplicate_or_out_of_range_ranks() {
     // NPCG v2 has the same header but omits the final rank word of each source.
     let mut previous = saved[..64].to_vec();
     previous[4..8].copy_from_slice(&2u32.to_le_bytes());
-    for source in saved[64..].chunks_exact(64) {
+    for source in saved[64..].chunks_exact(68) {
         previous.extend_from_slice(&source[..56]);
     }
     assert_eq!(Agent::load(&previous).unwrap(), a);
     let mut duplicate = saved.clone();
-    duplicate[64 + 64 + 56..64 + 64 + 60].copy_from_slice(&0u32.to_le_bytes());
+    duplicate[64 + 68 + 56..64 + 68 + 60].copy_from_slice(&0u32.to_le_bytes());
     assert!(Agent::load(&duplicate).is_none());
     let mut outside = saved;
     outside[64 + 56..64 + 60].copy_from_slice(&2u32.to_le_bytes());
@@ -644,10 +644,10 @@ fn legacy_v4(bytes: &[u8]) -> Vec<u8> {
     let count = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
     let mut old = bytes[..64].to_vec();
     old[4..8].copy_from_slice(&4u32.to_le_bytes());
-    for source in bytes[64..64 + count * 64].chunks_exact(64) {
+    for source in bytes[64..64 + count * 68].chunks_exact(68) {
         old.extend_from_slice(&source[..60]);
     }
-    old.extend_from_slice(&bytes[64 + count * 64..]);
+    old.extend_from_slice(&bytes[64 + count * 68..]);
     old
 }
 
@@ -817,4 +817,52 @@ fn unseen_moved_corpse_is_learned_at_arrival_and_a_new_sighting_relocates_it() {
     a.observe_source(0, point(20.), point(20.));
     assert_eq!(a.sources()[0].kind, npc_sim::SourceKind::Corpse);
     assert_eq!(a.step(o, 0).decision.action, Action::Travel(point(20.)));
+}
+
+#[test]
+fn repeated_rejections_back_off_across_movement_and_save_then_reset_on_success() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let mut o = observation(10.);
+    let mut search = a.step(o, 0).decision;
+    for delay in [60_000, 120_000, 240_000, 480_000, 900_000, 900_000] {
+        assert_eq!(search.action, Action::Inspect);
+        assert!(a.search_rejected(search.command));
+        o.current = point(o.current.position[0] + 2.);
+        o.supply_location = o.current;
+        a.observe_source(0, o.current, o.current);
+        a = Agent::load(&a.save()).unwrap();
+        o.elapsed_ms = delay - 1;
+        assert_eq!(a.step(o, 0).decision.phase, Phase::Waiting);
+        o.elapsed_ms = 1;
+        assert_eq!(a.step(o, 0).decision.phase, Phase::Outbound);
+        search = a.step(o, 0).decision;
+    }
+    assert!(a.searched(search.command, false));
+    // A successful search ends the refusal streak, even if inventory was
+    // consumed before the next observation.
+    let next = a.step(o, 0).decision;
+    let next = if next.action == Action::Inspect {
+        next
+    } else {
+        a.step(o, 0).decision
+    };
+    assert!(a.search_rejected(next.command));
+    o.elapsed_ms = 60_000;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Outbound);
+}
+
+#[test]
+fn version_five_corpse_saves_default_to_no_rejection_streak() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    let saved = a.save();
+    let mut previous = saved[..64].to_vec();
+    previous[4..8].copy_from_slice(&5u32.to_le_bytes());
+    previous.extend_from_slice(&saved[64..128]);
+    assert_eq!(Agent::load(&previous).unwrap(), a);
+    let mut invalid = saved;
+    invalid[128..132].copy_from_slice(&900_001u32.to_le_bytes());
+    assert!(Agent::load(&invalid).is_none());
 }

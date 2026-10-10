@@ -297,7 +297,8 @@ void CNpcSimulation::inspect(Entry& entry, CAI_Stalker* client, const NpcDecisio
     CSE_ALifeDynamicObject* selected = nullptr;
     u32 count = 0;
     for (const auto id : corpse->children)
-        if (auto item = objects().object(id, true); item && item->ID_Parent == corpse->ID && item->m_tClassID == CLSID_IITEM_BANDAGE)
+        if (auto item = objects().object(id, true); item && item->ID_Parent == corpse->ID && item->m_tClassID == CLSID_IITEM_BANDAGE &&
+            READ_IF_EXISTS(pSettings, r_bool, item->name(), "can_take", TRUE))
         {
             ++count;
             if (!selected || item->ID < selected->ID) selected = item;
@@ -307,17 +308,18 @@ void CNpcSimulation::inspect(Entry& entry, CAI_Stalker* client, const NpcDecisio
         if (selected->m_bOnline != entry.npc->m_bOnline)
         {
             R_ASSERT(npc_agent_search_rejected(entry.plan, decision.command));
+            Msg("[npc search] rejected npc=%u corpse=%u item=%u online=%u reason=representation", entry.npc->ID, corpse->ID, selected->ID, u32(entry.npc->m_bOnline));
             return;
         }
-        // The server inventory budget also applies while the map is unloaded.
-        // Live inventory acceptance can impose further restrictions online.
+        // Offline inventories use ALife masses; online inventories account for
+        // dynamic item weights and equipment bonuses through CanTakeItem.
         float mass = smart_cast<CSE_ALifeInventoryItem*>(selected)->m_fMass;
         for (const auto id : entry.npc->children)
             if (auto owned = smart_cast<CSE_ALifeInventoryItem*>(objects().object(id, true))) mass += owned->m_fMass;
-        if (mass > entry.npc->m_fMaxItemMass || !READ_IF_EXISTS(pSettings, r_bool, selected->name(), "can_take", TRUE))
+        if (!client && mass > entry.npc->m_fMaxItemMass)
         {
             R_ASSERT(npc_agent_search_rejected(entry.plan, decision.command));
-            Msg("[npc search] rejected npc=%u corpse=%u item=%u", entry.npc->ID, corpse->ID, selected->ID);
+            Msg("[npc search] rejected npc=%u corpse=%u item=%u online=0 reason=mass", entry.npc->ID, corpse->ID, selected->ID);
             return;
         }
         if (client)
@@ -327,6 +329,7 @@ void CNpcSimulation::inspect(Entry& entry, CAI_Stalker* client, const NpcDecisio
             if (!item || !owner || owner->g_Alive() || item->object().H_Parent() != owner || !client->inventory().CanTakeItem(item))
             {
                 R_ASSERT(npc_agent_search_rejected(entry.plan, decision.command));
+                Msg("[npc search] rejected npc=%u corpse=%u item=%u online=1 reason=inventory", entry.npc->ID, corpse->ID, selected->ID);
                 return;
             }
             // Commit server ownership synchronously before another planner can
@@ -580,8 +583,8 @@ void CNpcSimulation::load(IReader& source)
             supplies.push_back(supply);
         }
         const u32 size = chunk->r_u32();
-        // NPCG v5 header + bounded source memory + optional Plan snapshot.
-        R_ASSERT(npc && m_entries.find(npc) == m_entries.end() && size <= chunk->elapsed() && size <= 64 + 256 * 64 + 148);
+        // NPCG v6 header + bounded source memory + optional Plan snapshot.
+        R_ASSERT(npc && m_entries.find(npc) == m_entries.end() && size <= chunk->elapsed() && size <= 64 + 256 * 68 + 148);
         xr_vector<u8> bytes(size);
         chunk->r(bytes.data(), size);
         xr_vector<u8> binder_data;

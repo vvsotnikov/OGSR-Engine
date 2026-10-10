@@ -4,7 +4,7 @@ impl Agent {
     pub fn save(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(b"NPCG");
-        put(&mut bytes, 5);
+        put(&mut bytes, 6);
         bytes.extend_from_slice(&self.identity.to_le_bytes());
         bytes.extend_from_slice(&self.command.to_le_bytes());
         put_location(&mut bytes, self.home);
@@ -26,6 +26,7 @@ impl Agent {
             put(&mut bytes, source.retry_ms);
             put(&mut bytes, source.learned_order);
             put(&mut bytes, source.kind as u32);
+            put(&mut bytes, source.rejection_delay_ms);
         }
         if let Some(trip) = &self.activity {
             bytes.extend(trip.save());
@@ -42,7 +43,7 @@ impl Agent {
             return None;
         }
         let version = r.u32()?;
-        if !(2..=5).contains(&version) {
+        if !(2..=6).contains(&version) {
             return None;
         }
         let identity = u64::from_le_bytes(r.take()?);
@@ -94,12 +95,14 @@ impl Agent {
             } else {
                 SourceKind::LooseItem
             };
+            let rejection_delay_ms = if version >= 6 { r.u32()? } else { 0 };
             sources.push(Source {
                 kind,
                 navigation,
                 physical,
                 failure,
                 retry_ms,
+                rejection_delay_ms,
                 learned_order,
             });
         }

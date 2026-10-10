@@ -111,8 +111,11 @@ and its looter must share a representation. Corpses remain online on the loaded
 map under the existing engine policy, so off-map inspection is validated through
 an actual level transition, not by forcing only the looter offline.
 
-Both representations enforce the server inventory mass budget and item takeability.
-Online execution additionally respects native inventory acceptance, whose dynamic
-weapon weights and equipped bonuses are not represented by offline item masses.
-A refusal ends the current attempt and retains the source with a retry cooldown;
-it must not mark the body empty or hold execution until the trip deadline.
+Corpse searches skip statically untakeable items. Online searches respect native
+inventory acceptance; offline searches use the ALife mass budget, which cannot
+represent dynamic weapon weights or equipment bonuses. These are search rules;
+loose-item pickup retains its existing engine path.
+A refusal ends the current attempt and retains the source with exponential retry
+backoff, capped at fifteen minutes. Sightings, body movement and saves preserve
+that backoff; a successful search resets it. A refusal
+must not mark the body empty or hold execution until the trip deadline.

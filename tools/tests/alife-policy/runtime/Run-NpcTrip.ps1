@@ -46,7 +46,6 @@ $config = "$runtime/gamedata/config/misc/items.ltx"
 if ((Get-Content $config -Raw).Contains('[npc_trip_stalker]')) { throw 'Fixture section already exists' }
 Add-Content $config "`n[npc_trip_stalker]:stalker" -Encoding ascii
 if ($Scenario -ne 'fallback') { Add-Content $config 'npc_planner = supply_trip' -Encoding ascii }
-if ($Scenario -eq 'corpse-rejected') { Add-Content $config 'inv_max_weight = 0' -Encoding ascii }
 if ($Scenario -eq 'corpse-rejected-offline') { Add-Content $config 'max_item_mass = 0' -Encoding ascii }
 if ($Scenario -eq 'elevated') { Add-Content $config "`n[npc_trip_elevated_bandage]:bandage`nuse_ai_locations = false" -Encoding ascii }
 if ($Scenario.StartsWith('control-')) {
@@ -102,6 +101,10 @@ try {
     if ($Scenario -eq 'perception-memory' -and $log -notmatch '\[npc perception fixture\] nonpersonal_ignored') { throw 'Missing non-personal memory rejection' }
     if ($Scenario -eq 'perception-resume' -and $log -match '\[npc perception\] npc=') { throw 'Offline continuation acquired a new sighting' }
     if ($Scenario.StartsWith('corpse') -and $Scenario -notin @('corpse-save','corpse-removed','corpse-rejected','corpse-rejected-offline') -and $log -notmatch '\[npc search\]') { throw 'Missing actual corpse inspection' }
+    if ($Scenario -in @('corpse-rejected','corpse-rejected-offline')) {
+        $representation = if ($Scenario -eq 'corpse-rejected-offline') { 0 } else { 1 }
+        if ([regex]::Matches($log, "\[npc search\] rejected .*online=$representation reason=").Count -lt 2) { throw 'Missing native rejection in the required representation' }
+    }
     $meta.status = 'npc-completed'
     Write-Output "COMPLETE npc scenario=$Scenario session=$session"
 } catch {

@@ -365,11 +365,13 @@ void CDangerManager::add(const CDangerObject& object)
         // Owned planners must finish the initial reaction before inspecting a
         // body. Retain its event time but keep tracking its physical position.
         if (object.type() == CDangerObject::eDangerTypeFreshEntityCorpse)
+        {
             if (auto simulation = CNpcSimulation::active(); simulation && simulation->owns(m_object->ID()))
             {
                 *I = CDangerObject(object.object(), object.position(), I->time(), object.type(), object.perceive_type(), object.dependent_object());
                 return;
             }
+        }
 
         *I = object;
         return;

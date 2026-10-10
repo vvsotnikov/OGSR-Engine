@@ -7,6 +7,7 @@ return function(cfg)
         local state=dofile(state_path)
         for key,value in pairs(state) do cfg[key]=value end
     end
+    local refusal_waits,waiting_refusal=0,false
     local npc,body,item,rival = cfg.npc,cfg.body,cfg.item,cfg.rival
     local stage,started,since,finished = cfg.stage or 0,nil,nil,false
     local home,node,moved,attacked,fought,released,actor_position,corpse_time,reacted,extra,consumed,ordinary,ordinary_time,ordinary_refreshed
@@ -92,9 +93,16 @@ return function(cfg)
                 rival=spawn("npc_trip_stalker",34548); assert(alife():start_supply_goal(rival))
             end
             if cfg.scenario=="corpse-danger" then ordinary=spawn("stalker",34548) end
-            stage=3
+            stage=3; since=now
         elseif stage==3 then
             local client=level.object_by_id(npc)
+            if cfg.scenario=="corpse-rejected" then
+                if not client or now-since<2000 then return end
+                local loot=assert(level.object_by_id(item))
+                local flags=loot:get_inventory_item_flags()
+                flags:set(global_flags.FCanTake,false)
+                loot:set_inventory_item_flags(flags)
+            end
             if client and corpse then client:set_sight(corpse) end
             if rival and corpse and level.object_by_id(rival) then level.object_by_id(rival):set_sight(corpse) end
             local phase=alife():supply_trip_phase(npc)
@@ -156,9 +164,9 @@ return function(cfg)
             elseif cfg.scenario=="corpse-rejected" or cfg.scenario=="corpse-rejected-offline" then
                 assert(object(item).parent_id==body,"Refused item was transferred")
                 if moved and phase==6 then
-                    since=since or now
-                    if now-since>10000 then finish() end
-                else since=now end
+                    if not waiting_refusal then refusal_waits=refusal_waits+1; waiting_refusal=true; since=now end
+                    if refusal_waits>=2 and now-since>10000 then finish() end
+                else waiting_refusal=false; since=now end
             elseif rival then
                 local parent=assert(object(item)).parent_id
                 local other=parent==npc and rival or npc
