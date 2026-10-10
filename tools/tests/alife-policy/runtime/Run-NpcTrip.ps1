@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory)][string]$InstallRoot,
     [Parameter(Mandatory)][ValidatePattern('^bin_[a-zA-Z0-9_]+$')][string]$Package,
     [ValidateSet('Release','Debug')][string]$Configuration = 'Debug',
-    [ValidateSet('basic','interrupt','offline','switch','missing','death','mismatch','natural','elevated','boundary','far','moved','spawn-combat','save','resume','fallback','goal-cycle','goal-displaced','goal-combat','goal-switch','goal-competition','goal-save','goal-resume','goal-wait-save','goal-wait-resume','control-save','control-resume','control-meet','control-transition','perception','perception-save','perception-resume','perception-memory','corpse','corpse-revisit','corpse-danger','corpse-rejected','corpse-rejected-offline','corpse-combat','corpse-empty','corpse-removed','corpse-competition','corpse-offline','corpse-save','corpse-resume')][string]$Scenario = 'basic',
+    [ValidateSet('basic','interrupt','offline','switch','missing','death','mismatch','natural','elevated','boundary','far','moved','spawn-combat','save','resume','fallback','goal-cycle','goal-displaced','goal-combat','goal-switch','goal-competition','goal-save','goal-resume','goal-wait-save','goal-wait-resume','control-save','control-resume','control-meet','control-transition','perception','perception-save','perception-resume','perception-memory','corpse','corpse-revisit','corpse-mixed','corpse-static','corpse-danger','corpse-rejected','corpse-rejected-offline','corpse-combat','corpse-empty','corpse-removed','corpse-competition','corpse-offline','corpse-save','corpse-resume')][string]$Scenario = 'basic',
     [ValidateSet('whole-map','distance')][string]$Mode = 'whole-map',
     [string]$ResumeSession = '',
     [switch]$GoalOffline,
@@ -47,6 +47,7 @@ if ((Get-Content $config -Raw).Contains('[npc_trip_stalker]')) { throw 'Fixture 
 Add-Content $config "`n[npc_trip_stalker]:stalker" -Encoding ascii
 if ($Scenario -ne 'fallback') { Add-Content $config 'npc_planner = supply_trip' -Encoding ascii }
 if ($Scenario -eq 'corpse-rejected-offline') { Add-Content $config 'max_item_mass = 0' -Encoding ascii }
+if ($Scenario -eq 'corpse-static') { Add-Content $config "`n[npc_corpse_bandage]:bandage" -Encoding ascii }
 if ($Scenario -eq 'elevated') { Add-Content $config "`n[npc_trip_elevated_bandage]:bandage`nuse_ai_locations = false" -Encoding ascii }
 if ($Scenario.StartsWith('control-')) {
     Add-Content $config 'custom_data = scripts\npc_control.ltx' -Encoding ascii

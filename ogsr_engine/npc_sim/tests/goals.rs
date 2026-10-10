@@ -866,3 +866,24 @@ fn version_five_corpse_saves_default_to_no_rejection_streak() {
     invalid[128..132].copy_from_slice(&900_001u32.to_le_bytes());
     assert!(Agent::load(&invalid).is_none());
 }
+
+#[test]
+fn moved_corpse_reopens_a_stalled_route_but_loose_saves_cannot_have_search_backoff() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let mut stalled = observation(0.);
+    stalled.elapsed_ms = 60_000;
+    assert_eq!(a.step(stalled, 0).decision.phase, Phase::Waiting);
+    a.observe_source(0, point(20.), point(20.));
+    assert_eq!(
+        a.step(observation(0.), 0).decision.action,
+        Action::Travel(point(20.))
+    );
+    let mut loose = agent().save();
+    loose[116..120].copy_from_slice(&60_001u32.to_le_bytes());
+    assert!(Agent::load(&loose).is_none());
+    loose[116..120].copy_from_slice(&0u32.to_le_bytes());
+    loose[128..132].copy_from_slice(&60_000u32.to_le_bytes());
+    assert!(Agent::load(&loose).is_none());
+}

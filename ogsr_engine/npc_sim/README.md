@@ -115,6 +115,9 @@ Corpse searches skip statically untakeable items. Online searches respect native
 inventory acceptance; offline searches use the ALife mass budget, which cannot
 represent dynamic weapon weights or equipment bonuses. These are search rules;
 loose-item pickup retains its existing engine path.
+A body with only temporarily refused items is not known to be empty. Selection
+must try other acceptable items before deferring the body. Backoff is per source:
+one refusal does not establish that every other body holds equally heavy items.
 A refusal ends the current attempt and retains the source with exponential retry
 backoff, capped at fifteen minutes. Sightings, body movement and saves preserve
 that backoff; a successful search resets it. A refusal

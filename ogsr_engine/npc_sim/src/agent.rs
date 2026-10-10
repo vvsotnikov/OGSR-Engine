@@ -150,7 +150,7 @@ impl Agent {
     }
 
     /// A real inspection could not acquire its item. Keep the source knowledge
-    /// but end this attempt, with the same cooldown used for other visit failures.
+    /// but end this attempt, with a persistent, capped exponential backoff.
     pub fn search_rejected(&mut self, command: u64) -> bool {
         let status = self.status();
         if status.decision.command != command || status.decision.action != Action::Inspect {

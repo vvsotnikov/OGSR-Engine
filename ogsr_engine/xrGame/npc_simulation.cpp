@@ -296,42 +296,46 @@ void CNpcSimulation::inspect(Entry& entry, CAI_Stalker* client, const NpcDecisio
     if (here.level != there.level || delta.square_magnitude() > 6.25f) return;
     CSE_ALifeDynamicObject* selected = nullptr;
     u32 count = 0;
+    float mass = 0;
+    if (!client)
+        for (const auto id : entry.npc->children)
+            if (auto owned = smart_cast<CSE_ALifeInventoryItem*>(objects().object(id, true))) mass += owned->m_fMass;
+    LPCSTR refusal = "representation";
     for (const auto id : corpse->children)
         if (auto item = objects().object(id, true); item && item->ID_Parent == corpse->ID && item->m_tClassID == CLSID_IITEM_BANDAGE &&
             READ_IF_EXISTS(pSettings, r_bool, item->name(), "can_take", TRUE))
         {
+            // Temporarily refused items remain possible future supplies, but
+            // must not hide another item that can be taken during this visit.
             ++count;
+            if (item->m_bOnline != entry.npc->m_bOnline) continue;
+            if (client)
+            {
+                auto live = smart_cast<CInventoryItem*>(Level().Objects.net_Find(id));
+                auto owner = smart_cast<CAI_Stalker*>(Level().Objects.net_Find(corpse->ID));
+                if (!live || !owner || owner->g_Alive() || live->object().H_Parent() != owner || !client->inventory().CanTakeItem(live))
+                {
+                    refusal = "inventory";
+                    continue;
+                }
+            }
+            else if (mass + smart_cast<CSE_ALifeInventoryItem*>(item)->m_fMass > entry.npc->m_fMaxItemMass)
+            {
+                refusal = "mass";
+                continue;
+            }
             if (!selected || item->ID < selected->ID) selected = item;
         }
+    if (!selected && count)
+    {
+        R_ASSERT(npc_agent_search_rejected(entry.plan, decision.command));
+        Msg("[npc search] rejected npc=%u corpse=%u online=%u reason=%s", entry.npc->ID, corpse->ID, u32(entry.npc->m_bOnline), refusal);
+        return;
+    }
     if (selected)
     {
-        if (selected->m_bOnline != entry.npc->m_bOnline)
-        {
-            R_ASSERT(npc_agent_search_rejected(entry.plan, decision.command));
-            Msg("[npc search] rejected npc=%u corpse=%u item=%u online=%u reason=representation", entry.npc->ID, corpse->ID, selected->ID, u32(entry.npc->m_bOnline));
-            return;
-        }
-        // Offline inventories use ALife masses; online inventories account for
-        // dynamic item weights and equipment bonuses through CanTakeItem.
-        float mass = smart_cast<CSE_ALifeInventoryItem*>(selected)->m_fMass;
-        for (const auto id : entry.npc->children)
-            if (auto owned = smart_cast<CSE_ALifeInventoryItem*>(objects().object(id, true))) mass += owned->m_fMass;
-        if (!client && mass > entry.npc->m_fMaxItemMass)
-        {
-            R_ASSERT(npc_agent_search_rejected(entry.plan, decision.command));
-            Msg("[npc search] rejected npc=%u corpse=%u item=%u online=0 reason=mass", entry.npc->ID, corpse->ID, selected->ID);
-            return;
-        }
         if (client)
         {
-            auto item = smart_cast<CInventoryItem*>(Level().Objects.net_Find(selected->ID));
-            auto owner = smart_cast<CAI_Stalker*>(Level().Objects.net_Find(corpse->ID));
-            if (!item || !owner || owner->g_Alive() || item->object().H_Parent() != owner || !client->inventory().CanTakeItem(item))
-            {
-                R_ASSERT(npc_agent_search_rejected(entry.plan, decision.command));
-                Msg("[npc search] rejected npc=%u corpse=%u item=%u online=1 reason=inventory", entry.npc->ID, corpse->ID, selected->ID);
-                return;
-            }
             // Commit server ownership synchronously before another planner can
             // search this corpse; packets only replicate the committed transfer.
             // Both endpoints remain attached: single-player OnDetach/OnTouch's

@@ -85,7 +85,7 @@ return function(cfg)
             corpse:iterate_inventory(function(_,it) if it:section()=="bandage" then remove[#remove+1]=it:id() end end,corpse)
             for _,id in ipairs(remove) do alife():release(object(id),true) end
             if cfg.scenario~="corpse-empty" then item=spawn("bandage",node,body) end
-            if cfg.scenario=="corpse-revisit" then extra=spawn("bandage",node,body) end
+            if (cfg.scenario=="corpse-revisit" or cfg.scenario=="corpse-mixed" or cfg.scenario=="corpse-static") then extra=spawn(cfg.scenario=="corpse-static" and "npc_corpse_bandage" or "bandage",node,body) end
             stage=2; since=now
         elseif stage==2 and now-since>2000 then
             npc=spawn("npc_trip_stalker",34548); assert(alife():start_supply_goal(npc))
@@ -96,12 +96,21 @@ return function(cfg)
             stage=3; since=now
         elseif stage==3 then
             local client=level.object_by_id(npc)
-            if cfg.scenario=="corpse-rejected" then
+            if cfg.scenario=="corpse-rejected" or cfg.scenario=="corpse-mixed" or cfg.scenario=="corpse-static" then
                 if not client or now-since<2000 then return end
+                if extra and item>extra then item,extra=extra,item end
                 local loot=assert(level.object_by_id(item))
-                local flags=loot:get_inventory_item_flags()
-                flags:set(global_flags.FCanTake,false)
-                loot:set_inventory_item_flags(flags)
+                if cfg.scenario=="corpse-static" then
+                    -- Change only this isolated process's fixture section after
+                    -- spawning so native starter-inventory creation is unaffected.
+                    local ini=system_ini()
+                    local readonly=ini.readonly; ini.readonly=false
+                    ini:w_bool(loot:section(),"can_take",false); ini.readonly=readonly
+                else
+                    local flags=loot:get_inventory_item_flags()
+                    flags:set(global_flags.FCanTake,false)
+                    loot:set_inventory_item_flags(flags)
+                end
             end
             if client and corpse then client:set_sight(corpse) end
             if rival and corpse and level.object_by_id(rival) then level.object_by_id(rival):set_sight(corpse) end
@@ -177,6 +186,11 @@ return function(cfg)
                     finish()
                 end
             elseif phase==3 and (not consumed or object(item).parent_id==npc) then
+                if cfg.scenario=="corpse-mixed" or cfg.scenario=="corpse-static" then
+                    assert(item<extra and object(item).parent_id==body and object(extra).parent_id==npc,"Locked item blocked acceptable loot")
+                    assert(here:distance_to(home)<=1.6)
+                    finish(); return
+                end
                 if cfg.scenario=="corpse-revisit" and not consumed and object(extra).parent_id==npc then item,extra=extra,item end
                 assert(object(item).parent_id==npc and here:distance_to(home)<=1.6,"No real corpse loot/return")
                 if cfg.scenario=="corpse-revisit" and not consumed then

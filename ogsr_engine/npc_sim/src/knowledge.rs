@@ -54,7 +54,8 @@ impl Knowledge {
             if rank >= sources.len()
                 || ranks[rank]
                 || !valid_source(home, source.navigation, source.physical)
-                || source.retry_ms > Self::MAX_REJECTION_DELAY_MS
+                || source.retry_ms > Self::SOURCE_RETRY_MS.max(source.rejection_delay_ms)
+                || (source.kind == SourceKind::LooseItem && source.rejection_delay_ms != 0)
                 || source.rejection_delay_ms > Self::MAX_REJECTION_DELAY_MS
             {
                 return None;
@@ -134,7 +135,9 @@ impl Knowledge {
             if previous.failure == FailureReason::SupplyUnavailable {
                 source.failure = previous.failure;
             }
-            source.retry_ms = previous.retry_ms;
+            if previous.rejection_delay_ms != 0 {
+                source.retry_ms = previous.retry_ms;
+            }
             source.rejection_delay_ms = previous.rejection_delay_ms;
         }
         true
@@ -197,6 +200,7 @@ impl Knowledge {
             self.sources[i].failure = reason;
         } else {
             self.sources[i].retry_ms = Self::SOURCE_RETRY_MS;
+            self.sources[i].rejection_delay_ms = 0;
         }
     }
 
