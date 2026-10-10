@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory)][string]$InstallRoot,
     [Parameter(Mandatory)][ValidatePattern('^bin_[a-zA-Z0-9_]+$')][string]$Package,
     [ValidateSet('Release','Debug')][string]$Configuration = 'Debug',
-    [ValidateSet('basic','interrupt','offline','switch','missing','death','mismatch','natural','elevated','boundary','far','moved','spawn-combat','save','resume','fallback','goal-cycle','goal-displaced','goal-combat','goal-switch','goal-competition','goal-save','goal-resume','goal-wait-save','goal-wait-resume','control-save','control-resume','control-meet','control-transition','perception','perception-save','perception-resume','perception-memory','corpse','corpse-combat','corpse-empty','corpse-removed','corpse-competition','corpse-offline','corpse-save','corpse-resume')][string]$Scenario = 'basic',
+    [ValidateSet('basic','interrupt','offline','switch','missing','death','mismatch','natural','elevated','boundary','far','moved','spawn-combat','save','resume','fallback','goal-cycle','goal-displaced','goal-combat','goal-switch','goal-competition','goal-save','goal-resume','goal-wait-save','goal-wait-resume','control-save','control-resume','control-meet','control-transition','perception','perception-save','perception-resume','perception-memory','corpse','corpse-revisit','corpse-danger','corpse-rejected','corpse-rejected-offline','corpse-combat','corpse-empty','corpse-removed','corpse-competition','corpse-offline','corpse-save','corpse-resume')][string]$Scenario = 'basic',
     [ValidateSet('whole-map','distance')][string]$Mode = 'whole-map',
     [string]$ResumeSession = '',
     [switch]$GoalOffline,
@@ -46,6 +46,8 @@ $config = "$runtime/gamedata/config/misc/items.ltx"
 if ((Get-Content $config -Raw).Contains('[npc_trip_stalker]')) { throw 'Fixture section already exists' }
 Add-Content $config "`n[npc_trip_stalker]:stalker" -Encoding ascii
 if ($Scenario -ne 'fallback') { Add-Content $config 'npc_planner = supply_trip' -Encoding ascii }
+if ($Scenario -eq 'corpse-rejected') { Add-Content $config 'inv_max_weight = 0' -Encoding ascii }
+if ($Scenario -eq 'corpse-rejected-offline') { Add-Content $config 'max_item_mass = 0' -Encoding ascii }
 if ($Scenario -eq 'elevated') { Add-Content $config "`n[npc_trip_elevated_bandage]:bandage`nuse_ai_locations = false" -Encoding ascii }
 if ($Scenario.StartsWith('control-')) {
     Add-Content $config 'custom_data = scripts\npc_control.ltx' -Encoding ascii
@@ -84,7 +86,7 @@ try {
     if ($logs.Count -ne 1) { throw 'Expected one log' }
     $log = [IO.File]::ReadAllText($logs[0].FullName)
     Assert-ValidationLogHealthy $log
-    Assert-PolicyMessages $log $Mode $(if ($Scenario -eq 'control-transition') { 4 } elseif ($Scenario -in @('corpse-offline','corpse-save')) { 2 } else { 1 }) $false
+    Assert-PolicyMessages $log $Mode $(if ($Scenario -eq 'control-transition') { 4 } elseif ($Scenario -in @('corpse-offline','corpse-save','corpse-rejected-offline')) { 2 } else { 1 }) $false
     if ($game.ExitCode -ne 0 -or $log -match '\[npc fixture\] FAILED') { throw 'NPC scenario failed' }
     if ($Scenario -in @('save','goal-save','goal-wait-save','control-save','perception-save','corpse-save')) {
         if ($log -notmatch '\[npc fixture\] saved_pending' -or $log -notmatch 'Game npc_trip_pending\.sav is successfully saved' -or !(Test-Path "$session/appdata/savedgames/npc_trip_pending.sav")) { throw 'Pending trip save was not acknowledged' }
@@ -99,7 +101,7 @@ try {
         $log -notmatch '\[npc perception\] npc=' -or $log -notmatch '\[npc perception fixture\] discovered' -or $log -notmatch '\[npc perception fixture\] online_unseen')) { throw 'Missing real perception sequence' }
     if ($Scenario -eq 'perception-memory' -and $log -notmatch '\[npc perception fixture\] nonpersonal_ignored') { throw 'Missing non-personal memory rejection' }
     if ($Scenario -eq 'perception-resume' -and $log -match '\[npc perception\] npc=') { throw 'Offline continuation acquired a new sighting' }
-    if ($Scenario.StartsWith('corpse') -and $Scenario -notin @('corpse-save','corpse-removed') -and $log -notmatch '\[npc search\]') { throw 'Missing actual corpse inspection' }
+    if ($Scenario.StartsWith('corpse') -and $Scenario -notin @('corpse-save','corpse-removed','corpse-rejected','corpse-rejected-offline') -and $log -notmatch '\[npc search\]') { throw 'Missing actual corpse inspection' }
     $meta.status = 'npc-completed'
     Write-Output "COMPLETE npc scenario=$Scenario session=$session"
 } catch {

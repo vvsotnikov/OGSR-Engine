@@ -99,7 +99,9 @@ activity's counter could mistake old execution state for a new request.
 Seeing a body establishes a possible search location, not knowledge of its
 inventory. Only inspection at the body may enumerate its contents. Moving a
 searched body or seeing it again does not reveal replenishment; exhausted-source
-knowledge survives those sightings and save/reload. Offline execution uses the
+knowledge survives those sightings and save/reload until that source is evicted.
+Known loose bandages take priority over body searches, then distance breaks ties.
+Offline execution uses the
 same remembered location and search result, without discovering unseen bodies.
 
 Corpse looting commits authoritative server ownership before another NPC can
@@ -108,3 +110,9 @@ they are not two independent attempts to acquire a still-available item. A body
 and its looter must share a representation. Corpses remain online on the loaded
 map under the existing engine policy, so off-map inspection is validated through
 an actual level transition, not by forcing only the looter offline.
+
+Both representations enforce the server inventory mass budget and item takeability.
+Online execution additionally respects native inventory acceptance, whose dynamic
+weapon weights and equipped bonuses are not represented by offline item masses.
+A refusal ends the current attempt and retains the source with a retry cooldown;
+it must not mark the body empty or hold execution until the trip deadline.

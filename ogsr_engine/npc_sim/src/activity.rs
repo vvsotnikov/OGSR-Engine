@@ -195,7 +195,7 @@ impl Plan {
                     decision = self.decision();
                 }
             }
-            Action::Collect | Action::Inspect => {
+            Action::Collect => {
                 if !o.representation_ready || unknown_item {
                     self.unavailable_ms = self
                         .unavailable_ms
@@ -223,6 +223,7 @@ impl Plan {
                     }
                 }
             }
+            Action::Inspect => unreachable!("Only Agent translates a collection into inspection"),
             Action::Wait => {}
         }
         decision

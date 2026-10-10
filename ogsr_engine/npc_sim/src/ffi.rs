@@ -335,6 +335,11 @@ pub unsafe extern "C" fn npc_agent_searched(
     unsafe { plan.as_mut() }.is_some_and(|p| p.searched(command, exhausted))
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn npc_agent_search_rejected(plan: *mut Agent, command: u64) -> bool {
+    unsafe { plan.as_mut() }.is_some_and(|p| p.search_rejected(command))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

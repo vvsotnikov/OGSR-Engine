@@ -97,11 +97,13 @@ impl Knowledge {
         home: Location,
         navigation: Location,
         physical: Location,
+        kind: SourceKind,
     ) -> bool {
         if !self.accepts(index, home, navigation, physical) {
             return false;
         }
         let mut source = Source::new(navigation, physical, self.sources.len() as u32);
+        source.kind = kind;
         if index == self.sources.len() {
             self.sources.push(source);
         } else {
@@ -112,8 +114,28 @@ impl Knowledge {
         true
     }
 
-    pub fn set_kind(&mut self, index: usize, kind: SourceKind) {
-        self.sources[index].kind = kind;
+    pub fn relocate(
+        &mut self,
+        index: usize,
+        home: Location,
+        navigation: Location,
+        physical: Location,
+    ) -> bool {
+        let previous = self.sources.get(index).copied();
+        let kind = previous.map_or(SourceKind::LooseItem, |s| s.kind);
+        if !self.remember(index, home, navigation, physical, kind) {
+            return false;
+        }
+        if previous.is_some_and(|s| {
+            s.kind == SourceKind::Corpse && s.failure == FailureReason::SupplyUnavailable
+        }) {
+            self.sources[index].failure = FailureReason::SupplyUnavailable;
+        }
+        true
+    }
+
+    pub fn defer(&mut self, index: usize) {
+        self.sources[index].retry_ms = Self::SOURCE_RETRY_MS;
     }
 
     pub fn searched(&mut self, index: usize, exhausted: bool) {
@@ -174,9 +196,13 @@ impl Knowledge {
             .enumerate()
             .filter(|(_, s)| s.failure == FailureReason::None && s.retry_ms == 0)
             .min_by(|(a, x), (b, y)| {
-                current
-                    .distance(x.navigation)
-                    .total_cmp(&current.distance(y.navigation))
+                (x.kind as u32)
+                    .cmp(&(y.kind as u32))
+                    .then_with(|| {
+                        current
+                            .distance(x.navigation)
+                            .total_cmp(&current.distance(y.navigation))
+                    })
                     .then(a.cmp(b))
             })
             .map(|(i, _)| i)

@@ -9,13 +9,14 @@ return function(cfg)
     end
     local npc,body,item,rival = cfg.npc,cfg.body,cfg.item,cfg.rival
     local stage,started,since,finished = cfg.stage or 0,nil,nil,false
-    local home,node,moved,attacked,fought,released,actor_position,corpse_time,reacted
+    local home,node,moved,attacked,fought,released,actor_position,corpse_time,reacted,extra,consumed,ordinary,ordinary_time,ordinary_refreshed
     local function object(id) return id and alife():object(id) end
     local function spawn(section,vertex,parent)
         return assert(alife():create(section,level.vertex_position(vertex),vertex,cross_table():vertex(vertex):game_vertex_id(),parent or 65535)).id
     end
     local function finish()
         if cfg.scenario=="corpse" or cfg.scenario=="corpse-empty" then assert(reacted,"Missing initial corpse danger reaction") end
+        if cfg.scenario=="corpse-danger" then assert(ordinary_refreshed,"Legacy corpse danger did not refresh") end
         log1("[npc fixture] complete scenario=" .. cfg.scenario)
         finished=true; get_console():execute("quit")
     end
@@ -59,6 +60,15 @@ return function(cfg)
         end
         assert(now-started<180000,"Corpse scenario timed out stage="..stage)
         local corpse=body and level.object_by_id(body)
+        local legacy=ordinary and level.object_by_id(ordinary)
+        if legacy and corpse then
+            legacy:set_sight(corpse)
+            local threat=legacy:best_danger()
+            if threat and threat:type()==danger_object.entity_corpse and threat:object() and threat:object():id()==body then
+                if ordinary_time and threat:time()>ordinary_time+1000 then ordinary_refreshed=true end
+                ordinary_time=ordinary_time or threat:time()
+            end
+        end
         local observer=npc and level.object_by_id(npc)
         local danger=observer and observer:best_danger()
         if danger and danger:type()==danger_object.entity_corpse and danger:object() and danger:object():id()==body then
@@ -74,12 +84,14 @@ return function(cfg)
             corpse:iterate_inventory(function(_,it) if it:section()=="bandage" then remove[#remove+1]=it:id() end end,corpse)
             for _,id in ipairs(remove) do alife():release(object(id),true) end
             if cfg.scenario~="corpse-empty" then item=spawn("bandage",node,body) end
+            if cfg.scenario=="corpse-revisit" then extra=spawn("bandage",node,body) end
             stage=2; since=now
         elseif stage==2 and now-since>2000 then
             npc=spawn("npc_trip_stalker",34548); assert(alife():start_supply_goal(npc))
             if cfg.scenario=="corpse-competition" then
                 rival=spawn("npc_trip_stalker",34548); assert(alife():start_supply_goal(rival))
             end
+            if cfg.scenario=="corpse-danger" then ordinary=spawn("stalker",34548) end
             stage=3
         elseif stage==3 then
             local client=level.object_by_id(npc)
@@ -91,7 +103,7 @@ return function(cfg)
                 if cfg.scenario=="corpse-removed" then
                     if item then alife():release(object(item),true); item=nil end
                     alife():release(object(body),true); body=nil
-                elseif cfg.scenario=="corpse-offline" or cfg.scenario=="corpse-save" then
+                elseif cfg.scenario=="corpse-offline" or cfg.scenario=="corpse-save" or cfg.scenario=="corpse-rejected-offline" then
                     local state=assert(io.open(state_path,"w"))
                     state:write(string.format("return {npc=%d,body=%d,item=%d,stage=5,x=%.9g,y=%.9g,z=%.9g}",npc,body,item,home.x,home.y,home.z))
                     state:close()
@@ -141,6 +153,12 @@ return function(cfg)
                     since=since or now
                     if now-since>10000 then finish() end
                 else since=now end
+            elseif cfg.scenario=="corpse-rejected" or cfg.scenario=="corpse-rejected-offline" then
+                assert(object(item).parent_id==body,"Refused item was transferred")
+                if moved and phase==6 then
+                    since=since or now
+                    if now-since>10000 then finish() end
+                else since=now end
             elseif rival then
                 local parent=assert(object(item)).parent_id
                 local other=parent==npc and rival or npc
@@ -150,8 +168,16 @@ return function(cfg)
                     assert(winner:object("bandage") and not loser:object("bandage"),"Competition duplicated or lost loot")
                     finish()
                 end
-            elseif phase==3 then
+            elseif phase==3 and (not consumed or object(item).parent_id==npc) then
                 assert(object(item).parent_id==npc and here:distance_to(home)<=1.6,"No real corpse loot/return")
+                if cfg.scenario=="corpse-revisit" and not consumed then
+                    assert(object(extra).parent_id==body,"Both bandages taken in one search")
+                    local owned=assert(level.object_by_id(item))
+                    client:eat(owned)
+                    consumed=true; item=extra
+                    log1("[npc corpse fixture] consumed_first_bandage")
+                    return
+                end
                 if cfg.scenario=="corpse-combat" then assert(fought and released and not client:best_enemy()) end
                 if cfg.scenario=="corpse-offline" or cfg.scenario=="corpse-resume" then assert(not server.online) end
                 finish()

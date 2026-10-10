@@ -44,6 +44,7 @@ NpcSourceObservation npc_agent_observe_source(NpcAgent*, std::uint32_t index, co
 bool npc_agent_remember_corpse(NpcAgent*, std::uint32_t index, const NpcLocation* navigation, const NpcLocation* physical);
 std::uint32_t npc_agent_source_kind(const NpcAgent*, std::uint32_t index); // loose=0, corpse=1, invalid=UINT32_MAX
 bool npc_agent_searched(NpcAgent*, std::uint64_t command, bool exhausted);
+bool npc_agent_search_rejected(NpcAgent*, std::uint64_t command);
 bool npc_agent_accepts_sightings(const NpcAgent*);
 // UINT32_MAX if unavailable. Query and remember belong to one serialized operation.
 std::uint32_t npc_agent_available_source_slot(const NpcAgent*);

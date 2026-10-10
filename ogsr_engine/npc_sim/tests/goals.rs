@@ -700,11 +700,12 @@ fn empty_search_is_remembered_across_sightings_and_reload() {
 
 #[test]
 fn corpse_and_item_share_execution_but_have_distinct_interactions() {
-    let mut a = agent();
+    let mut a = Agent::medical(7, point(0.)).unwrap();
     a.remember_corpse(0, point(10.), point(10.));
     a.step(observation(0.), 0);
     let search = a.step(observation(10.), 0).decision;
     a.searched(search.command, true);
+    a.remember(1, point(20.), point(20.));
     assert_eq!(a.step(observation(10.), 0).source, Some(1));
     let mut o = observation(20.);
     o.supply_location = point(20.);
@@ -769,4 +770,51 @@ fn moving_an_empty_body_does_not_reveal_new_contents() {
     a.observe_source(0, point(20.), point(20.));
     assert_eq!(a.sources()[0].physical, point(20.));
     assert_eq!(a.step(observation(10.), 0).decision.phase, Phase::Waiting);
+}
+
+#[test]
+fn rejected_search_releases_execution_and_retries_after_cooldown() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let search = a.step(observation(10.), 0).decision;
+    assert!(!a.search_rejected(search.command - 1));
+    assert!(a.search_rejected(search.command));
+    assert_eq!(a.status().decision.phase, Phase::Waiting);
+    assert_eq!(a.sources()[0].failure, FailureReason::None);
+    assert!(!a.search_rejected(search.command));
+    a = Agent::load(&a.save()).unwrap();
+    a.observe_source(0, point(10.), point(10.));
+    let mut o = observation(10.);
+    o.elapsed_ms = 59_999;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Waiting);
+    o.elapsed_ms = 1;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Outbound);
+    let retry = a.step(o, 0).decision;
+    assert_eq!(retry.action, Action::Inspect);
+    assert!(retry.command > search.command);
+}
+
+#[test]
+fn known_loose_bandage_is_preferred_to_a_closer_body_search() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    a.remember(1, point(30.), point(30.));
+    assert_eq!(a.step(observation(0.), 0).source, Some(1));
+}
+
+#[test]
+fn unseen_moved_corpse_is_learned_at_arrival_and_a_new_sighting_relocates_it() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let mut o = observation(3.);
+    o.supply_location = point(20.);
+    assert_eq!(a.step(o, 0).decision.action, Action::Travel(point(10.)));
+    o.current = point(10.);
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Waiting);
+    assert_eq!(a.sources()[0].failure, FailureReason::SupplyMoved);
+    a.observe_source(0, point(20.), point(20.));
+    assert_eq!(a.sources()[0].kind, npc_sim::SourceKind::Corpse);
+    assert_eq!(a.step(o, 0).decision.action, Action::Travel(point(20.)));
 }

@@ -198,11 +198,11 @@ bool CNpcSimulation::remember(u16 npc_id, u16 supply_id)
 void CNpcSimulation::see_item(CAI_Stalker& observer, const CGameObject& item)
 {
     if (m_entries.empty() || item.H_Parent() || item.getDestroy()) return;
-    const auto body = smart_cast<const CAI_Stalker*>(&item);
-    const bool corpse = body && !body->g_Alive();
-    if (!corpse && item.CLS_ID != CLSID_IITEM_BANDAGE) return;
     auto entry = find(smart_cast<CSE_ALifeMonsterAbstract*>(objects().object(observer.ID(), true)));
     if (!entry || !npc_agent_accepts_sightings(entry->plan)) return;
+    const auto body = item.CLS_ID == CLSID_IITEM_BANDAGE ? nullptr : smart_cast<const CAI_Stalker*>(&item);
+    const bool corpse = body && !body->g_Alive();
+    if (!corpse && item.CLS_ID != CLSID_IITEM_BANDAGE) return;
     auto supply = objects().object(item.ID(), true);
     if (!supply || !supply->m_bOnline || supply->ID_Parent != u16(-1) || !navigable_here(*supply)) return;
     const auto found = std::find(entry->supplies.begin(), entry->supplies.end(), supply);
@@ -304,14 +304,35 @@ void CNpcSimulation::inspect(Entry& entry, CAI_Stalker* client, const NpcDecisio
         }
     if (selected)
     {
-        if (selected->m_bOnline != entry.npc->m_bOnline) return;
+        if (selected->m_bOnline != entry.npc->m_bOnline)
+        {
+            R_ASSERT(npc_agent_search_rejected(entry.plan, decision.command));
+            return;
+        }
+        // The server inventory budget also applies while the map is unloaded.
+        // Live inventory acceptance can impose further restrictions online.
+        float mass = smart_cast<CSE_ALifeInventoryItem*>(selected)->m_fMass;
+        for (const auto id : entry.npc->children)
+            if (auto owned = smart_cast<CSE_ALifeInventoryItem*>(objects().object(id, true))) mass += owned->m_fMass;
+        if (mass > entry.npc->m_fMaxItemMass || !READ_IF_EXISTS(pSettings, r_bool, selected->name(), "can_take", TRUE))
+        {
+            R_ASSERT(npc_agent_search_rejected(entry.plan, decision.command));
+            Msg("[npc search] rejected npc=%u corpse=%u item=%u", entry.npc->ID, corpse->ID, selected->ID);
+            return;
+        }
         if (client)
         {
             auto item = smart_cast<CInventoryItem*>(Level().Objects.net_Find(selected->ID));
             auto owner = smart_cast<CAI_Stalker*>(Level().Objects.net_Find(corpse->ID));
-            if (!item || !owner || owner->g_Alive() || item->object().H_Parent() != owner || !client->inventory().CanTakeItem(item)) return;
+            if (!item || !owner || owner->g_Alive() || item->object().H_Parent() != owner || !client->inventory().CanTakeItem(item))
+            {
+                R_ASSERT(npc_agent_search_rejected(entry.plan, decision.command));
+                return;
+            }
             // Commit server ownership synchronously before another planner can
             // search this corpse; packets only replicate the committed transfer.
+            // Both endpoints remain attached: single-player OnDetach/OnTouch's
+            // temporary loose-item registry membership is unnecessary here.
             NET_Packet reject, take;
             m_alife.server().Perform_transfer(reject, take, selected, corpse, entry.npc);
             m_alife.server().SendBroadcast(BroadcastCID, reject, net_flags(TRUE, TRUE));
@@ -321,7 +342,7 @@ void CNpcSimulation::inspect(Entry& entry, CAI_Stalker* client, const NpcDecisio
         {
             auto item = smart_cast<CSE_ALifeInventoryItem*>(selected);
             m_alife.graph().detach(*corpse, item, corpse->m_tGraphID, true);
-            m_alife.graph().attach(*entry.npc, item, entry.npc->m_tGraphID, true);
+            m_alife.graph().attach(*entry.npc, item, selected->m_tGraphID, true);
         }
     }
     entry.pickup_command = decision.command;
@@ -559,7 +580,8 @@ void CNpcSimulation::load(IReader& source)
             supplies.push_back(supply);
         }
         const u32 size = chunk->r_u32();
-        R_ASSERT(npc && m_entries.find(npc) == m_entries.end() && size <= chunk->elapsed() && size <= 32768);
+        // NPCG v5 header + bounded source memory + optional Plan snapshot.
+        R_ASSERT(npc && m_entries.find(npc) == m_entries.end() && size <= chunk->elapsed() && size <= 64 + 256 * 64 + 148);
         xr_vector<u8> bytes(size);
         chunk->r(bytes.data(), size);
         xr_vector<u8> binder_data;

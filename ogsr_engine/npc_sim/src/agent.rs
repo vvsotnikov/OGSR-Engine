@@ -82,6 +82,15 @@ impl Agent {
     }
     // The caller supplies new information, not a periodic world-state refresh.
     pub fn remember(&mut self, index: usize, navigation: Location, physical: Location) -> bool {
+        self.update_source(index, navigation, physical, Some(SourceKind::LooseItem))
+    }
+    fn update_source(
+        &mut self,
+        index: usize,
+        navigation: Location,
+        physical: Location,
+        replacement: Option<SourceKind>,
+    ) -> bool {
         if !self.is_medical() {
             return false;
         }
@@ -98,10 +107,15 @@ impl Agent {
         } else {
             self.command
         };
-        if !self
-            .knowledge
-            .remember(index, self.home, navigation, physical)
-        {
+        let accepted = match replacement {
+            Some(kind) => self
+                .knowledge
+                .remember(index, self.home, navigation, physical, kind),
+            None => self
+                .knowledge
+                .relocate(index, self.home, navigation, physical),
+        };
+        if !accepted {
             return false;
         }
         if replace_activity {
@@ -117,11 +131,7 @@ impl Agent {
         navigation: Location,
         physical: Location,
     ) -> bool {
-        if !self.remember(index, navigation, physical) {
-            return false;
-        }
-        self.knowledge.set_kind(index, SourceKind::Corpse);
-        true
+        self.update_source(index, navigation, physical, Some(SourceKind::Corpse))
     }
 
     /// Result of the currently issued search, after a real inventory inspection.
@@ -132,9 +142,25 @@ impl Agent {
         }
         let index = self.selected.unwrap();
         self.knowledge.searched(index, exhausted);
+        if exhausted {
+            self.activity = None;
+            self.selected = None;
+        }
         true
     }
 
+    /// A real inspection could not acquire its item. Keep the source knowledge
+    /// but end this attempt, with the same cooldown used for other visit failures.
+    pub fn search_rejected(&mut self, command: u64) -> bool {
+        let status = self.status();
+        if status.decision.command != command || status.decision.action != Action::Inspect {
+            return false;
+        }
+        self.knowledge.defer(self.selected.unwrap());
+        self.activity = None;
+        self.selected = None;
+        true
+    }
     /// A personal sighting of the same bound object, not a replacement identity.
     pub fn observe_source(
         &mut self,
@@ -162,19 +188,7 @@ impl Agent {
                 return SourceObservation::Unchanged;
             }
         }
-        let kind = self
-            .sources()
-            .get(index)
-            .map(|s| s.kind)
-            .unwrap_or(SourceKind::LooseItem);
-        let exhausted = self.sources().get(index).is_some_and(|s| {
-            s.kind == SourceKind::Corpse && s.failure == FailureReason::SupplyUnavailable
-        });
-        if self.remember(index, navigation, physical) {
-            self.knowledge.set_kind(index, kind);
-            if exhausted {
-                self.knowledge.searched(index, true);
-            }
+        if self.update_source(index, navigation, physical, None) {
             SourceObservation::Updated
         } else {
             SourceObservation::Rejected
@@ -292,12 +306,6 @@ impl Agent {
         self.goal.elapse(elapsed);
         self.knowledge.elapse(elapsed);
         let inventory_changed = self.goal.observe_inventory(bandages);
-        if self.selected.is_some_and(|i| {
-            self.sources()[i].kind == SourceKind::Corpse
-                && self.sources()[i].failure == FailureReason::SupplyUnavailable
-        }) {
-            o.supply = Supply::Missing;
-        }
         if let Some(activity) = self.activity.as_mut() {
             if o.supply == Supply::Owned {
                 self.knowledge.acquired(self.selected);
