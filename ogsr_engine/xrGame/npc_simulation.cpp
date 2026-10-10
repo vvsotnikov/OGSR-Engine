@@ -257,6 +257,11 @@ NpcDecision CNpcSimulation::observe(Entry& entry, const Fvector& here, u32 graph
             else input.supply = supply->ID_Parent == entry.npc->ID ? 2 : supply->ID_Parent == u16(-1) ? 1 : 3;
             input.supply_location = location(*supply);
             input.representation_ready = supply->m_bOnline == entry.npc->m_bOnline;
+            if (input.representation_ready && entry.npc->m_bOnline && npc_agent_source_kind(entry.plan, before.source) == 1)
+            {
+                auto corpse = smart_cast<CAI_Stalker*>(Level().Objects.net_Find(supply->ID));
+                input.representation_ready = corpse && !corpse->g_Alive();
+            }
         }
     // World facts are distinct from knowledge: Rust decides what can be learned
     // at the remembered destination and owns arrival, waiting and failure policy.
@@ -294,6 +299,10 @@ void CNpcSimulation::inspect(Entry& entry, CAI_Stalker* client, const NpcDecisio
     const auto here = location(*entry.npc), there = location(*corpse);
     const Fvector delta = Fvector().set(here.position[0]-there.position[0], here.position[1]-there.position[1], here.position[2]-there.position[2]);
     if (here.level != there.level || delta.square_magnitude() > 6.25f) return;
+    auto owner = client ? smart_cast<CAI_Stalker*>(Level().Objects.net_Find(corpse->ID)) : nullptr;
+    // observe() classifies an unavailable corpse client as a representation
+    // wait, so its existing timeout applies rather than inventory backoff.
+    if (client && (!owner || owner->g_Alive())) return;
     CSE_ALifeDynamicObject* selected = nullptr;
     u32 count = 0;
     float mass = 0;
@@ -312,8 +321,12 @@ void CNpcSimulation::inspect(Entry& entry, CAI_Stalker* client, const NpcDecisio
             if (client)
             {
                 auto live = smart_cast<CInventoryItem*>(Level().Objects.net_Find(id));
-                auto owner = smart_cast<CAI_Stalker*>(Level().Objects.net_Find(corpse->ID));
-                if (!live || !owner || owner->g_Alive() || live->object().H_Parent() != owner || !client->inventory().CanTakeItem(live))
+                if (!live || live->object().H_Parent() != owner)
+                {
+                    refusal = "representation";
+                    continue;
+                }
+                if (!client->inventory().CanTakeItem(live))
                 {
                     refusal = "inventory";
                     continue;

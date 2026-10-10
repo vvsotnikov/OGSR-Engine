@@ -887,3 +887,25 @@ fn moved_corpse_reopens_a_stalled_route_but_loose_saves_cannot_have_search_backo
     loose[128..132].copy_from_slice(&60_000u32.to_le_bytes());
     assert!(Agent::load(&loose).is_none());
 }
+
+#[test]
+fn failed_return_to_a_refused_body_preserves_the_rejection_streak() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember_corpse(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let search = a.step(observation(10.), 0).decision;
+    assert!(a.search_rejected(search.command));
+    let mut o = observation(0.);
+    o.elapsed_ms = 60_000;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Outbound);
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Waiting); // route stalls
+    a = Agent::load(&a.save()).unwrap();
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Outbound);
+    o = observation(10.);
+    let search = a.step(o, 0).decision;
+    assert!(a.search_rejected(search.command));
+    o.elapsed_ms = 119_999;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Waiting);
+    o.elapsed_ms = 1;
+    assert_eq!(a.step(o, 0).decision.phase, Phase::Outbound);
+}

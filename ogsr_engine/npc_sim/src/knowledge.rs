@@ -200,7 +200,6 @@ impl Knowledge {
             self.sources[i].failure = reason;
         } else {
             self.sources[i].retry_ms = Self::SOURCE_RETRY_MS;
-            self.sources[i].rejection_delay_ms = 0;
         }
     }
 

@@ -47,7 +47,7 @@ if ((Get-Content $config -Raw).Contains('[npc_trip_stalker]')) { throw 'Fixture 
 Add-Content $config "`n[npc_trip_stalker]:stalker" -Encoding ascii
 if ($Scenario -ne 'fallback') { Add-Content $config 'npc_planner = supply_trip' -Encoding ascii }
 if ($Scenario -eq 'corpse-rejected-offline') { Add-Content $config 'max_item_mass = 0' -Encoding ascii }
-if ($Scenario -eq 'corpse-static') { Add-Content $config "`n[npc_corpse_bandage]:bandage" -Encoding ascii }
+if ($Scenario -eq 'corpse-static') { Add-Content $config "`n[npc_corpse_bandage_a]:bandage`n[npc_corpse_bandage_b]:bandage" -Encoding ascii }
 if ($Scenario -eq 'elevated') { Add-Content $config "`n[npc_trip_elevated_bandage]:bandage`nuse_ai_locations = false" -Encoding ascii }
 if ($Scenario.StartsWith('control-')) {
     Add-Content $config 'custom_data = scripts\npc_control.ltx' -Encoding ascii
@@ -106,6 +106,8 @@ try {
         $representation = if ($Scenario -eq 'corpse-rejected-offline') { 0 } else { 1 }
         if ([regex]::Matches($log, "\[npc search\] rejected .*online=$representation reason=").Count -lt 2) { throw 'Missing native rejection in the required representation' }
     }
+    if ($Scenario -eq 'corpse-mixed' -and $log -notmatch '\[npc search\].*remaining=1') { throw 'Temporarily locked loot was forgotten' }
+    if ($Scenario -eq 'corpse-static' -and $log -notmatch '\[npc search\].*remaining=0') { throw 'Statically untakeable loot remained a candidate' }
     $meta.status = 'npc-completed'
     Write-Output "COMPLETE npc scenario=$Scenario session=$session"
 } catch {

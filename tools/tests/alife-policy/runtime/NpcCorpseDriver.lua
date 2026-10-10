@@ -84,8 +84,8 @@ return function(cfg)
             local remove={}
             corpse:iterate_inventory(function(_,it) if it:section()=="bandage" then remove[#remove+1]=it:id() end end,corpse)
             for _,id in ipairs(remove) do alife():release(object(id),true) end
-            if cfg.scenario~="corpse-empty" then item=spawn("bandage",node,body) end
-            if (cfg.scenario=="corpse-revisit" or cfg.scenario=="corpse-mixed" or cfg.scenario=="corpse-static") then extra=spawn(cfg.scenario=="corpse-static" and "npc_corpse_bandage" or "bandage",node,body) end
+            if cfg.scenario~="corpse-empty" then item=spawn(cfg.scenario=="corpse-static" and "npc_corpse_bandage_a" or "bandage",node,body) end
+            if (cfg.scenario=="corpse-revisit" or cfg.scenario=="corpse-mixed" or cfg.scenario=="corpse-static") then extra=spawn(cfg.scenario=="corpse-static" and "npc_corpse_bandage_b" or "bandage",node,body) end
             stage=2; since=now
         elseif stage==2 and now-since>2000 then
             npc=spawn("npc_trip_stalker",34548); assert(alife():start_supply_goal(npc))
