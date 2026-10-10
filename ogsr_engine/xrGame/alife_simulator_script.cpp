@@ -22,6 +22,10 @@
 #include "xrServer.h"
 #include "level.h"
 #include "GameObject.h"
+#include "ai/stalker/ai_stalker.h"
+#include "memory_manager.h"
+#include "visual_memory_manager.h"
+#include "alife_simulator_header.h"
 
 namespace detail
 {
@@ -50,6 +54,29 @@ bool start_supply_trip(CALifeSimulator* simulator, u16 npc, u16 supply)
 {
     return simulator->initialized() && !simulator->is_unloading() && simulator->npc_simulation().enroll(npc, supply);
 }
+// Exercise non-personal insertion and reload the entire visual memory, including
+// other entries' timestamps. Only used by the isolated -npc_sim_test fixture.
+bool npc_sim_test_nonpersonal_memory(CALifeSimulator* simulator, u16 npc_id, u16 item_id)
+{
+    if (!simulator->initialized() || simulator->is_unloading() || !simulator->npc_simulation().owns(npc_id)) return false;
+    auto observer = smart_cast<CAI_Stalker*>(Level().Objects.net_Find(npc_id));
+    auto item = smart_cast<CGameObject*>(Level().Objects.net_Find(item_id));
+    if (!observer || !item || !observer->g_Alive() || observer->getDestroy() || item->getDestroy()) return false;
+    // The live writer emits 64-bit masks; don't feed it to an old save reader.
+    if (static_cast<const CALifeSimulatorBase&>(*simulator).header().version() < 8) return false;
+    auto& visual = observer->memory().visual();
+    visual.add_visible_object(item, 0.f, true);
+    NET_Packet packet;
+    visual.save(packet);
+    visual.remove_links(item);
+    IReader reader(packet.B.data, packet.B.count);
+    visual.load(reader);
+    if (reader.elapsed()) return false;
+    for (const auto& memory : visual.objects())
+        if (memory.m_object == item) return true;
+    return false;
+}
+
 // Native ownership stimulus for isolated gameplay tests; not a gameplay trade API.
 bool npc_sim_test_transfer(CALifeSimulator* simulator, u16 item_id, u16 recipient_id)
 {
@@ -450,7 +477,8 @@ bool is_unloading(CALifeSimulator* sim) { return sim->is_unloading(); }
 void CALifeSimulator::script_register(lua_State* L)
 {
     if (strstr(Core.Params, "-npc_sim_test"))
-        module(L)[def("npc_sim_test_transfer", &npc_sim_test_transfer), def("npc_sim_test_cancel_spawn", &npc_sim_test_cancel_spawn)];
+        module(L)[def("npc_sim_test_transfer", &npc_sim_test_transfer), def("npc_sim_test_cancel_spawn", &npc_sim_test_cancel_spawn),
+            def("npc_sim_test_nonpersonal_memory", &npc_sim_test_nonpersonal_memory)];
     module(L)[(class_<CALifeSimulator>("alife_simulator")
                   .def("valid_object_id", &valid_object_id)
                   .def("level_id", &get_level_id)

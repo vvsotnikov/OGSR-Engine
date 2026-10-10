@@ -97,16 +97,25 @@ impl Knowledge {
         if index == self.sources.len() {
             self.sources.push(source);
         } else {
-            let old_order = self.sources[index].learned_order;
-            for existing in &mut self.sources {
-                if existing.learned_order > old_order {
-                    existing.learned_order -= 1;
-                }
-            }
-            source.learned_order = self.sources.len() as u32 - 1;
+            self.observe_again(index);
+            source.learned_order = self.sources[index].learned_order;
             self.sources[index] = source;
         }
         true
+    }
+
+    pub(super) fn observe_again(&mut self, index: usize) {
+        let newest = self.sources.len() as u32 - 1;
+        let old_order = self.sources[index].learned_order;
+        if old_order == newest {
+            return;
+        }
+        for existing in &mut self.sources {
+            if existing.learned_order > old_order {
+                existing.learned_order -= 1;
+            }
+        }
+        self.sources[index].learned_order = newest;
     }
 
     pub fn elapse(&mut self, elapsed_ms: u32) {

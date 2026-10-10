@@ -6,8 +6,10 @@ mod ffi;
 mod goal;
 mod knowledge;
 pub use activity::Plan;
-pub use agent::{Agent, AgentDecision};
+pub use agent::{Agent, AgentDecision, SourceObservation};
 pub use knowledge::Source;
+
+const SOURCE_MOVEMENT_TOLERANCE: f32 = 1.0;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]

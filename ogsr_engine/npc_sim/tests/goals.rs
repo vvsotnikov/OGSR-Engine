@@ -499,3 +499,143 @@ fn saving_a_new_script_owner_does_not_advance_the_activity() {
         Action::Travel(point(10.))
     );
 }
+
+#[test]
+fn personal_sightings_discover_sources_without_resetting_travel_or_retry() {
+    use npc_sim::SourceObservation::{Unchanged, Updated};
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    assert_eq!(a.step(observation(0.), 0).decision.phase, Phase::Waiting);
+    assert_eq!(a.observe_source(0, point(10.), point(10.)), Updated);
+    let first = a.step(observation(0.), 0);
+    assert_eq!(first.decision.action, Action::Travel(point(10.)));
+    let mut o = observation(0.);
+    o.elapsed_ms = 10_000;
+    for _ in 0..6 {
+        let before = a.save();
+        assert_eq!(a.observe_source(0, point(10.1), point(10.1)), Unchanged);
+        assert_eq!(a.save(), before);
+        a.step(o, 0);
+    }
+    assert_eq!(a.status().decision.phase, Phase::Waiting);
+    let mut a = Agent::load(&a.save()).unwrap();
+    for _ in 0..5 {
+        assert_eq!(a.observe_source(0, point(10.), point(10.)), Unchanged);
+        assert_eq!(a.step(o, 0).decision.phase, Phase::Waiting);
+    }
+    assert_eq!(a.observe_source(0, point(10.), point(10.)), Unchanged);
+    let retry = a.step(o, 0);
+    assert_eq!(retry.decision.phase, Phase::Outbound);
+    assert!(retry.decision.command > first.decision.command);
+}
+
+#[test]
+fn seen_movement_is_news_but_unseen_movement_is_not_a_destination() {
+    use npc_sim::SourceObservation::Updated;
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    assert_eq!(a.observe_source(0, point(10.), point(10.)), Updated);
+    let first = a.step(observation(0.), 0);
+    let mut o = observation(2.);
+    o.supply_location = point(20.);
+    assert_eq!(a.step(o, 0).decision.action, Action::Travel(point(10.)));
+    assert_eq!(a.observe_source(0, point(20.), point(20.)), Updated);
+    let moved = a.step(o, 0);
+    assert_eq!(moved.decision.action, Action::Travel(point(20.)));
+    assert!(moved.decision.command > first.decision.command);
+    let a = Agent::load(&a.save()).unwrap();
+    assert_eq!(a.sources()[0].physical, point(20.));
+    assert_eq!(a.status(), moved);
+}
+
+#[test]
+fn actual_rediscovery_reopens_an_unavailable_source_and_rejects_invalid_news() {
+    use npc_sim::SourceObservation::{Rejected, Updated};
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.observe_source(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let mut absent = observation(10.);
+    absent.supply = Supply::Missing;
+    a.step(absent, 0);
+    assert_eq!(a.sources()[0].failure, FailureReason::SupplyUnavailable);
+    assert_eq!(a.observe_source(0, point(10.), point(10.)), Updated);
+    assert_eq!(a.sources()[0].failure, FailureReason::None);
+    let before = a.save();
+    assert_eq!(a.observe_source(2, point(10.), point(10.)), Rejected);
+    let mut invalid = point(10.);
+    invalid.position[0] = f32::NAN;
+    assert_eq!(a.observe_source(0, invalid, point(10.)), Rejected);
+    assert_eq!(a.save(), before);
+    let mut assigned = Agent::assigned(Plan::new(8, point(0.), point(10.), point(10.)).unwrap());
+    assert_eq!(assigned.observe_source(0, point(20.), point(20.)), Rejected);
+}
+
+#[test]
+fn small_nudges_and_navigation_snapping_preserve_pending_pickup() {
+    use npc_sim::SourceObservation::{Unchanged, Updated};
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.observe_source(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let collecting = a.step(observation(10.), 0);
+    assert_eq!(collecting.decision.phase, Phase::Collecting);
+    let before = a.save();
+    // Navigation may snap to another vertex without meaningful physical motion.
+    for physical in [10.25, 10.5, 10.75, 11.] {
+        assert_eq!(a.observe_source(0, point(12.), point(physical)), Unchanged);
+        assert_eq!(a.save(), before);
+    }
+    let mut pending = observation(10.);
+    pending.supply_location = point(10.5);
+    pending.pickup_pending = true;
+    let waiting = a.step(pending, 0);
+    assert_eq!(waiting.decision.command, collecting.decision.command);
+    assert_eq!(waiting.decision.action, Action::Wait);
+    assert_eq!(a.observe_source(0, point(12.), point(11.01)), Updated);
+    assert!(a.step(pending, 0).decision.command > collecting.decision.command);
+}
+
+#[test]
+fn seeing_a_previously_moved_item_back_at_its_old_position_is_fresh_evidence() {
+    use npc_sim::SourceObservation::Updated;
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.observe_source(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let mut moved = observation(10.);
+    moved.supply_location = point(20.);
+    a.step(moved, 0);
+    assert_eq!(a.sources()[0].failure, FailureReason::SupplyMoved);
+    // The item has returned and is personally seen, rather than read remotely.
+    assert_eq!(a.observe_source(0, point(10.), point(10.)), Updated);
+    assert_eq!(a.sources()[0].failure, FailureReason::None);
+    assert_eq!(
+        a.step(observation(0.), 0).decision.action,
+        Action::Travel(point(10.))
+    );
+}
+
+#[test]
+fn sightings_refresh_eviction_recency_across_save_without_restarting_the_trip() {
+    use npc_sim::SourceObservation::Unchanged;
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    for index in 0..Agent::MAX_SOURCES {
+        let source = point(10. + index as f32 * 10.);
+        assert!(a.remember(index, source, source));
+    }
+    let trip = a.step(observation(0.), 0);
+    assert_eq!(trip.source, Some(0));
+    assert_eq!(a.available_source_slot(), Some(1)); // selected source cannot be evicted
+    assert_eq!(a.observe_source(1, point(20.), point(20.)), Unchanged);
+    assert_eq!(a.status(), trip);
+    assert_eq!(a.available_source_slot(), Some(2));
+    let mut a = Agent::load(&a.save()).unwrap();
+    assert_eq!(a.status(), trip);
+    assert_eq!(a.available_source_slot(), Some(2));
+    assert_eq!(a.observe_source(2, point(30.), point(30.)), Unchanged);
+    assert_eq!(a.available_source_slot(), Some(3));
+    // Repeated observations of the newest source need no rank changes.
+    let before = a.save();
+    assert_eq!(a.observe_source(2, point(30.), point(30.)), Unchanged);
+    assert_eq!(a.save(), before);
+    let mut stalled = observation(0.);
+    stalled.elapsed_ms = 60_000;
+    a.step(stalled, 0);
+    assert_ne!(a.status().source, Some(0)); // sightings did not renew travel time
+}

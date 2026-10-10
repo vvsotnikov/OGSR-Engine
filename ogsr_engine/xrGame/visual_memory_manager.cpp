@@ -7,6 +7,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
+#include "npc_simulation.h"
 #include "visual_memory_manager.h"
 #include "ai/stalker/ai_stalker.h"
 #include "memory_space_impl.h"
@@ -422,6 +423,11 @@ void CVisualMemoryManager::add_visible_object(const CObject* object, float time_
     if (!game_object || (!fictitious && !visible(game_object, time_delta)))
         return;
     //	STOP_PROFILE
+
+    // Only this observer's successful perception supplies knowledge. Squad
+    // memory, restored memory and fictitious visibility are not personal sightings.
+    if (!fictitious && m_stalker)
+        if (auto simulation = CNpcSimulation::active()) simulation->see_item(*m_stalker, *game_object);
 
     //	START_PROFILE("Memory Manager/visuals/update/add_visibles/find_object_by_id")
     const CGameObject* self = m_object;
