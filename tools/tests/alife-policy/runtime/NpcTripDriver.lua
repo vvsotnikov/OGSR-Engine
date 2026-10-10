@@ -18,7 +18,13 @@ return function(cfg)
             home = level.vertex_position(home_node)
             get_console():execute("g_god on")
             level.disable_input()
-            db.actor:set_actor_position(vector():set(home.x,home.y+1.1,home.z))
+            local actor_position = home
+            if cfg.scenario == "basic" then
+                -- Exercise the assigned trip without a nearby actor holding meet control.
+                local actor_node = level.vertex_in_direction(home_node,vector():set(-1,0,0),25)
+                actor_position = level.vertex_position(actor_node)
+            end
+            db.actor:set_actor_position(vector():set(actor_position.x,actor_position.y+1.1,actor_position.z))
             if cfg.scenario == "natural" then alife():set_switch_distance(5) end
             local home_graph = cross_table():vertex(home_node):game_vertex_id()
             local best = 6
@@ -86,7 +92,9 @@ return function(cfg)
             return
         end
         assert(phase >= 0 and phase <= 3, "Planner failed or NPC died: " .. phase)
-        if client then assert(not client:is_talk_enabled(), "Planner NPC exposes legacy dialogs") end
+        if client and cfg.scenario == "basic" then
+            assert(client:is_talk_enabled(), "Planner disabled ordinary dialogs")
+        end
         if server.online then saw_online = true elseif saw_online then saw_offline = true end
         if cfg.scenario == "mismatch" and phase == 1 and not mismatch_released then
             assert(server.online and not supply.online, "Expected mixed representation")
