@@ -48,6 +48,9 @@ try {
     $perceptionMeta = Get-Content "$perception/session.json" -Raw | ConvertFrom-Json
     if ($perceptionMeta.arguments -match '-npc_sim_test' -or
         (Get-FileHash "$perception/appdata/RegularDriver.lua").Hash -ne (Get-FileHash "$PSScriptRoot/NpcPerceptionDriver.lua").Hash) { throw 'Perception must use ordinary gameplay APIs' }
+    $memory = & "$PSScriptRoot/Run-NpcTrip.ps1" -InstallRoot $root -Package bin_fixture -Scenario perception-memory -PrepareOnly
+    if ((Get-Content "$memory/session.json" -Raw | ConvertFrom-Json).arguments -notmatch '-npc_sim_test' -or
+        (Get-FileHash "$memory/appdata/RegularDriver.lua").Hash -ne (Get-FileHash "$PSScriptRoot/NpcPerceptionDriver.lua").Hash) { throw 'Missing native memory stimulus scenario' }
     $perceptionMeta.status = 'npc-completed'
     $perceptionMeta | ConvertTo-Json | Set-Content "$perception/session.json"
     Set-Content "$perception/appdata/savedgames/npc_trip_pending.sav" 'perception'

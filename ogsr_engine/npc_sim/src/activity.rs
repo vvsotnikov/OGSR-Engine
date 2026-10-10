@@ -143,7 +143,10 @@ impl Plan {
                 self.transition(TripPhase::Collecting);
             } else if o.supply != Supply::Free {
                 self.fail(FailureReason::SupplyUnavailable);
-            } else if !self.remembered_item.near(o.supply_location, 1.0) {
+            } else if !self
+                .remembered_item
+                .near(o.supply_location, crate::SOURCE_MOVEMENT_TOLERANCE)
+            {
                 self.fail(FailureReason::SupplyMoved);
             } else if !o.current.near(o.supply_location, 2.5) {
                 // The item is still where remembered, but the NPC must approach

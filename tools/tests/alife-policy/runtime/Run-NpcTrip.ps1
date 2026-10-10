@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory)][string]$InstallRoot,
     [Parameter(Mandatory)][ValidatePattern('^bin_[a-zA-Z0-9_]+$')][string]$Package,
     [ValidateSet('Release','Debug')][string]$Configuration = 'Debug',
-    [ValidateSet('basic','interrupt','offline','switch','missing','death','mismatch','natural','elevated','boundary','far','moved','spawn-combat','save','resume','fallback','goal-cycle','goal-displaced','goal-combat','goal-switch','goal-competition','goal-save','goal-resume','goal-wait-save','goal-wait-resume','control-save','control-resume','control-meet','control-transition','perception','perception-save','perception-resume')][string]$Scenario = 'basic',
+    [ValidateSet('basic','interrupt','offline','switch','missing','death','mismatch','natural','elevated','boundary','far','moved','spawn-combat','save','resume','fallback','goal-cycle','goal-displaced','goal-combat','goal-switch','goal-competition','goal-save','goal-resume','goal-wait-save','goal-wait-resume','control-save','control-resume','control-meet','control-transition','perception','perception-save','perception-resume','perception-memory')][string]$Scenario = 'basic',
     [ValidateSet('whole-map','distance')][string]$Mode = 'whole-map',
     [string]$ResumeSession = '',
     [switch]$GoalOffline,
@@ -59,7 +59,7 @@ $fs[$lines[0]] = '$app_data_root$ = true| false| ' + ("$session/appdata/" -repla
 $fs | Set-Content "$session/fsgame.ltx" -Encoding ascii
 $meta.arguments = '-fsltx ..\fsgame.ltx'
 if ($Mode -eq 'whole-map') { $meta.arguments += ' -alife_whole_map' }
-if ($Scenario.StartsWith('goal-') -or $Scenario -eq 'control-resume') { $meta.arguments += ' -npc_sim_test' }
+if ($Scenario.StartsWith('goal-') -or $Scenario -in @('control-resume','perception-memory')) { $meta.arguments += ' -npc_sim_test' }
 $meta.arguments += " -start server($save/single/alife/load) client(localhost)"
 $luaConfig = "return {scenario='$Scenario',offline=$(([bool]$GoalOffline).ToString().ToLowerInvariant())}"
 if ($Scenario -in @('resume','fallback','goal-resume','goal-wait-resume','control-resume','perception-resume')) {
@@ -95,8 +95,9 @@ try {
     if ($Scenario -eq 'moved' -and $log -notmatch '\[npc trip\].*phase=4 reason=2') { throw 'Missing SupplyMoved failure reason' }
     if ($Scenario -eq 'goal-combat' -and $log -notmatch '\[npc goal fixture\] gift_owned_during_combat') { throw 'Gift was not observed during combat' }
     if ($Scenario -eq 'goal-displaced' -and $log -notmatch '\[npc goal fixture\] returned_after_displacement') { throw 'Missing return after displacement' }
-    if ($Scenario -in @('perception','perception-save') -and ($log -notmatch '\[npc perception fixture\] unseen_wait' -or
-        $log -notmatch '\[npc perception\] npc=' -or $log -notmatch '\[npc perception fixture\] discovered')) { throw 'Missing real perception sequence' }
+    if ($Scenario -in @('perception','perception-save','perception-memory') -and ($log -notmatch '\[npc perception fixture\] unseen_wait' -or
+        $log -notmatch '\[npc perception\] npc=' -or $log -notmatch '\[npc perception fixture\] discovered' -or $log -notmatch '\[npc perception fixture\] online_unseen')) { throw 'Missing real perception sequence' }
+    if ($Scenario -eq 'perception-memory' -and $log -notmatch '\[npc perception fixture\] nonpersonal_ignored') { throw 'Missing non-personal memory rejection' }
     if ($Scenario -eq 'perception-resume' -and $log -match '\[npc perception\] npc=') { throw 'Offline continuation acquired a new sighting' }
     $meta.status = 'npc-completed'
     Write-Output "COMPLETE npc scenario=$Scenario session=$session"

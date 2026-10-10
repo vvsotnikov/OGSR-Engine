@@ -196,8 +196,9 @@ void CNpcSimulation::see_item(CAI_Stalker& observer, const CGameObject& item)
 {
     if (m_entries.empty() || item.CLS_ID != CLSID_IITEM_BANDAGE || item.H_Parent() || item.getDestroy()) return;
     auto entry = find(smart_cast<CSE_ALifeMonsterAbstract*>(objects().object(observer.ID(), true)));
+    if (!entry) return;
     auto supply = objects().object(item.ID(), true);
-    if (!entry || !supply || !supply->m_bOnline || supply->ID_Parent != u16(-1) || !navigable_here(*supply)) return;
+    if (!supply || !supply->m_bOnline || supply->ID_Parent != u16(-1) || !navigable_here(*supply)) return;
     const auto found = std::find(entry->supplies.begin(), entry->supplies.end(), supply);
     const bool known = found != entry->supplies.end();
     const auto index = known ? u32(found - entry->supplies.begin()) : npc_agent_available_source_slot(entry->plan);

@@ -75,8 +75,9 @@ at the same position; the native binding supplies that identity distinction.
 
 Waiting is not a request to refresh world knowledge: it also covers retry
 cooldowns. Explicit `remember_supply` news can clear that cooldown; recurring
-sightings of an unchanged source cannot. Cooldowns can elapse without a known position; unlike travel
-stall timers, they make no inference about movement during that interval.
+sightings of an unchanged source cannot. Cooldowns can elapse without a known
+position; unlike travel stall timers, they make no inference about movement
+during that interval.
 
 The C ABI is not a synchronization boundary. Current frame ordering runs script
 updates before deferred A-Life work and joins that work before the next frame.

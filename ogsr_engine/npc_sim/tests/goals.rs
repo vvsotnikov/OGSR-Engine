@@ -567,3 +567,46 @@ fn actual_rediscovery_reopens_an_unavailable_source_and_rejects_invalid_news() {
     let mut assigned = Agent::assigned(Plan::new(8, point(0.), point(10.), point(10.)).unwrap());
     assert_eq!(assigned.observe_source(0, point(20.), point(20.)), Rejected);
 }
+
+#[test]
+fn small_nudges_and_navigation_snapping_preserve_pending_pickup() {
+    use npc_sim::SourceObservation::{Unchanged, Updated};
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.observe_source(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let collecting = a.step(observation(10.), 0);
+    assert_eq!(collecting.decision.phase, Phase::Collecting);
+    let before = a.save();
+    // Navigation may snap to another vertex without meaningful physical motion.
+    for physical in [10.25, 10.5, 10.75, 11.] {
+        assert_eq!(a.observe_source(0, point(12.), point(physical)), Unchanged);
+        assert_eq!(a.save(), before);
+    }
+    let mut pending = observation(10.);
+    pending.supply_location = point(10.5);
+    pending.pickup_pending = true;
+    let waiting = a.step(pending, 0);
+    assert_eq!(waiting.decision.command, collecting.decision.command);
+    assert_eq!(waiting.decision.action, Action::Wait);
+    assert_eq!(a.observe_source(0, point(12.), point(11.01)), Updated);
+    assert!(a.step(pending, 0).decision.command > collecting.decision.command);
+}
+
+#[test]
+fn seeing_a_previously_moved_item_back_at_its_old_position_is_fresh_evidence() {
+    use npc_sim::SourceObservation::Updated;
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.observe_source(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let mut moved = observation(10.);
+    moved.supply_location = point(20.);
+    a.step(moved, 0);
+    assert_eq!(a.sources()[0].failure, FailureReason::SupplyMoved);
+    // The item has returned and is personally seen, rather than read remotely.
+    assert_eq!(a.observe_source(0, point(10.), point(10.)), Updated);
+    assert_eq!(a.sources()[0].failure, FailureReason::None);
+    assert_eq!(
+        a.step(observation(0.), 0).decision.action,
+        Action::Travel(point(10.))
+    );
+}

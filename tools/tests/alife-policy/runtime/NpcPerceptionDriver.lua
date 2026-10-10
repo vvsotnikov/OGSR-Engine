@@ -2,6 +2,7 @@
 return function(cfg)
     local npc,item = cfg.npc,cfg.item
     local stage,started,finished = cfg.stage or 0,nil,false
+    local unseen_since,memory_since
     local home
     local function tick()
         if finished or not db.actor or not app_ready() or device().precache_frame ~= 0 then return end
@@ -35,10 +36,32 @@ return function(cfg)
         local phase = alife():supply_trip_phase(npc)
         assert(phase ~= 4 and phase ~= 5,"Perception goal failed")
         if stage == 0 then
+            if client then client:set_sight(look.direction,vector():set(-1,0,0),true) end
             assert(not supply.online and phase == 6,"Unseen supply became knowledge")
             if client and now-started > 5000 then
                 log1("[npc perception fixture] unseen_wait")
                 alife():set_switch_online(item,true)
+                stage = 10
+            end
+        elseif stage == 10 then
+            if client then client:set_sight(look.direction,vector():set(-1,0,0),true) end
+            assert(phase == 6,"Online unseen supply became knowledge")
+            if client and visible_item then
+                assert(not client:see(visible_item),"Negative fixture item entered field of view")
+                unseen_since = unseen_since or now
+                if now-unseen_since > 5000 then
+                    log1("[npc perception fixture] online_unseen")
+                    if cfg.scenario == "perception-memory" then
+                        assert(npc_sim_test_nonpersonal_memory(alife(),npc,item))
+                        memory_since = now; stage = 11
+                    else stage = 1 end
+                end
+            end
+        elseif stage == 11 then
+            if client then client:set_sight(look.direction,vector():set(-1,0,0),true) end
+            assert(phase == 6,"Non-personal visual memory became supply knowledge")
+            if now-memory_since > 5000 then
+                log1("[npc perception fixture] nonpersonal_ignored")
                 stage = 1
             end
         elseif stage == 1 then
