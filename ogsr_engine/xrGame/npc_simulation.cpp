@@ -27,6 +27,7 @@
 #include "xrServer.h"
 #include "inventory.h"
 #include "inventory_item.h"
+#include <memory>
 
 extern u16 script_server_object_version();
 
@@ -224,20 +225,23 @@ void CNpcSimulation::enroll_campaign(CAI_Stalker& client)
     if (!npc || npc->m_story_id != ALife::_STORY_ID(-1) || npc->m_group_id != u16(-1) || npc->m_smart_terrain_id == u16(-1)) return;
     auto camp = smart_cast<CSE_ALifeSmartZone*>(objects().object(npc->m_smart_terrain_id, true));
     if (!camp || !m_campaign->section_exist(camp->name_replace()) || !navigable_here(*camp)) return;
+    auto check = m_campaign_checks.find(npc);
+    if (check != m_campaign_checks.end() && s32(Device.dwTimeGlobal - check->second) < 0) return;
+    m_campaign_checks[npc] = Device.dwTimeGlobal + 5000;
     luabind::functor<bool> eligible, handoff;
     if (!ai().script_engine().functor("npc_sim_bridge.campaign_eligible", eligible) || !eligible(npc->ID, camp->ID) ||
         !ai().script_engine().functor("npc_sim_bridge.campaign_handoff", handoff)) return;
-    const auto home = navigation_location(*camp);
-    NpcAgent* plan = npc_agent_create_goal(m_next_identity, &home);
+    if (!navigable_here(*npc)) return;
+    // Keep the resident's own job position instead of funneling the whole camp to one point.
+    const auto home = navigation_location(*npc);
+    std::unique_ptr<NpcAgent, decltype(&npc_agent_destroy)> plan(npc_agent_create_goal(m_next_identity, &home), npc_agent_destroy);
     if (!plan) return;
-    if (!handoff(npc->ID, camp->ID))
-    {
-        npc_agent_destroy(plan);
-        return;
-    }
+    if (!handoff(npc->ID, camp->ID)) return;
+    R_ASSERT2(npc->m_smart_terrain_id == u16(-1), "Campaign handoff retained a legacy job");
     Entry entry{};
     entry.npc = npc;
-    entry.plan = plan;
+    entry.plan = plan.release();
+    m_campaign_checks.erase(npc);
     entry.camp = camp->name_replace();
     m_entries.emplace(npc, std::move(entry));
     Msg("[npc campaign] enroll identity=%llu npc=%u camp=%s", m_next_identity, npc->ID, camp->name_replace());
@@ -591,6 +595,7 @@ void CNpcSimulation::restore_binder(u16 id, CScriptBinderObject& binder)
 
 void CNpcSimulation::remove(CSE_ALifeDynamicObject* object)
 {
+    if (auto npc = smart_cast<CSE_ALifeHumanAbstract*>(object)) m_campaign_checks.erase(npc);
     for (auto it = m_entries.begin(); it != m_entries.end();)
     {
         if (it->second.npc == object)

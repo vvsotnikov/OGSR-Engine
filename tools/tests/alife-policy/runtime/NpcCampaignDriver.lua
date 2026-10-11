@@ -3,6 +3,7 @@
 return function(cfg)
     local stage, started, since, sent = cfg.stage or 0, nil, nil, false
     local positioned=false
+    local supplies = {}
     local combat_started, combat_seen, combat_released = nil, false, false
     local npcs, camp_id, item, winner = cfg.npcs, cfg.camp, cfg.item, cfg.winner
     local function server(id) return assert(alife():object(id), "Missing server object "..id) end
@@ -103,6 +104,11 @@ return function(cfg)
                 for _,id in ipairs(npcs) do
                     local client=assert(level.object_by_id(id))
                     xr_logic.pstor_store(client,"campaign_fixture",42)
+                    local remove = {}
+                    client:iterate_inventory(function(_, it)
+                        if it:section() == "bandage" then remove[#remove + 1] = it:id() end
+                    end, client)
+                    for _, item_id in ipairs(remove) do alife():release(server(item_id), true) end
                 end
                 local fighter = assert(level.object_by_id(npcs[1]))
                 fighter:set_goodwill(-10000, db.actor)
@@ -123,17 +129,26 @@ return function(cfg)
                 fighter:set_relation(game_object.neutral, db.actor)
                 combat_released = true
                 log1("[npc campaign fixture] combat_released")
-                local node=level.vertex_in_direction(camp.m_level_vertex_id,vector():set(1,0,0),7)
-                item=assert(alife():create("bandage",level.vertex_position(node),node,cross_table():vertex(node):game_vertex_id())).id
+                for _, id in ipairs(npcs) do
+                    local client = assert(level.object_by_id(id))
+                    assert(not client:object("bandage"), "Resident already carries a bandage")
+                    local node = level.vertex_in_direction(client:level_vertex_id(), client:direction(), 5)
+                    supplies[#supplies + 1] = assert(alife():create("bandage", level.vertex_position(node), node,
+                        cross_table():vertex(node):game_vertex_id())).id
+                end
+                item = supplies[1]
             end
-            local supply=level.object_by_id(item)
-            for _,id in ipairs(npcs) do
-                local client=level.object_by_id(id)
-                if client and supply and not supply:parent() then client:set_sight(supply) end
+            local completed = 0
+            for _, id in ipairs(npcs) do
+                local owns_supply = false
+                for _, supply in ipairs(supplies) do
+                    if server(supply).parent_id == id then owns_supply = true end
+                end
+                if owns_supply and alife():supply_trip_phase(id) == 3 then completed = completed + 1 end
             end
-            local parent=server(item).parent_id
-            for _,id in ipairs(npcs) do if parent==id then winner=id end end
-            if winner and alife():supply_trip_phase(winner)==3 then
+            if completed == #npcs then
+                winner = server(item).parent_id
+                log1("[npc campaign fixture] multiple_residents_returned")
                 log1("[npc campaign fixture] real_supply_acquired")
                 reload(1)
             end

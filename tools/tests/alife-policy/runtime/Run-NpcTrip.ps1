@@ -133,7 +133,7 @@ try {
         !(Test-Path "$session/appdata/savedgames/campaign_legacy_seed.sav") -or
         !(Test-Path "$session/appdata/campaign-seed.lua"))) { throw 'Legacy campaign seed was not saved' }
     if ($Scenario -eq 'campaign') {
-        foreach ($milestone in @('legacy_migrated_capacity_preserved','combat_released','real_supply_acquired','online_reload_preserved',
+        foreach ($milestone in @('legacy_migrated_capacity_preserved','combat_released','multiple_residents_returned','real_supply_acquired','online_reload_preserved',
             'offline_ownership_preserved','offline_reload_preserved','returned_with_same_residents','real_respawner_replacement_enrolled')) {
             if ($log -notmatch "\[npc campaign fixture\] $milestone") { throw "Missing campaign milestone: $milestone" }
         }

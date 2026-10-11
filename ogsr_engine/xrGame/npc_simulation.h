@@ -33,6 +33,7 @@ class CNpcSimulation
     };
     CALifeSimulatorBase& m_alife;
     xr_map<CSE_ALifeHumanAbstract*, Entry> m_entries;
+    xr_map<CSE_ALifeHumanAbstract*, u32> m_campaign_checks;
     u64 m_next_identity = 1;
     CInifile* m_campaign;
 

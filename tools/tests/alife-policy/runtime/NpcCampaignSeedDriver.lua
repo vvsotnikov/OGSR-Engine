@@ -27,13 +27,23 @@ return function()
             assert(#npcs <= 3, "Unexpected farm population")
             local p = level.vertex_position(camp.m_level_vertex_id)
             db.actor:set_actor_position(vector():set(p.x + 8, p.y + 1, p.z))
+            for _, id in ipairs(npcs) do
+                alife():teleport_object(id, p, camp.m_level_vertex_id, camp.m_game_vertex_id)
+            end
             for i = #npcs + 1, 3 do
                 local obj = assert(alife():create("esc_stalker_respawn_1", p, camp.m_level_vertex_id, camp.m_game_vertex_id))
                 assert(obj:smart_terrain_id() == camp.id, "Wrong camp")
                 npcs[i] = obj.id
             end
         end
-        assert(now - started < 90000, "Camp seed timed out")
+        if now - started >= 90000 then
+            for _, id in ipairs(npcs) do
+                local st = db.storage[id]
+                log1(string.format("[campaign seed] npc=%d online=%s begun=%s active=%s", id,
+                    tostring(alife():object(id).online), tostring(camp.gulag.Object_begin_job[id]), tostring(st and st.active_section)))
+            end
+            error("Camp seed timed out")
+        end
         for _, id in ipairs(npcs) do
             local obj, st = assert(alife():object(id)), db.storage[id]
             assert(obj:alive() and obj:smart_terrain_id() == camp.id)
