@@ -21,8 +21,8 @@ struct NpcObservation
 struct NpcDecision
 {
     std::uint64_t identity, command;
-    std::uint32_t phase; // outbound=0, collecting=1, returning=2, complete=3, failed=4, dead=5, waiting=6
-    std::uint32_t interrupted, action; // wait=0, travel=1, collect=2, inspect=3
+    std::uint32_t phase; // outbound=0, collecting=1, returning=2, complete=3, failed=4, dead=5, waiting=6, resting=7
+    std::uint32_t interrupted, action; // wait=0, travel=1, collect=2, inspect=3, rest=4
     std::uint32_t reason; // Rust FailureReason; zero unless failed
     std::uint32_t game_vertex, level_vertex, level;
     float position[3];
@@ -36,6 +36,8 @@ extern "C"
 {
 NpcAgent* npc_agent_create(std::uint64_t identity, const NpcLocation* home, const NpcLocation* source, const NpcLocation* remembered_item);
 NpcAgent* npc_agent_create_goal(std::uint64_t identity, const NpcLocation* home);
+bool npc_agent_enable_camp(NpcAgent*);
+bool npc_agent_is_resident(const NpcAgent*);
 bool npc_agent_remember(NpcAgent*, std::uint32_t index, const NpcLocation* navigation, const NpcLocation* physical);
 enum class NpcSourceObservation : std::uint32_t { Rejected = 0, Unchanged = 1, Updated = 2 };
 // Only for the same bound item. A replacement at the same position would retain

@@ -38,8 +38,24 @@ same consumer audit before allowlisting. The installed `smart_terrain.script` me
 the gulag object, restores squad/group and clears the native smart-terrain ID;
 `xr_gulag.script` owns `capacity_non_exclusive`, adjusted by `se_smart_terrain:preserve_exclusives`. The installed `se_respawn:create(prob)` returns acceptance and appends accepted IDs to `spawned_obj`.
 
-Migration currently removes the old camp animations/patrols. A supplied resident
-has no new social routine. Each goal keeps the resident's own handoff position
+Campaign residents choose supply acquisition ahead of camp residence only when
+they lack a bandage and know an available source. Otherwise they return home and
+rest; no source is invented to keep an unsupplied resident busy. Camp residence
+is independent of possession. One active plan executes either acquisition or a
+source-less return; return retry remains goal-owned and supply failure history
+remains source-owned. Combat and persistent script ownership suspend it.
+Rest has no travel deadline; displacement requires a new return command. Failed
+returns back off across saves instead of retrying every frame. The native relaxed
+standing animation executes rest, matching the ordinary A-Life executor's relaxed
+travel stance; combat owns its separate posture. Legacy camp jobs and seated routines are not
+reactivated. Dedicated supply-only NPCs retain their old behavior.
+
+NPCG v7 persists resident goal policy for the renderer-free core as well as the
+engine. Native camp affiliation owns population reservations; a resident policy
+without an affiliation is rejected on native load. Older campaign saves upgrade
+their goal policy using that affiliation without discarding knowledge or an
+active supply trip. Execution still has one owner and one command sequence.
+Each goal keeps the resident's own handoff position
 as home only inside the configured `home_radius`; approach travel remains a
 legacy job until then. A job that never enters that radius remains legacy: mixed
 legacy/planner occupancy is supported, not evidence that every job was migrated.

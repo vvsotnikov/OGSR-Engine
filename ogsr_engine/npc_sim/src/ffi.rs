@@ -49,6 +49,7 @@ impl From<AgentDecision> for Output {
             Action::Wait => {}
             Action::Collect => output.action = 2,
             Action::Inspect => output.action = 3,
+            Action::Rest => output.action = 4,
             Action::Travel(location) => {
                 output.action = 1;
                 output.game_vertex = location.game_vertex;
@@ -213,6 +214,16 @@ pub unsafe extern "C" fn npc_agent_create_goal(identity: u64, home: *const Locat
     };
     Agent::medical(identity, *home)
         .map_or(std::ptr::null_mut(), |agent| Box::into_raw(Box::new(agent)))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn npc_agent_enable_camp(plan: *mut Agent) -> bool {
+    unsafe { plan.as_mut() }.is_some_and(Agent::enable_camp)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn npc_agent_is_resident(plan: *const Agent) -> bool {
+    unsafe { plan.as_ref() }.is_some_and(Agent::is_resident)
 }
 
 #[no_mangle]

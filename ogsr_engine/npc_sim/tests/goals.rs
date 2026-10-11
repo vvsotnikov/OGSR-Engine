@@ -644,6 +644,7 @@ fn legacy_v4(bytes: &[u8]) -> Vec<u8> {
     let count = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
     let mut old = bytes[..64].to_vec();
     old[4..8].copy_from_slice(&4u32.to_le_bytes());
+    old[48] &= 31;
     for source in bytes[64..64 + count * 68].chunks_exact(68) {
         old.extend_from_slice(&source[..60]);
     }

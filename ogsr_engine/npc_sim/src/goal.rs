@@ -6,6 +6,7 @@ use crate::{Location, Observation};
 pub(super) enum GoalKind {
     AssignedItem,
     CarryBandage,
+    Resident,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -32,7 +33,17 @@ impl Goal {
         })
     }
     pub fn is_medical(&self) -> bool {
-        self.kind == GoalKind::CarryBandage
+        self.kind != GoalKind::AssignedItem
+    }
+    pub fn is_resident(&self) -> bool {
+        self.kind == GoalKind::Resident
+    }
+    pub fn enable_camp(&mut self) -> bool {
+        if !self.is_medical() {
+            return false;
+        }
+        self.kind = GoalKind::Resident;
+        true
     }
     pub fn satisfied(&self) -> bool {
         self.satisfied
@@ -70,15 +81,24 @@ impl Goal {
         home: Location,
     ) -> bool {
         let failed = matches!(report.outcome, ActivityOutcome::Failed(_));
-        if failed && self.satisfied && report.previous == ActivityState::Returning {
+        if failed
+            && (self.satisfied || self.is_resident())
+            && report.previous == ActivityState::Returning
+        {
             self.return_retry_ms = Self::RETURN_RETRY_MS;
+        }
+        // A resident fetch is preempted once its acquired bandage satisfies the goal:
+        // cargo ownership and bandage count come from the same inventory snapshot.
+        // Starting any new activity clears this timer, so fetch failures do not inherit it.
+        if self.is_resident() && failed && self.return_retry_ms != 0 {
+            return false;
         }
         let terminal = matches!(
             report.previous,
             ActivityState::Complete | ActivityState::Failed
         );
         let completed_away = report.previous == ActivityState::Complete
-            && self.satisfied
+            && (self.satisfied || self.is_resident())
             && !observation.interrupted
             && observation.current.spatially_valid()
             && !observation.current.near(home, 3.0);
@@ -87,11 +107,26 @@ impl Goal {
             || completed_away
     }
 
+    pub fn preempts(&self, fetching: bool, current: Location, knowledge: &Knowledge) -> bool {
+        self.is_resident()
+            && ((fetching && self.satisfied)
+                || (!fetching
+                    && !self.satisfied
+                    && current.spatially_valid()
+                    && knowledge.nearest_available(current).is_some()))
+    }
     pub fn select(&self, current: Location, knowledge: &Knowledge) -> Option<ActivityRequest> {
         if !current.spatially_valid() {
             return None;
         }
-        if self.satisfied {
+        if self.is_resident() {
+            if !self.satisfied {
+                if let Some(source) = knowledge.nearest_available(current) {
+                    return Some(ActivityRequest::Fetch(source));
+                }
+            }
+            (self.return_retry_ms == 0).then_some(ActivityRequest::ReturnHome)
+        } else if self.satisfied {
             Some(ActivityRequest::ReturnHome)
         } else {
             knowledge

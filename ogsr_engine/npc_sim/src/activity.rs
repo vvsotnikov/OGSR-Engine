@@ -223,7 +223,7 @@ impl Plan {
                     }
                 }
             }
-            Action::Inspect => unreachable!("Only Agent translates a collection into inspection"),
+            Action::Inspect | Action::Rest => unreachable!("Agent-owned action"),
             Action::Wait => {}
         }
         decision
@@ -384,7 +384,7 @@ pub(super) enum ActivityOutcome {
     Dead,
 }
 
-// This is a supply-trip report, not a general-purpose activity protocol.
+// Report from shared travel/collection execution, not a general activity protocol.
 // Keep the prior state: a new return failure arms a cooldown, whereas later
 // reports of that same terminal failure must not restart it.
 #[derive(Debug)]
@@ -436,6 +436,28 @@ impl Plan {
         }
     }
 
+    // A source-less return has no cargo precondition. Its travel budgets and
+    // progress accounting are identical to the return leg of a supply trip.
+    pub(super) fn advance_home(&mut self, observation: Observation) -> ActivityReport {
+        if matches!(
+            self.state(),
+            ActivityState::Complete | ActivityState::Failed
+        ) {
+            self.interrupted = observation.interrupted;
+            self.location_valid = observation.current.spatially_valid();
+        }
+        self.advance(observation, true)
+    }
+    pub(super) fn residence_decision(&self) -> Decision {
+        let mut decision = self.decision();
+        if self.phase == TripPhase::Complete {
+            decision.phase = Phase::Resting;
+            if !self.interrupted && self.location_valid {
+                decision.action = Action::Rest;
+            }
+        }
+        decision
+    }
     pub(super) fn advance(&mut self, observation: Observation, satisfied: bool) -> ActivityReport {
         let previous = self.state();
         let decision = match previous {

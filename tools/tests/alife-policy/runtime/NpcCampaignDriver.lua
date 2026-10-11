@@ -5,12 +5,35 @@ return function(cfg)
     local positioned=false
     local radius = ini_file("scripts\\npc_campaign.ltx"):r_float("esc_farm_lager", "home_radius")
     local outside, outside_since, outside_complete
+    local camp_displaced, displaced_at, return_seen, rest_since, no_supply_since
+    local rest_gate_started, diagnostic_at, acquisition_started, reload_checked, reload_rest_since
     local function check_home(id, camp)
         local point = vector()
         assert(alife():supply_trip_home(id, point), "Missing planner home: " .. id)
         assert(point:distance_to(camp.position) <= radius + 0.001, "Planner home outside configured camp radius")
     end
+    local function resting(id)
+        local client = level.object_by_id(id)
+        local home = vector()
+        return client and alife():supply_trip_phase(id) == 7
+            and client:motivation_action_manager():current_action_id() == stalker_ids.action_alife_planner
+            and alife():supply_trip_home(id, home) and client:position():distance_to(home) <= 3
+    end
+    local function move_observer_away(camp)
+        for _, direction in ipairs({vector():set(-1,0,0),vector():set(1,0,0),vector():set(0,0,1),vector():set(0,0,-1)}) do
+            local node = level.vertex_in_direction(camp.m_level_vertex_id, direction, 80)
+            local p = level.vertex_position(node)
+            local clear = p:distance_to(camp.position) > 40
+            for _, id in ipairs(cfg.npcs) do
+                local client = level.object_by_id(id)
+                if client and client:position():distance_to(p) < 30 then clear = false end
+            end
+            if clear then db.actor:set_actor_position(vector():set(p.x,p.y+1.1,p.z)); return end
+        end
+        error("No observer position clear of camp residents")
+    end
     local inventory_reset_at
+    local recovered_at = {}
     local supplies, owners = cfg.supplies or {}, cfg.owners or {}
     local combat_started, combat_seen, combat_released = nil, false, false
     local npcs, camp_id, item, winner = cfg.npcs, cfg.camp, cfg.item, cfg.winner
@@ -53,12 +76,27 @@ return function(cfg)
         return server(respawner.spawned_obj[#respawner.spawned_obj])
     end
     local function tick()
-        if sent or not db.actor or not app_ready() or device().precache_frame~=0 then return end
+        if sent or not db.actor then return end
+        -- Protect every resident before any readiness check can return early.
+        -- Simulation can already run during precache and staggered enrollment.
+        for _, id in ipairs(npcs) do
+            if stage < 5 or id ~= winner then
+                local client = level.object_by_id(id)
+                if client then
+                    client:invulnerable(true)
+                    if not combat_started or combat_released or id ~= npcs[1] then
+                        client:set_enemy_callback(function() return false end)
+                    end
+                end
+            end
+        end
+        if not app_ready() or device().precache_frame~=0 then return end
         local now=time_global()
         if not started then
             started=now; get_console():execute("g_god on"); level.disable_input()
         end
-        assert(now-started<150000,"Campaign test timed out at stage "..stage)
+        local stage_limit = stage == 0 and 360000 or 150000
+        assert(now-started<stage_limit,"Campaign test timed out at stage "..stage)
         local camp=server(camp_id)
         assert(camp:name()=="esc_farm_lager","Seed camp binding changed")
         if level.name()=="l01_escape" and not positioned then
@@ -76,21 +114,13 @@ return function(cfg)
                     alife():release(n,true)
                 end
             end
+            if stage > 0 then move_observer_away(camp) end
             positioned=true
         end
         for _,id in ipairs(npcs) do
             if stage<5 or id~=winner then
                 local n=server(id)
-                assert(n:alive(),"Resident unexpectedly died")
-                local client=level.object_by_id(id)
-                if client then
-                    -- Keep ambient encounters out of this persistence test.
-                    -- Combat arbitration has its own native gameplay scenario.
-                    client:invulnerable(true)
-                    if not combat_started or combat_released or id ~= npcs[1] then
-                        client:set_enemy_callback(function() return false end)
-                    end
-                end
+                assert(n:alive(),"Resident unexpectedly died: " .. id)
                 if alife():supply_trip_phase(id)<0 then assert(stage==0,"Lost persistent ownership"); return end
                 assert(n:smart_terrain_id()==65535,"Legacy job reclaimed resident")
                 assert(not camp.npc_info[id],"Legacy camp retained migrated resident")
@@ -102,7 +132,52 @@ return function(cfg)
             end
         end
         if stage==0 then
+            if not diagnostic_at or now - diagnostic_at > 15000 then
+                diagnostic_at = now
+                for _, id in ipairs(npcs) do
+                    local client = level.object_by_id(id)
+                    local enemy = client and client:best_enemy()
+                    local threat = client and client:best_danger()
+                    log1(string.format("[npc campaign fixture] status npc=%d phase=%d action=%s enemy=%s danger=%s danger_object=%s danger_age=%s actor_distance=%.1f",
+                        id, alife():supply_trip_phase(id), tostring(client and client:motivation_action_manager():current_action_id()),
+                        tostring(enemy and enemy:id()), tostring(threat and threat:type()),
+                        tostring(threat and threat:object() and threat:object():id()), tostring(threat and now - threat:time()),
+                        client and client:position():distance_to(db.actor:position()) or -1))
+                end
+            end
             if not since then
+                if not camp_displaced then
+                    if not rest_gate_started then rest_gate_started = now end
+                    for _, id in ipairs(npcs) do
+                        if not resting(id) then
+                            rest_since = nil
+                            assert(now - rest_gate_started < 60000, "Resident did not settle at home: " .. id .. " phase=" .. alife():supply_trip_phase(id))
+                            return
+                        end
+                    end
+                    if not rest_since then rest_since = now; return end
+                    if now - rest_since < 3000 then return end
+                    log1("[npc campaign fixture] residents_resting")
+                    local client = assert(level.object_by_id(npcs[1]))
+                    local home = vector()
+                    assert(alife():supply_trip_home(npcs[1], home), "Missing resident home")
+                    local destination
+                    for _, direction in ipairs({vector():set(1,0,0),vector():set(-1,0,0),vector():set(0,0,1),vector():set(0,0,-1)}) do
+                        local node = level.vertex_in_direction(client:level_vertex_id(), direction, 12)
+                        local p = level.vertex_position(node)
+                        if p:distance_to(home) > 5 then destination = p; break end
+                    end
+                    assert(destination, "No reachable camp displacement point")
+                    client:set_npc_position(destination, true)
+                    camp_displaced = true
+                    displaced_at = now
+                    return
+                end
+                assert(now - displaced_at < 60000, "Displaced resident did not return to rest")
+                local phase = alife():supply_trip_phase(npcs[1])
+                if phase == 2 then return_seen = true end
+                if not resting(npcs[1]) or not return_seen then return end
+                log1("[npc campaign fixture] displaced_resident_returned")
                 since=now
                 local extra=newcomer(camp)
                 if extra then
@@ -132,6 +207,7 @@ return function(cfg)
                 fighter:set_enemy_callback(function() return false end)
                 fighter:set_relation(game_object.neutral, db.actor)
                 combat_released = true
+                move_observer_away(camp)
                 inventory_reset_at = now
                 log1("[npc campaign fixture] combat_released")
                 for _, id in ipairs(npcs) do
@@ -151,6 +227,27 @@ return function(cfg)
                         return
                     end
                 end
+                local all_resting = true
+                for _, id in ipairs(npcs) do
+                    local client = assert(level.object_by_id(id))
+                    if client:motivation_action_manager():current_action_id() == stalker_ids.action_alife_planner then
+                        recovered_at[id] = recovered_at[id] or now
+                    end
+                    if not resting(id) then
+                        all_resting = false
+                        assert(alife():supply_trip_phase(id) ~= 4, "Unsupplied return failed: " .. id)
+                        if recovered_at[id] then
+                            assert(now - recovered_at[id] < 60000, "Unsupplied resident did not return to camp: " .. id
+                                .. " action=" .. client:motivation_action_manager():current_action_id())
+                        else
+                            assert(now - inventory_reset_at < 60000, "Resident did not leave combat/danger control: " .. id)
+                        end
+                    end
+                end
+                if not all_resting then no_supply_since = nil; return end
+                if not no_supply_since then no_supply_since = now; return end
+                if now - no_supply_since < 3000 then return end
+                log1("[npc campaign fixture] unsupplied_residents_resting")
                 for _, id in ipairs(npcs) do
                     local client = assert(level.object_by_id(id))
                     local node = level.vertex_in_direction(client:level_vertex_id(), client:direction(), 5)
@@ -158,14 +255,16 @@ return function(cfg)
                         cross_table():vertex(node):game_vertex_id())).id
                 end
                 item = supplies[1]
+                acquisition_started = now
             end
+            assert(now - acquisition_started < 60000, "Residents did not acquire supplies and return to rest")
             local completed = 0
             for _, id in ipairs(npcs) do
                 local owns_supply = false
                 for _, supply in ipairs(supplies) do
                     if server(supply).parent_id == id then owns_supply = true end
                 end
-                if owns_supply and alife():supply_trip_phase(id) == 3 then completed = completed + 1 end
+                if owns_supply and resting(id) then completed = completed + 1 end
             end
             if completed == #npcs then
                 for i, supply in ipairs(supplies) do owners[i] = server(supply).parent_id end
@@ -183,8 +282,20 @@ return function(cfg)
             assert(#supplies == 3 and #owners == 3, "Missing inventory bindings")
             for i, supply in ipairs(supplies) do
                 assert(server(supply).parent_id == owners[i], "Reload changed a resident inventory")
-                assert(alife():supply_trip_phase(owners[i]) == 3, "Reload changed a completed resident goal")
+                if not reload_checked then
+                    assert(alife():supply_trip_phase(owners[i]) == 7, "Reload lost resident rest activity")
+                end
             end
+            reload_checked = true
+            for _, id in ipairs(npcs) do
+                if not resting(id) then
+                    reload_rest_since = nil
+                    assert(now - started < 60000, "Resident did not resume rest after reload: " .. id)
+                    return
+                end
+            end
+            if not reload_rest_since then reload_rest_since = now; return end
+            if now - reload_rest_since < 3000 then return end
             if stage==1 then
                 log1("[npc campaign fixture] online_reload_preserved")
                 depart(2,"l02_garbage")
@@ -200,6 +311,7 @@ return function(cfg)
             for _,id in ipairs(npcs) do
                 assert(not server(id).online and not level.object_by_id(id),"Resident remained on previous map")
                 server(id):brain():update(true)
+                assert(alife():supply_trip_phase(id) == 7, "Offline resident lost rest activity")
                 assert(server(id):smart_terrain_id()==65535,"Forced legacy update reclaimed resident")
             end
             if now-started<3000 then return end

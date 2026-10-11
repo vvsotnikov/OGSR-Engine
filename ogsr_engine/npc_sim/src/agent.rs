@@ -65,6 +65,12 @@ impl Agent {
             activity: Some(plan),
         }
     }
+    pub fn enable_camp(&mut self) -> bool {
+        self.goal.enable_camp()
+    }
+    pub fn is_resident(&self) -> bool {
+        self.goal.is_resident()
+    }
     pub fn home(&self) -> Location {
         self.home
     }
@@ -219,6 +225,13 @@ impl Agent {
         true
     }
     fn result(&self, mut decision: Decision) -> AgentDecision {
+        if decision.phase == Phase::Complete && self.is_resident() && self.selected.is_none() {
+            if let Some(activity) = &self.activity {
+                if !self.dead {
+                    decision = activity.residence_decision();
+                }
+            }
+        }
         if decision.action == Action::Collect
             && self
                 .selected
@@ -310,13 +323,21 @@ impl Agent {
             if o.supply == Supply::Owned {
                 self.knowledge.acquired(self.selected);
             }
-            let report = activity.advance(o, self.goal.satisfied());
+            let camp = self.goal.is_resident() && self.selected.is_none();
+            let report = if camp {
+                activity.advance_home(o)
+            } else {
+                activity.advance(o, self.goal.satisfied())
+            };
             self.command = activity.command();
             self.knowledge
                 .learn(self.selected, &report, self.goal.satisfied());
             if self
                 .goal
                 .reconsider(&report, inventory_changed, o, self.home)
+                || self
+                    .goal
+                    .preempts(self.selected.is_some(), o.current, &self.knowledge)
             {
                 self.activity = None;
                 self.selected = None;
@@ -332,7 +353,11 @@ impl Agent {
                 initial.path_blocked = false;
                 initial.pickup_pending = false;
                 let activity = self.activity.as_mut().unwrap();
-                activity.advance(initial, self.goal.satisfied());
+                if self.goal.is_resident() {
+                    activity.advance_home(initial);
+                } else {
+                    activity.advance(initial, self.goal.satisfied());
+                }
                 self.command = activity.command();
             }
             // Source facts belong to the previous selection. Observe a newly

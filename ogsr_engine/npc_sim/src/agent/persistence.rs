@@ -4,7 +4,7 @@ impl Agent {
     pub fn save(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(b"NPCG");
-        put(&mut bytes, 6);
+        put(&mut bytes, 7);
         bytes.extend_from_slice(&self.identity.to_le_bytes());
         bytes.extend_from_slice(&self.command.to_le_bytes());
         put_location(&mut bytes, self.home);
@@ -14,7 +14,9 @@ impl Agent {
                 | (u32::from(self.goal.satisfied()) << 1)
                 | (u32::from(self.dead) << 2)
                 | (u32::from(self.interrupted) << 3)
-                | (u32::from(self.script_suspended) << 4),
+                | (u32::from(self.script_suspended) << 4)
+                | (u32::from(self.is_resident()) << 5)
+                | (u32::from(self.activity.is_some()) << 6),
         );
         put(&mut bytes, self.goal.return_retry_ms());
         put(&mut bytes, self.selected.map_or(u32::MAX, |i| i as u32));
@@ -43,7 +45,7 @@ impl Agent {
             return None;
         }
         let version = r.u32()?;
-        if !(2..=6).contains(&version) {
+        if !(2..=7).contains(&version) {
             return None;
         }
         let identity = u64::from_le_bytes(r.take()?);
@@ -54,11 +56,26 @@ impl Agent {
         let return_retry_ms = r.u32()?;
         let selected = r.u32()?;
         let count = r.u32()? as usize;
-        if command == 0 || flags > if version >= 4 { 31 } else { 15 } || count > Self::MAX_SOURCES {
+        if command == 0
+            || flags
+                > if version >= 7 {
+                    127
+                } else if version >= 4 {
+                    31
+                } else {
+                    15
+                }
+            || count > Self::MAX_SOURCES
+        {
             return None;
         }
         agent.command = command;
-        let kind = if flags & 1 != 0 {
+        if flags & 32 != 0 && flags & 1 == 0 {
+            return None;
+        }
+        let kind = if flags & 32 != 0 {
+            GoalKind::Resident
+        } else if flags & 1 != 0 {
             GoalKind::CarryBandage
         } else {
             GoalKind::AssignedItem
@@ -119,6 +136,9 @@ impl Agent {
                 return None;
             }
             agent.activity = Some(trip);
+        }
+        if version >= 7 && (flags & 64 != 0) != agent.activity.is_some() {
+            return None;
         }
         if agent.selected.is_some() && agent.activity.is_none() {
             return None;

@@ -51,6 +51,7 @@ pub enum Phase {
     Failed = 4,
     Dead = 5,
     Waiting = 6,
+    Resting = 7,
 }
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -93,6 +94,7 @@ pub enum Action {
     Travel(Location),
     Collect,
     Inspect,
+    Rest,
 }
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Decision {
