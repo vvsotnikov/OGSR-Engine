@@ -412,9 +412,6 @@ impl Plan {
         activity
     }
 
-    pub(super) fn exhaust_command(&mut self) {
-        self.fail(FailureReason::CounterExhausted);
-    }
     pub(super) fn command(&self) -> u64 {
         self.command
     }
@@ -439,6 +436,28 @@ impl Plan {
         }
     }
 
+    // A source-less return has no cargo precondition. Its travel budgets and
+    // progress accounting are identical to the return leg of a supply trip.
+    pub(super) fn advance_home(&mut self, observation: Observation) -> ActivityReport {
+        if matches!(
+            self.state(),
+            ActivityState::Complete | ActivityState::Failed
+        ) {
+            self.interrupted = observation.interrupted;
+            self.location_valid = observation.current.spatially_valid();
+        }
+        self.advance(observation, true)
+    }
+    pub(super) fn residence_decision(&self) -> Decision {
+        let mut decision = self.decision();
+        if self.phase == TripPhase::Complete {
+            decision.phase = Phase::Resting;
+            if !self.interrupted && self.location_valid {
+                decision.action = Action::Rest;
+            }
+        }
+        decision
+    }
     pub(super) fn advance(&mut self, observation: Observation, satisfied: bool) -> ActivityReport {
         let previous = self.state();
         let decision = match previous {

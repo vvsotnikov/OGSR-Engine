@@ -2,7 +2,6 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 mod activity;
 mod agent;
-mod camp;
 mod ffi;
 mod goal;
 mod knowledge;

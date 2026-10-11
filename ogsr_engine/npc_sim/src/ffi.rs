@@ -217,6 +217,16 @@ pub unsafe extern "C" fn npc_agent_create_goal(identity: u64, home: *const Locat
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn npc_agent_enable_camp(plan: *mut Agent) -> bool {
+    unsafe { plan.as_mut() }.is_some_and(Agent::enable_camp)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn npc_agent_is_resident(plan: *const Agent) -> bool {
+    unsafe { plan.as_ref() }.is_some_and(Agent::is_resident)
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn npc_agent_remember(
     plan: *mut Agent,
     index: u32,
@@ -548,9 +558,4 @@ mod tests {
             npc_agent_destroy(restored);
         }
     }
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn npc_agent_enable_camp(plan: *mut Agent) -> bool {
-    unsafe { plan.as_mut() }.is_some_and(Agent::enable_camp)
 }

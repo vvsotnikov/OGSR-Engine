@@ -37,6 +37,7 @@ extern "C"
 NpcAgent* npc_agent_create(std::uint64_t identity, const NpcLocation* home, const NpcLocation* source, const NpcLocation* remembered_item);
 NpcAgent* npc_agent_create_goal(std::uint64_t identity, const NpcLocation* home);
 bool npc_agent_enable_camp(NpcAgent*);
+bool npc_agent_is_resident(const NpcAgent*);
 bool npc_agent_remember(NpcAgent*, std::uint32_t index, const NpcLocation* navigation, const NpcLocation* physical);
 enum class NpcSourceObservation : std::uint32_t { Rejected = 0, Unchanged = 1, Updated = 2 };
 // Only for the same bound item. A replacement at the same position would retain

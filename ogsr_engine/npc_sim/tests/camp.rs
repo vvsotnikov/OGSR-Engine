@@ -101,11 +101,11 @@ fn blocked_return_backs_off_across_reload_but_supply_can_preempt_it() {
     blocked.path_blocked = true;
     blocked.elapsed_ms = 60_000;
     let failed = a.step(blocked, 0).decision;
-    assert_eq!(failed.reason, FailureReason::TravelStalled);
+    assert_eq!(failed.action, Action::Wait);
     a = reload(&a);
     let mut wait = observation(30.);
     wait.elapsed_ms = 59_000;
-    assert_eq!(a.step(wait, 0).decision.phase, Phase::Failed);
+    assert_eq!(a.step(wait, 0).decision.action, Action::Wait);
     a = reload(&a);
     assert!(a.remember(0, point(10.), point(10.)));
     assert_eq!(
@@ -130,8 +130,7 @@ fn previous_medical_save_can_enable_camp_without_losing_sources() {
     a.remember(0, point(10.), point(10.));
     a.step(observation(0.), 0);
     let mut old = a.save();
-    let count = a.sources().len();
-    old.drain(64 + 68 * count..68 + 68 * count);
+    old[48] &= 31;
     old[4..8].copy_from_slice(&6u32.to_le_bytes());
     let mut restored = Agent::load(&old).unwrap();
     assert_eq!(restored, a);
@@ -195,5 +194,44 @@ fn a_return_observes_lost_position_and_resets_progress_after_combat() {
     assert_eq!(
         a.step(unknown, 1).decision.reason,
         FailureReason::PositionUnknown
+    );
+}
+
+#[test]
+fn a_failed_acquisition_falls_back_to_camp_without_forgetting_the_failure() {
+    let mut a = resident();
+    a.remember(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    let mut missing = observation(10.);
+    missing.supply = Supply::Missing;
+    let d = a.step(missing, 0).decision;
+    assert_eq!(d.action, Action::Travel(point(0.)));
+    assert_eq!(a.sources()[0].failure, FailureReason::SupplyUnavailable);
+    a = reload(&a);
+    assert_eq!(a.step(observation(0.), 0).decision.action, Action::Rest);
+}
+#[test]
+fn a_legacy_return_can_become_camp_execution_without_losing_inventory_policy() {
+    let mut a = Agent::medical(7, point(0.)).unwrap();
+    a.remember(0, point(10.), point(10.));
+    a.step(observation(0.), 0);
+    a.step(observation(10.), 1);
+    let mut old = a.save();
+    old[48] &= 31;
+    old[4..8].copy_from_slice(&6u32.to_le_bytes());
+    let mut restored = Agent::load(&old).unwrap();
+    assert!(restored.enable_camp());
+    assert_eq!(
+        restored.step(observation(10.), 1).decision.action,
+        Action::Travel(point(0.))
+    );
+    restored = reload(&restored);
+    assert_eq!(
+        restored.step(observation(0.), 1).decision.action,
+        Action::Rest
+    );
+    assert_eq!(
+        restored.step(observation(0.), 0).decision.action,
+        Action::Travel(point(10.))
     );
 }

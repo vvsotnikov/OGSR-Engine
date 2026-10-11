@@ -15,8 +15,8 @@ impl Agent {
                 | (u32::from(self.dead) << 2)
                 | (u32::from(self.interrupted) << 3)
                 | (u32::from(self.script_suspended) << 4)
-                | (u32::from(self.camp_enabled) << 5)
-                | (u32::from(self.camp.is_some()) << 6),
+                | (u32::from(self.is_resident()) << 5)
+                | (u32::from(self.activity.is_some()) << 6),
         );
         put(&mut bytes, self.goal.return_retry_ms());
         put(&mut bytes, self.selected.map_or(u32::MAX, |i| i as u32));
@@ -30,19 +30,8 @@ impl Agent {
             put(&mut bytes, source.kind as u32);
             put(&mut bytes, source.rejection_delay_ms);
         }
-        put(
-            &mut bytes,
-            if self.activity.is_some() {
-                Plan::SNAPSHOT_SIZE as u32
-            } else {
-                0
-            },
-        );
         if let Some(trip) = &self.activity {
             bytes.extend(trip.save());
-        }
-        if let Some(camp) = &self.camp {
-            bytes.extend(camp.save());
         }
         bytes
     }
@@ -81,7 +70,12 @@ impl Agent {
             return None;
         }
         agent.command = command;
-        let kind = if flags & 1 != 0 {
+        if flags & 32 != 0 && flags & 1 == 0 {
+            return None;
+        }
+        let kind = if flags & 32 != 0 {
+            GoalKind::Resident
+        } else if flags & 1 != 0 {
             GoalKind::CarryBandage
         } else {
             GoalKind::AssignedItem
@@ -90,10 +84,6 @@ impl Agent {
         agent.dead = flags & 4 != 0;
         agent.interrupted = flags & 8 != 0;
         agent.script_suspended = flags & 16 != 0;
-        agent.camp_enabled = flags & 32 != 0;
-        if agent.camp_enabled && !agent.is_medical() {
-            return None;
-        }
         let mut sources = Vec::with_capacity(count);
         for index in 0..count {
             let navigation = r.location()?;
@@ -140,39 +130,14 @@ impl Agent {
             }
             agent.selected = Some(selected as usize);
         }
-        let trip_bytes = if version >= 7 {
-            let size = r.u32()? as usize;
-            if size != 0 && size != Plan::SNAPSHOT_SIZE {
-                return None;
-            }
-            let bytes = r.0.get(..size)?;
-            r.0 = &r.0[size..];
-            bytes
-        } else {
-            let bytes = r.0;
-            r.0 = &[];
-            bytes
-        };
-        if !trip_bytes.is_empty() {
-            let trip = Plan::load(trip_bytes)?;
+        if !r.0.is_empty() {
+            let trip = Plan::load(r.0)?;
             if trip.identity() != identity || trip.home() != home || trip.command() != command {
                 return None;
             }
             agent.activity = Some(trip);
         }
-        if flags & 64 != 0 {
-            if !agent.camp_enabled || agent.activity.is_some() || agent.selected.is_some() {
-                return None;
-            }
-            let camp = Camp::load(r.0)?;
-            if camp.identity() != identity
-                || camp.home() != home
-                || camp.decision().command != command
-            {
-                return None;
-            }
-            agent.camp = Some(camp);
-        } else if !r.0.is_empty() {
+        if version >= 7 && (flags & 64 != 0) != agent.activity.is_some() {
             return None;
         }
         if agent.selected.is_some() && agent.activity.is_none() {

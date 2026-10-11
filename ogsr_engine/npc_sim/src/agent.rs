@@ -1,5 +1,4 @@
 use crate::activity::ActivityState;
-use crate::camp::Camp;
 use crate::goal::{ActivityRequest, Goal, GoalKind};
 use crate::knowledge::{Knowledge, Source, SourceKind};
 use crate::{
@@ -29,8 +28,6 @@ pub struct Agent {
     knowledge: Knowledge,
     selected: Option<usize>,
     activity: Option<Plan>,
-    camp_enabled: bool,
-    camp: Option<Camp>,
     command: u64,
     dead: bool,
     interrupted: bool,
@@ -47,8 +44,6 @@ impl Agent {
             knowledge: Knowledge::default(),
             selected: None,
             activity: None,
-            camp_enabled: false,
-            camp: None,
             command: 1,
             dead: false,
             interrupted: false,
@@ -68,16 +63,13 @@ impl Agent {
             interrupted: false,
             script_suspended: false,
             activity: Some(plan),
-            camp_enabled: false,
-            camp: None,
         }
     }
     pub fn enable_camp(&mut self) -> bool {
-        if !self.is_medical() {
-            return false;
-        }
-        self.camp_enabled = true;
-        true
+        self.goal.enable_camp()
+    }
+    pub fn is_resident(&self) -> bool {
+        self.goal.is_resident()
     }
     pub fn home(&self) -> Location {
         self.home
@@ -214,7 +206,7 @@ impl Agent {
         };
         let source = match request {
             ActivityRequest::Fetch(i) => Some(i),
-            ActivityRequest::ReturnHome => None,
+            ActivityRequest::ReturnHome | ActivityRequest::Camp => None,
         };
         let locations = source.map(|i| {
             let s = self.knowledge.sources()[i];
@@ -233,6 +225,13 @@ impl Agent {
         true
     }
     fn result(&self, mut decision: Decision) -> AgentDecision {
+        if decision.phase == Phase::Complete && self.is_resident() && self.selected.is_none() {
+            if let Some(activity) = &self.activity {
+                if !self.dead {
+                    decision = activity.residence_decision();
+                }
+            }
+        }
         if decision.action == Action::Collect
             && self
                 .selected
@@ -256,8 +255,6 @@ impl Agent {
                 interrupted: false,
                 action: Action::Wait,
             }
-        } else if let Some(camp) = &self.camp {
-            camp.decision()
         } else if let Some(activity) = &self.activity {
             activity.decision()
         } else {
@@ -322,50 +319,28 @@ impl Agent {
         self.goal.elapse(elapsed);
         self.knowledge.elapse(elapsed);
         let inventory_changed = self.goal.observe_inventory(bandages);
-        if self.camp_enabled {
-            if o.supply == Supply::Owned {
-                self.knowledge.acquired(self.selected);
-            }
-            let supply_available = !self.goal.satisfied()
-                && o.current.spatially_valid()
-                && self.knowledge.nearest_available(o.current).is_some();
-            if self.camp.is_some() && supply_available {
-                self.camp = None;
-            }
-            // A camp resident has a daily activity even without a known supply.
-            // A running acquisition keeps its existing interruption/retry rules.
-            if self.camp.is_none()
-                && (self.goal.satisfied() || (self.activity.is_none() && !supply_available))
-            {
-                if let Some(command) = self.command.checked_add(1) {
-                    self.activity = None;
-                    self.selected = None;
-                    self.camp = Some(Camp::new(self.identity, command, self.home, o.interrupted));
-                    o.elapsed_ms = 0;
-                    o.path_blocked = false;
-                    o.pickup_pending = false;
-                }
-            }
-            if let Some(camp) = &mut self.camp {
-                let decision = camp.step(o, elapsed);
-                self.command = decision.command;
-                return AgentDecision {
-                    decision,
-                    source: None,
-                };
-            }
-        }
         if let Some(activity) = self.activity.as_mut() {
             if o.supply == Supply::Owned {
                 self.knowledge.acquired(self.selected);
             }
-            let report = activity.advance(o, self.goal.satisfied());
+            let camp = self.goal.is_resident() && self.selected.is_none();
+            let report = if camp {
+                activity.advance_home(o)
+            } else {
+                activity.advance(o, self.goal.satisfied())
+            };
             self.command = activity.command();
             self.knowledge
                 .learn(self.selected, &report, self.goal.satisfied());
             if self
                 .goal
                 .reconsider(&report, inventory_changed, o, self.home)
+                || (self.goal.is_resident()
+                    && ((self.selected.is_some() && self.goal.satisfied())
+                        || (camp
+                            && !self.goal.satisfied()
+                            && o.current.spatially_valid()
+                            && self.knowledge.nearest_available(o.current).is_some())))
             {
                 self.activity = None;
                 self.selected = None;
@@ -374,14 +349,19 @@ impl Agent {
             }
         }
         if let Some(request) = self.goal.select(o.current, &self.knowledge) {
-            if self.start_activity(request, o.interrupted) && request == ActivityRequest::ReturnHome
+            if self.start_activity(request, o.interrupted)
+                && matches!(request, ActivityRequest::ReturnHome | ActivityRequest::Camp)
             {
                 let mut initial = o;
                 initial.elapsed_ms = 0;
                 initial.path_blocked = false;
                 initial.pickup_pending = false;
                 let activity = self.activity.as_mut().unwrap();
-                activity.advance(initial, self.goal.satisfied());
+                if request == ActivityRequest::Camp {
+                    activity.advance_home(initial);
+                } else {
+                    activity.advance(initial, self.goal.satisfied());
+                }
                 self.command = activity.command();
             }
             // Source facts belong to the previous selection. Observe a newly

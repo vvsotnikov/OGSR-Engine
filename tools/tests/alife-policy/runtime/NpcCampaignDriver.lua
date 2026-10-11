@@ -5,7 +5,8 @@ return function(cfg)
     local positioned=false
     local radius = ini_file("scripts\\npc_campaign.ltx"):r_float("esc_farm_lager", "home_radius")
     local outside, outside_since, outside_complete
-    local camp_displaced, return_seen, rest_since
+    local camp_displaced, return_seen, rest_since, no_supply_since
+    local rest_gate_started
     local function check_home(id, camp)
         local point = vector()
         assert(alife():supply_trip_home(id, point), "Missing planner home: " .. id)
@@ -105,24 +106,37 @@ return function(cfg)
         if stage==0 then
             if not since then
                 if not camp_displaced then
+                    if not rest_gate_started then rest_gate_started = now end
                     for _, id in ipairs(npcs) do
-                        if alife():supply_trip_phase(id) ~= 7 then return end
+                        if alife():supply_trip_phase(id) ~= 7 then
+                            rest_since = nil
+                            assert(now - rest_gate_started < 60000, "Resident did not settle at home: " .. id .. " phase=" .. alife():supply_trip_phase(id))
+                            return
+                        end
                     end
                     if not rest_since then rest_since = now; return end
                     if now - rest_since < 3000 then return end
                     log1("[npc campaign fixture] residents_resting")
                     local client = assert(level.object_by_id(npcs[1]))
-                    local node = level.vertex_in_direction(client:level_vertex_id(), client:direction(), 12)
-                    local p = level.vertex_position(node)
                     local home = vector()
-                    assert(alife():supply_trip_home(npcs[1], home) and p:distance_to(home) > 5, "Invalid camp displacement")
-                    client:set_npc_position(p, true)
+                    assert(alife():supply_trip_home(npcs[1], home), "Missing resident home")
+                    local destination
+                    for _, direction in ipairs({vector():set(1,0,0),vector():set(-1,0,0),vector():set(0,0,1),vector():set(0,0,-1)}) do
+                        local node = level.vertex_in_direction(client:level_vertex_id(), direction, 12)
+                        local p = level.vertex_position(node)
+                        if p:distance_to(home) > 5 then destination = p; break end
+                    end
+                    assert(destination, "No reachable camp displacement point")
+                    client:set_npc_position(destination, true)
                     camp_displaced = true
                     return
                 end
                 local phase = alife():supply_trip_phase(npcs[1])
                 if phase == 2 then return_seen = true end
                 if phase ~= 7 or not return_seen then return end
+                local home = vector()
+                assert(alife():supply_trip_home(npcs[1], home), "Missing resident home")
+                assert(level.object_by_id(npcs[1]):position():distance_to(home) <= 3, "Rest reported away from home")
                 log1("[npc campaign fixture] displaced_resident_returned")
                 since=now
                 local extra=newcomer(camp)
@@ -172,6 +186,16 @@ return function(cfg)
                         return
                     end
                 end
+                for _, id in ipairs(npcs) do
+                    if alife():supply_trip_phase(id) ~= 7 then
+                        no_supply_since = nil
+                        assert(now - inventory_reset_at < 60000, "Unsupplied resident did not return to camp: " .. id)
+                        return
+                    end
+                end
+                if not no_supply_since then no_supply_since = now; return end
+                if now - no_supply_since < 3000 then return end
+                log1("[npc campaign fixture] unsupplied_residents_resting")
                 for _, id in ipairs(npcs) do
                     local client = assert(level.object_by_id(id))
                     local node = level.vertex_in_direction(client:level_vertex_id(), client:direction(), 5)

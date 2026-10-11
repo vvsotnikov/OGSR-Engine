@@ -247,8 +247,8 @@ void CNpcSimulation::enroll_campaign(CAI_Stalker& client)
     }
     std::unique_ptr<NpcAgent, decltype(&npc_agent_destroy)> plan(npc_agent_create_goal(m_next_identity, &home), npc_agent_destroy);
     if (!plan) return;
-    if (!handoff(npc->ID, camp->ID)) return;
     R_ASSERT(npc_agent_enable_camp(plan.get()));
+    if (!handoff(npc->ID, camp->ID)) return;
     R_ASSERT2(npc->m_smart_terrain_id == u16(-1), "Campaign handoff retained a legacy job");
     Entry entry{};
     entry.npc = npc;
@@ -761,6 +761,7 @@ void CNpcSimulation::load(IReader& source)
         entry.npc = npc;
         entry.camp = camp;
         if (camp.size()) R_ASSERT(npc_agent_enable_camp(plan));
+        else R_ASSERT2(!npc_agent_is_resident(plan), "Resident planner has no native camp affiliation");
         entry.supplies = std::move(supplies);
         entry.plan = plan;
         entry.binder_data = std::move(binder_data);
