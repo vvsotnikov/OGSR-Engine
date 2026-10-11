@@ -75,7 +75,16 @@ return function(cfg)
         return server(respawner.spawned_obj[#respawner.spawned_obj])
     end
     local function tick()
-        if sent or not db.actor or not app_ready() or device().precache_frame~=0 then return end
+        if sent or not db.actor then return end
+        -- Protect every resident before any readiness check can return early.
+        -- Simulation can already run during precache and staggered enrollment.
+        for _, id in ipairs(npcs) do
+            if stage < 5 or id ~= winner then
+                local client = level.object_by_id(id)
+                if client then client:invulnerable(true) end
+            end
+        end
+        if not app_ready() or device().precache_frame~=0 then return end
         local now=time_global()
         if not started then
             started=now; get_console():execute("g_god on"); level.disable_input()
@@ -105,12 +114,11 @@ return function(cfg)
         for _,id in ipairs(npcs) do
             if stage<5 or id~=winner then
                 local n=server(id)
-                assert(n:alive(),"Resident unexpectedly died")
+                assert(n:alive(),"Resident unexpectedly died: " .. id)
                 local client=level.object_by_id(id)
                 if client then
                     -- Keep ambient encounters out of this persistence test.
                     -- Combat arbitration has its own native gameplay scenario.
-                    client:invulnerable(true)
                     if not combat_started or combat_released or id ~= npcs[1] then
                         client:set_enemy_callback(function() return false end)
                     end
