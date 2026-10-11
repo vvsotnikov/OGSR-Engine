@@ -3,14 +3,14 @@
 return function(cfg)
     local stage, started, since, sent = cfg.stage or 0, nil, nil, false
     local positioned=false
-    local supplies = {}
+    local supplies, owners = cfg.supplies or {}, cfg.owners or {}
     local combat_started, combat_seen, combat_released = nil, false, false
     local npcs, camp_id, item, winner = cfg.npcs, cfg.camp, cfg.item, cfg.winner
     local function server(id) return assert(alife():object(id), "Missing server object "..id) end
     local function persist(next_stage)
         local f=assert(io.open(getFS():update_path("$app_data_root$","npc-campaign-state.lua"),"w"))
-        f:write(string.format("return {stage=%d,camp=%d,npcs={%d,%d,%d},item=%s,winner=%s}",
-            next_stage,camp_id,npcs[1],npcs[2],npcs[3],tostring(item),tostring(winner)))
+        f:write(string.format("return {stage=%d,camp=%d,npcs={%d,%d,%d},item=%s,winner=%s,supplies={%s},owners={%s}}",
+            next_stage,camp_id,npcs[1],npcs[2],npcs[3],tostring(item),tostring(winner),table.concat(supplies,","),table.concat(owners,",")))
         f:close(); sent=true
     end
     local function reload(next_stage)
@@ -104,11 +104,7 @@ return function(cfg)
                 for _,id in ipairs(npcs) do
                     local client=assert(level.object_by_id(id))
                     xr_logic.pstor_store(client,"campaign_fixture",42)
-                    local remove = {}
-                    client:iterate_inventory(function(_, it)
-                        if it:section() == "bandage" then remove[#remove + 1] = it:id() end
-                    end, client)
-                    for _, item_id in ipairs(remove) do alife():release(server(item_id), true) end
+
                 end
                 local fighter = assert(level.object_by_id(npcs[1]))
                 fighter:set_goodwill(-10000, db.actor)
@@ -131,6 +127,20 @@ return function(cfg)
                 log1("[npc campaign fixture] combat_released")
                 for _, id in ipairs(npcs) do
                     local client = assert(level.object_by_id(id))
+                    local remove = {}
+                    client:iterate_inventory(function(_, it)
+                        if it:section() == "bandage" then remove[#remove + 1] = it:id() end
+                    end, client)
+                    for _, item_id in ipairs(remove) do alife():release(server(item_id), true) end
+                end
+                return
+            end
+            if #supplies == 0 then
+                for _, id in ipairs(npcs) do
+                    if assert(level.object_by_id(id)):object("bandage") then return end
+                end
+                for _, id in ipairs(npcs) do
+                    local client = assert(level.object_by_id(id))
                     assert(not client:object("bandage"), "Resident already carries a bandage")
                     local node = level.vertex_in_direction(client:level_vertex_id(), client:direction(), 5)
                     supplies[#supplies + 1] = assert(alife():create("bandage", level.vertex_position(node), node,
@@ -147,6 +157,7 @@ return function(cfg)
                 if owns_supply and alife():supply_trip_phase(id) == 3 then completed = completed + 1 end
             end
             if completed == #npcs then
+                for i, supply in ipairs(supplies) do owners[i] = server(supply).parent_id end
                 winner = server(item).parent_id
                 log1("[npc campaign fixture] multiple_residents_returned")
                 log1("[npc campaign fixture] real_supply_acquired")
@@ -158,7 +169,11 @@ return function(cfg)
                 if not client or not db.storage[id] or not db.storage[id].ini then return end
                 assert(xr_logic.pstor_retrieve(client,"campaign_fixture",0)==42,"Lost binder state")
             end
-            assert(server(item).parent_id==winner,"Reload changed real inventory")
+            assert(#supplies == 3 and #owners == 3, "Missing inventory bindings")
+            for i, supply in ipairs(supplies) do
+                assert(server(supply).parent_id == owners[i], "Reload changed a resident inventory")
+                assert(alife():supply_trip_phase(owners[i]) == 3, "Reload changed a completed resident goal")
+            end
             if stage==1 then
                 log1("[npc campaign fixture] online_reload_preserved")
                 depart(2,"l02_garbage")
@@ -192,6 +207,7 @@ return function(cfg)
         elseif stage==6 then
             if alife():supply_trip_phase(winner)<0 then return end
             assert(server(winner):smart_terrain_id()==65535,"Replacement kept legacy job")
+            assert(level.object_by_id(winner):position():distance_to(camp.position) <= 20, "Replacement migrated outside home radius")
             log1("[npc campaign fixture] real_respawner_replacement_enrolled")
             log1("[npc fixture] complete scenario=campaign")
             sent=true;get_console():execute("quit")

@@ -34,13 +34,13 @@ shipped farm uses `general_lager`; its population-dependent state selects only
 those remaining jobs. Its spawn data has capacity three and the
 `agroprom_military_case` prerequisite; the installed SoC scripts/config contain
 no farm-specific population/emptiness quest consumers. Other camps require the
-same consumer audit before allowlisting. The installed `unregister_npc` removes
+same consumer audit before allowlisting. The installed `smart_terrain.script` method `se_smart_terrain:unregister_npc` removes
 the gulag object, restores squad/group and clears the native smart-terrain ID;
-`capacity_non_exclusive` excludes exclusive reservations.
+`xr_gulag.script` owns `capacity_non_exclusive`, adjusted by `se_smart_terrain:preserve_exclusives`. The installed `se_respawn:create(prob)` returns acceptance and appends accepted IDs to `spawned_obj`.
 
 Migration currently removes the old camp animations/patrols. A supplied resident
 has no new social routine. Each goal keeps the resident's own handoff position
-as home; it does not send the entire camp to its centre. Profile lists gate new
+as home only inside the configured `home_radius`; approach travel remains a legacy job until then. It does not send the entire camp to its centre. Profile lists gate new
 admission, not existing saved ownership; removing a profile does not silently
 cancel its goal. Removing the whole camp section opts its saved residents out,
 as removing a dedicated planner section does.

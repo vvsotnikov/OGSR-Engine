@@ -47,6 +47,7 @@ function campaign_handoff(id, camp_id)
     -- This releases the real job, restrictions, population accounting and
     -- squad/group changes before installing ordinary planner-compatible logic.
     camp:unregister_npc(npc)
+    npc:clear_smart_terrain()
     local ini = campaign_config()
     xr_logic.configure_schemes(client, ini, "scripts\\npc_campaign.ltx", modules.stype_stalker, "logic", nil)
     xr_logic.activate_by_section(client, ini, "nil", false)

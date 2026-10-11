@@ -232,18 +232,22 @@ void CNpcSimulation::enroll_campaign(CAI_Stalker& client)
     if (!ai().script_engine().functor("npc_sim_bridge.campaign_eligible", eligible) || !eligible(npc->ID, camp->ID) ||
         !ai().script_engine().functor("npc_sim_bridge.campaign_handoff", handoff)) return;
     if (!navigable_here(*npc)) return;
-    // Keep the resident's own job position instead of funneling the whole camp to one point.
+    // Keep distinct resident positions, but never capture an approach path as home.
     const auto home = navigation_location(*npc);
+    const float radius = READ_IF_EXISTS(m_campaign, r_float, camp->name_replace(), "home_radius", 0.f);
+    const Fvector point = Fvector().set(home.position[0], home.position[1], home.position[2]);
+    if (!_valid(radius) || radius <= 0.f || point.distance_to(camp->o_Position) > radius) return;
     std::unique_ptr<NpcAgent, decltype(&npc_agent_destroy)> plan(npc_agent_create_goal(m_next_identity, &home), npc_agent_destroy);
     if (!plan) return;
     if (!handoff(npc->ID, camp->ID)) return;
     R_ASSERT2(npc->m_smart_terrain_id == u16(-1), "Campaign handoff retained a legacy job");
     Entry entry{};
     entry.npc = npc;
-    entry.plan = plan.release();
+    entry.plan = plan.get();
     m_campaign_checks.erase(npc);
     entry.camp = camp->name_replace();
     m_entries.emplace(npc, std::move(entry));
+    plan.release();
     Msg("[npc campaign] enroll identity=%llu npc=%u camp=%s", m_next_identity, npc->ID, camp->name_replace());
     ++m_next_identity;
 }
