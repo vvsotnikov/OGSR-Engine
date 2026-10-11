@@ -82,7 +82,12 @@ return function(cfg)
         for _, id in ipairs(npcs) do
             if stage < 5 or id ~= winner then
                 local client = level.object_by_id(id)
-                if client then client:invulnerable(true) end
+                if client then
+                    client:invulnerable(true)
+                    if not combat_started or combat_released or id ~= npcs[1] then
+                        client:set_enemy_callback(function() return false end)
+                    end
+                end
             end
         end
         if not app_ready() or device().precache_frame~=0 then return end
@@ -116,14 +121,6 @@ return function(cfg)
             if stage<5 or id~=winner then
                 local n=server(id)
                 assert(n:alive(),"Resident unexpectedly died: " .. id)
-                local client=level.object_by_id(id)
-                if client then
-                    -- Keep ambient encounters out of this persistence test.
-                    -- Combat arbitration has its own native gameplay scenario.
-                    if not combat_started or combat_released or id ~= npcs[1] then
-                        client:set_enemy_callback(function() return false end)
-                    end
-                end
                 if alife():supply_trip_phase(id)<0 then assert(stage==0,"Lost persistent ownership"); return end
                 assert(n:smart_terrain_id()==65535,"Legacy job reclaimed resident")
                 assert(not camp.npc_info[id],"Legacy camp retained migrated resident")
@@ -140,9 +137,11 @@ return function(cfg)
                 for _, id in ipairs(npcs) do
                     local client = level.object_by_id(id)
                     local enemy = client and client:best_enemy()
-                    log1(string.format("[npc campaign fixture] status npc=%d phase=%d action=%s enemy=%s danger=%s actor_distance=%.1f",
+                    local threat = client and client:best_danger()
+                    log1(string.format("[npc campaign fixture] status npc=%d phase=%d action=%s enemy=%s danger=%s danger_object=%s danger_age=%s actor_distance=%.1f",
                         id, alife():supply_trip_phase(id), tostring(client and client:motivation_action_manager():current_action_id()),
-                        tostring(enemy and enemy:id()), tostring(client and client:best_danger() ~= nil),
+                        tostring(enemy and enemy:id()), tostring(threat and threat:type()),
+                        tostring(threat and threat:object() and threat:object():id()), tostring(threat and now - threat:time()),
                         client and client:position():distance_to(db.actor:position()) or -1))
                 end
             end
