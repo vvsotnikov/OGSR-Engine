@@ -18,7 +18,8 @@ Neither changes the shipped activation condition or spawn locations.
 
 Ambient enemies are removed nearby and residents are protected while checking
 persistence, including before readiness during precache. These runs do not
-validate resident survival during unprotected startup. An explicit hostile-player stimulus tests combat on a migrated
+validate resident survival during unprotected startup. An explicit hostile-player
+stimulus tests combat on a migrated
 resident; protection is removed for the death/replacement test. Other native
 combat scenarios cover sustained fighting and corpse search interruptions.
 The player is moved away from the camp to keep greeting behavior from masking
@@ -29,7 +30,8 @@ this scenario does not establish resting behavior during a nearby greeting. The 
 a return before provoking combat and removing supplies. Real acquisitions must
 lead back to rest, which must survive online and off-map reloads. Post-combat
 recovery and return travel have separate deadlines: danger can retain control
-before any homeward movement starts; a failed return still fails the test. Displacement
+before any homeward movement starts, as in the existing engine. Recovery and
+return each get 60 seconds; a failed return still fails the test. Displacement
 is an external test stimulus, not a planner destination command. Save IDs are
 fixture bindings, not persistent simulation identities.
 

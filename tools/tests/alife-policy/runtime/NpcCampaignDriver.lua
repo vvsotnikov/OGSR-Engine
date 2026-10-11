@@ -90,7 +90,7 @@ return function(cfg)
         if not started then
             started=now; get_console():execute("g_god on"); level.disable_input()
         end
-        local stage_limit = stage == 0 and 420000 or 150000
+        local stage_limit = stage == 0 and 360000 or 150000
         assert(now-started<stage_limit,"Campaign test timed out at stage "..stage)
         local camp=server(camp_id)
         assert(camp:name()=="esc_farm_lager","Seed camp binding changed")
@@ -238,7 +238,8 @@ return function(cfg)
                         all_resting = false
                         assert(alife():supply_trip_phase(id) ~= 4, "Unsupplied return failed: " .. id)
                         if recovered_at[id] then
-                            assert(now - recovered_at[id] < 120000, "Unsupplied resident did not return to camp: " .. id)
+                            assert(now - recovered_at[id] < 60000, "Unsupplied resident did not return to camp: " .. id
+                                .. " action=" .. client:motivation_action_manager():current_action_id())
                         else
                             assert(now - inventory_reset_at < 60000, "Resident did not leave combat/danger control: " .. id)
                         end
