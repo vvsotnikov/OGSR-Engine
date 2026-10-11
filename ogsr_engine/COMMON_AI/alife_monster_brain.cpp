@@ -105,7 +105,7 @@ void CALifeMonsterBrain::process_task()
 void CALifeMonsterBrain::select_task(const bool forced)
 {
     // Task ownership starts at spawn, before a concrete trip is enrolled.
-    if (m_uses_npc_planner) return;
+    if (m_uses_npc_planner || ai().alife().npc_simulation().owns(&object())) return;
     if (object().m_smart_terrain_id != 0xffff)
         return;
 
@@ -123,7 +123,7 @@ void CALifeMonsterBrain::select_task(const bool forced)
 
     for (const auto& [id, smart] : ai().alife().smart_terrains().objects())
     {
-        if (!smart->enabled(&object()))
+        if (!smart->enabled(&object()) || !ai().alife().npc_simulation().camp_has_room(*smart))
             continue;
 
         float value = smart->suitable(&object());

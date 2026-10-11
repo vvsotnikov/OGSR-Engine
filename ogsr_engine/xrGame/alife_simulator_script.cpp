@@ -117,6 +117,10 @@ bool remember_supply(CALifeSimulator* simulator, u16 npc, u16 supply)
 {
     return simulator->initialized() && !simulator->is_unloading() && simulator->npc_simulation().remember(npc, supply);
 }
+bool supply_trip_home(CALifeSimulator* simulator, u16 npc, Fvector& point)
+{
+    return simulator->initialized() && !simulator->is_unloading() && simulator->npc_simulation().home(npc, point);
+}
 int supply_trip_phase(CALifeSimulator* simulator, u16 npc)
 {
     return simulator->initialized() && !simulator->is_unloading() ? simulator->npc_simulation().phase(npc) : -1;
@@ -489,6 +493,7 @@ void CALifeSimulator::script_register(lua_State* L)
                   .def("start_supply_goal", &start_supply_goal)
                   .def("remember_supply", &remember_supply)
                   .def("supply_trip_phase", &supply_trip_phase)
+                  .def("supply_trip_home", &supply_trip_home)
                   .def("object", (CSE_ALifeDynamicObject * (*)(const CALifeSimulator*, ALife::_OBJECT_ID))(alife_object))
                   .def("object", (CSE_ALifeDynamicObject * (*)(const CALifeSimulator*, LPCSTR))(alife_object))
                   .def("object", (CSE_ALifeDynamicObject * (*)(const CALifeSimulator*, ALife::_OBJECT_ID, bool))(alife_object))

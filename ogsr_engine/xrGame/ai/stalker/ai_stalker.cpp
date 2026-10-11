@@ -701,6 +701,10 @@ void CAI_Stalker::shedule_Update(u32 DT)
     CEntityAlive::shedule_Update(DT); // https://github.com/OpenXRay/xray-16/commit/30add3fdf05472faaa954f1c18783783fb5dc5bb
     STOP_PROFILE
 
+    START_PROFILE("stalker/schedule_update/campaign")
+    if (auto simulation = CNpcSimulation::active()) simulation->enroll_campaign(*this);
+    STOP_PROFILE
+
     if (Remote())
     {}
     else

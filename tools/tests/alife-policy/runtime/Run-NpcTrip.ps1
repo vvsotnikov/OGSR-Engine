@@ -2,9 +2,10 @@ param(
     [Parameter(Mandatory)][string]$InstallRoot,
     [Parameter(Mandatory)][ValidatePattern('^bin_[a-zA-Z0-9_]+$')][string]$Package,
     [ValidateSet('Release','Debug')][string]$Configuration = 'Debug',
-    [ValidateSet('basic','interrupt','offline','switch','missing','death','mismatch','natural','elevated','boundary','far','moved','spawn-combat','save','resume','fallback','goal-cycle','goal-displaced','goal-combat','goal-switch','goal-competition','goal-save','goal-resume','goal-wait-save','goal-wait-resume','control-save','control-resume','control-meet','control-transition','perception','perception-save','perception-resume','perception-memory','corpse','corpse-revisit','corpse-mixed','corpse-static','corpse-danger','corpse-rejected','corpse-rejected-offline','corpse-combat','corpse-empty','corpse-removed','corpse-competition','corpse-offline','corpse-save','corpse-resume')][string]$Scenario = 'basic',
+    [ValidateSet('basic','interrupt','offline','switch','missing','death','mismatch','natural','elevated','boundary','far','moved','spawn-combat','save','resume','fallback','goal-cycle','goal-displaced','goal-combat','goal-switch','goal-competition','goal-save','goal-resume','goal-wait-save','goal-wait-resume','control-save','control-resume','control-meet','control-transition','perception','perception-save','perception-resume','perception-memory','corpse','corpse-revisit','corpse-mixed','corpse-static','corpse-danger','corpse-rejected','corpse-rejected-offline','corpse-combat','corpse-empty','corpse-removed','corpse-competition','corpse-offline','corpse-save','corpse-resume','campaign','campaign-seed')][string]$Scenario = 'basic',
     [ValidateSet('whole-map','distance')][string]$Mode = 'whole-map',
     [string]$ResumeSession = '',
+    [string]$CampaignSeedSession = '',
     [switch]$GoalOffline,
     [switch]$PrepareOnly
 )
@@ -19,6 +20,16 @@ $engine = Join-Path $InstallRoot "$Package/xrEngine.exe"
 $build = Read-ValidationPackage $engine -Configuration $Configuration
 $seed = 'seeds/bar-2026-10-03'
 $save = 'bar_center'
+if ($Scenario -eq 'campaign') { $seed = 'seeds/cordon-farm-2026-10-11'; $save = 'campaign_legacy_seed' }
+if ($CampaignSeedSession) {
+    if ($Scenario -ne 'campaign') { throw 'CampaignSeedSession requires campaign scenario' }
+    $source = Get-Content "$CampaignSeedSession/session.json" -Raw | ConvertFrom-Json
+    if ($source.status -ne 'npc-completed' -or $source.scenario -ne 'campaign-seed') { throw 'Campaign seed session did not complete' }
+    $seedPath = (Resolve-Path $CampaignSeedSession).Path
+    $prefix = $InstallRoot.TrimEnd('\') + '\'
+    if (!$seedPath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { throw 'Campaign seed must be inside InstallRoot' }
+    $seed = Join-Path $seedPath.Substring($prefix.Length) appdata
+}
 if ($Scenario -in @('resume','fallback','goal-resume','goal-wait-resume','control-resume','perception-resume','corpse-resume')) {
     if (!$ResumeSession) { throw 'Resume requires the completed save scenario' }
     $previous = Get-Content "$ResumeSession/session.json" -Raw | ConvertFrom-Json
@@ -39,6 +50,11 @@ $runtime = New-Item -ItemType Directory "$session/runtime"
 Copy-Item "$InstallRoot/gamedata" "$runtime/gamedata" -Recurse
 New-Item -ItemType Directory "$runtime/gamedata/scripts" -Force | Out-Null
 Copy-Item "$PSScriptRoot/../../../../Game/Resources_SoC_1.0006/gamedata/scripts/npc_sim_bridge.script" "$runtime/gamedata/scripts/npc_sim_bridge.script"
+New-Item -ItemType Directory "$runtime/gamedata/config/scripts" -Force | Out-Null
+Copy-Item "$PSScriptRoot/../../../../Game/Resources_SoC_1.0006/gamedata/config/scripts/npc_campaign.ltx" "$runtime/gamedata/config/scripts/npc_campaign.ltx"
+if ($Scenario -eq 'campaign-seed') {
+    Set-Content "$runtime/gamedata/config/scripts/npc_campaign.ltx" "[logic]`nactive = nil" -Encoding ascii
+}
 Get-ChildItem $InstallRoot -Filter 'gamedata.db*' -File | ForEach-Object {
     New-Item -ItemType HardLink -Path "$runtime/$($_.Name)" -Target $_.FullName | Out-Null
 }
@@ -68,8 +84,12 @@ if ($Scenario -in @('resume','fallback','goal-resume','goal-wait-resume','contro
     Copy-Item "$ResumeSession/appdata/npc-trip-ids.lua" "$session/appdata/npc-trip-ids.lua"
     $luaConfig = "local ids=dofile(getFS():update_path(`"`$app_data_root`$`",`"npc-trip-ids.lua`")); ids.scenario='$Scenario'; ids.mode='$Mode'; return ids"
 }
+if ($Scenario -eq 'campaign') {
+    Copy-Item "$InstallRoot/$seed/campaign-seed.lua" "$session/appdata/npc-campaign-state.lua"
+    $luaConfig = "local ids=dofile(getFS():update_path(`"`$app_data_root`$`",`"npc-campaign-state.lua`")); ids.scenario='$Scenario'; ids.mode='$Mode'; return ids"
+}
 Set-Content "$session/appdata/regular-config.lua" $luaConfig -Encoding ascii
-$driver = if ($Scenario.StartsWith('corpse')) { 'NpcCorpseDriver.lua' } elseif ($Scenario.StartsWith('perception')) { 'NpcPerceptionDriver.lua' } elseif ($Scenario -eq 'control-transition') { 'NpcControlTransitionDriver.lua' } elseif ($Scenario.StartsWith('control-')) { 'NpcControlDriver.lua' } elseif ($Scenario.StartsWith('goal-')) { 'NpcGoalDriver.lua' } else { 'NpcTripDriver.lua' }
+$driver = if ($Scenario -eq 'campaign-seed') { 'NpcCampaignSeedDriver.lua' } elseif ($Scenario -eq 'campaign') { 'NpcCampaignDriver.lua' } elseif ($Scenario.StartsWith('corpse')) { 'NpcCorpseDriver.lua' } elseif ($Scenario.StartsWith('perception')) { 'NpcPerceptionDriver.lua' } elseif ($Scenario -eq 'control-transition') { 'NpcControlTransitionDriver.lua' } elseif ($Scenario.StartsWith('control-')) { 'NpcControlDriver.lua' } elseif ($Scenario.StartsWith('goal-')) { 'NpcGoalDriver.lua' } else { 'NpcTripDriver.lua' }
 Copy-Item "$PSScriptRoot/$driver" "$session/appdata/RegularDriver.lua"
 $meta.status = 'npc-prepared'
 $meta | ConvertTo-Json -Depth 8 | Set-Content "$session/session.json" -Encoding utf8
@@ -86,7 +106,7 @@ try {
     if ($logs.Count -ne 1) { throw 'Expected one log' }
     $log = [IO.File]::ReadAllText($logs[0].FullName)
     Assert-ValidationLogHealthy $log
-    Assert-PolicyMessages $log $Mode $(if ($Scenario -eq 'control-transition') { 4 } elseif ($Scenario -in @('corpse-offline','corpse-save','corpse-rejected-offline')) { 2 } else { 1 }) $false
+    Assert-PolicyMessages $log $Mode $(if ($Scenario -eq 'campaign') { 5 } elseif ($Scenario -eq 'control-transition') { 4 } elseif ($Scenario -in @('campaign-seed','corpse-offline','corpse-save','corpse-rejected-offline')) { 2 } else { 1 }) $false
     if ($game.ExitCode -ne 0 -or $log -match '\[npc fixture\] FAILED') { throw 'NPC scenario failed' }
     if ($Scenario -in @('save','goal-save','goal-wait-save','control-save','perception-save','corpse-save')) {
         if ($log -notmatch '\[npc fixture\] saved_pending' -or $log -notmatch 'Game npc_trip_pending\.sav is successfully saved' -or !(Test-Path "$session/appdata/savedgames/npc_trip_pending.sav")) { throw 'Pending trip save was not acknowledged' }
@@ -109,6 +129,19 @@ try {
     }
     if ($Scenario -eq 'corpse-mixed' -and $log -notmatch '\[npc search\].*remaining=1') { throw 'Temporarily locked loot was forgotten' }
     if ($Scenario -eq 'corpse-static' -and $log -notmatch '\[npc search\].*remaining=0') { throw 'Statically untakeable loot remained a candidate' }
+    if ($Scenario -eq 'campaign-seed' -and ($log -notmatch 'Game campaign_legacy_seed\.sav is successfully saved' -or
+        !(Test-Path "$session/appdata/savedgames/campaign_legacy_seed.sav") -or
+        !(Test-Path "$session/appdata/campaign-seed.lua"))) { throw 'Legacy campaign seed was not saved' }
+    if ($Scenario -eq 'campaign') {
+        foreach ($milestone in @('legacy_migrated_capacity_preserved','combat_released','multiple_residents_returned','real_supply_acquired','online_reload_preserved',
+            'offline_ownership_preserved','offline_reload_preserved','returned_with_same_residents','outside_radius_rejected','real_respawner_replacement_enrolled')) {
+            if ($log -notmatch "\[npc campaign fixture\] $milestone") { throw "Missing campaign milestone: $milestone" }
+        }
+        $outside = [regex]::Match($log, '\[npc campaign fixture\] outside_radius_rejected npc=(\d+)')
+        $rejected = [regex]::Match($log, "\[npc campaign\] reject npc=$($outside.Groups[1].Value) reason=home_radius ")
+        if (!$outside.Success -or !$rejected.Success -or $rejected.Index -ge $outside.Index) { throw 'Missing native radius rejection before the replacement admission check' }
+        if ($log -notmatch '\[npc trip\].*interrupted=1' -or $log -notmatch '\[npc trip\] restore identity=') { throw 'Missing campaign interruption or restoration' }
+    }
     $meta.status = 'npc-completed'
     Write-Output "COMPLETE npc scenario=$Scenario session=$session"
 } catch {

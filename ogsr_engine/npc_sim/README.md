@@ -20,12 +20,38 @@ job deliberately retains control, even when it has nothing to do. Temporary
 reactions end at the representation boundary; they do not claim persistent
 script ownership.
 
-Opt-in still requires a dedicated section and excludes story/group/smart-terrain
-assignments. The shipped smart-terrain registration goes through the native
-brain selector, which excludes planner sections before enrollment. Its Lua
-spawn-time gulag setup reads that same native ID; it does not independently
-assign a job. Custom scripts must respect that ownership boundary. Only enrolled NPCs retain
-binder snapshots.
+Dedicated planner sections bypass smart-terrain assignment from spawn. Campaign
+migration instead waits for an allowlisted ordinary camp job to start, then
+unregisters it through the existing camp API before installing idle binder logic.
+Story/group assignments, exclusive jobs, spawn-specific logic and a different
+active script section are not eligible. Profile and camp allowlists are both
+required; sharing an NPC section alone is not permission to migrate it.
+
+Migrated residents retain their home-camp reservation independently of legacy job
+membership, including while off-map. Dead residents no longer consume capacity.
+The Lua population counts remaining legacy jobs, not planner residents. The
+shipped farm uses `general_lager`; its population-dependent state selects only
+those remaining jobs. Its spawn data has capacity three and the
+`agroprom_military_case` prerequisite; the installed SoC scripts/config contain
+no farm-specific population/emptiness quest consumers. Other camps require the
+same consumer audit before allowlisting. The installed `smart_terrain.script` method `se_smart_terrain:unregister_npc` removes
+the gulag object, restores squad/group and clears the native smart-terrain ID;
+`xr_gulag.script` owns `capacity_non_exclusive`, adjusted by `se_smart_terrain:preserve_exclusives`. The installed `se_respawn:create(prob)` returns acceptance and appends accepted IDs to `spawned_obj`.
+
+Migration currently removes the old camp animations/patrols. A supplied resident
+has no new social routine. Each goal keeps the resident's own handoff position
+as home only inside the configured `home_radius`; approach travel remains a
+legacy job until then. A job that never enters that radius remains legacy: mixed
+legacy/planner occupancy is supported, not evidence that every job was migrated.
+It does not send the entire camp to its centre. Profile lists gate new
+admission, not existing saved ownership; removing a profile does not silently
+cancel its goal. Removing the whole camp section opts its saved residents out,
+as removing a dedicated planner section does.
+
+Legacy respawners still select and register a job before accepting a new spawn;
+handoff happens after client activation so that acceptance is not bypassed.
+Loaded planner ownership must suppress legacy job selection before the simulator
+becomes globally active. Only enrolled NPCs retain binder snapshots.
 The separate NPC save chunk retains that Lua payload without retaining native
 client memory, conditions or inventory-owner state, which can become stale while
 offline. It is consumed before binder net_spawn, where the saved scheme is
@@ -39,7 +65,7 @@ snapshot must survive; unlike an online save copy, it cannot have gone stale
 through later client updates. This distinction is transient, not a save field.
 Capturing ownership during save must not advance goal time or issue actions.
 Old binderless saves carry a marker so the newly enabled binder initializes
-without parsing missing Lua data. This is not a migration of campaign jobs.
+without parsing missing Lua data. Campaign migration uses the separate ordinary-job handoff described above.
 
 Server positions are not authoritative for online item physics. Navigation must
 use a reachable point, while pickup knowledge and reach must use the physical
