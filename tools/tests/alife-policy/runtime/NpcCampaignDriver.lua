@@ -6,7 +6,7 @@ return function(cfg)
     local radius = ini_file("scripts\\npc_campaign.ltx"):r_float("esc_farm_lager", "home_radius")
     local outside, outside_since, outside_complete
     local camp_displaced, return_seen, rest_since, no_supply_since
-    local rest_gate_started
+    local rest_gate_started, diagnostic_at
     local function check_home(id, camp)
         local point = vector()
         assert(alife():supply_trip_home(id, point), "Missing planner home: " .. id)
@@ -104,6 +104,17 @@ return function(cfg)
             end
         end
         if stage==0 then
+            if not diagnostic_at or now - diagnostic_at > 15000 then
+                diagnostic_at = now
+                for _, id in ipairs(npcs) do
+                    local client = level.object_by_id(id)
+                    local enemy = client and client:best_enemy()
+                    log1(string.format("[npc campaign fixture] status npc=%d phase=%d action=%s enemy=%s danger=%s actor_distance=%.1f",
+                        id, alife():supply_trip_phase(id), tostring(client and client:motivation_action_manager():current_action_id()),
+                        tostring(enemy and enemy:id()), tostring(client and client:best_danger() ~= nil),
+                        client and client:position():distance_to(db.actor:position()) or -1))
+                end
+            end
             if not since then
                 if not camp_displaced then
                     if not rest_gate_started then rest_gate_started = now end

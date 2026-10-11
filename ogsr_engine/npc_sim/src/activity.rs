@@ -384,7 +384,7 @@ pub(super) enum ActivityOutcome {
     Dead,
 }
 
-// This is a supply-trip report, not a general-purpose activity protocol.
+// Report from shared travel/collection execution, not a general activity protocol.
 // Keep the prior state: a new return failure arms a cooldown, whereas later
 // reports of that same terminal failure must not restart it.
 #[derive(Debug)]

@@ -20,7 +20,6 @@ pub(super) struct Goal {
 pub(super) enum ActivityRequest {
     Fetch(usize),
     ReturnHome,
-    Camp,
 }
 
 impl Goal {
@@ -88,6 +87,9 @@ impl Goal {
         {
             self.return_retry_ms = Self::RETURN_RETRY_MS;
         }
+        if self.is_resident() && failed && self.return_retry_ms != 0 {
+            return false;
+        }
         let terminal = matches!(
             report.previous,
             ActivityState::Complete | ActivityState::Failed
@@ -102,6 +104,14 @@ impl Goal {
             || completed_away
     }
 
+    pub fn preempts(&self, fetching: bool, current: Location, knowledge: &Knowledge) -> bool {
+        self.is_resident()
+            && ((fetching && self.satisfied)
+                || (!fetching
+                    && !self.satisfied
+                    && current.spatially_valid()
+                    && knowledge.nearest_available(current).is_some()))
+    }
     pub fn select(&self, current: Location, knowledge: &Knowledge) -> Option<ActivityRequest> {
         if !current.spatially_valid() {
             return None;
@@ -112,7 +122,7 @@ impl Goal {
                     return Some(ActivityRequest::Fetch(source));
                 }
             }
-            (self.return_retry_ms == 0).then_some(ActivityRequest::Camp)
+            (self.return_retry_ms == 0).then_some(ActivityRequest::ReturnHome)
         } else if self.satisfied {
             Some(ActivityRequest::ReturnHome)
         } else {

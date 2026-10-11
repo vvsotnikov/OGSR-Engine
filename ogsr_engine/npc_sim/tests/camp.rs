@@ -235,3 +235,57 @@ fn a_legacy_return_can_become_camp_execution_without_losing_inventory_policy() {
         Action::Travel(point(10.))
     );
 }
+
+#[test]
+fn resident_return_backoff_expires_for_both_inventory_states() {
+    for bandages in [0, 1] {
+        let mut a = resident();
+        a.step(observation(30.), bandages);
+        let mut blocked = observation(30.);
+        blocked.path_blocked = true;
+        blocked.elapsed_ms = 60_000;
+        let failed = a.step(blocked, bandages).decision;
+        assert_eq!(failed.phase, Phase::Failed);
+        assert_eq!(failed.reason, FailureReason::TravelStalled);
+        a = reload(&a);
+        let mut waiting = observation(30.);
+        waiting.elapsed_ms = 59_000;
+        assert_eq!(a.step(waiting, bandages).decision.phase, Phase::Failed);
+        a = reload(&a);
+        waiting.elapsed_ms = 1000;
+        let retry = a.step(waiting, bandages).decision;
+        assert_eq!(retry.action, Action::Travel(point(0.)));
+        assert!(retry.command > failed.command);
+    }
+}
+#[test]
+fn invalid_resident_and_activity_flags_are_rejected() {
+    let mut a = resident();
+    a.step(observation(0.), 1);
+    let bytes = a.save();
+    let mut invalid = bytes.clone();
+    invalid[48] &= !1;
+    assert!(Agent::load(&invalid).is_none());
+    let mut invalid = bytes.clone();
+    invalid[48] &= !64;
+    assert!(Agent::load(&invalid).is_none());
+    for flag in [32, 64] {
+        let mut old = bytes.clone();
+        old[4..8].copy_from_slice(&6u32.to_le_bytes());
+        old[48] = (old[48] & 31) | flag;
+        assert!(Agent::load(&old).is_none());
+    }
+    let a = Agent::medical(7, point(0.)).unwrap();
+    let mut invalid = a.save();
+    invalid[48] |= 64;
+    assert!(Agent::load(&invalid).is_none());
+}
+#[test]
+fn supply_only_agent_does_not_gain_camp_behavior_from_new_save_format() {
+    let a = Agent::medical(7, point(0.)).unwrap();
+    let mut a = Agent::load(&a.save()).unwrap();
+    let d = a.step(observation(20.), 0).decision;
+    assert_eq!(d.phase, Phase::Waiting);
+    assert_eq!(d.action, Action::Wait);
+    assert!(!a.is_resident());
+}

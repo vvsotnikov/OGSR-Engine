@@ -46,7 +46,8 @@ source-less return; return retry remains goal-owned and supply failure history
 remains source-owned. Combat and persistent script ownership suspend it.
 Rest has no travel deadline; displacement requires a new return command. Failed
 returns back off across saves instead of retrying every frame. The native relaxed
-standing animation executes rest; legacy camp jobs and seated routines are not
+standing animation executes rest, matching the ordinary A-Life executor's relaxed
+travel stance; combat owns its separate posture. Legacy camp jobs and seated routines are not
 reactivated. Dedicated supply-only NPCs retain their old behavior.
 
 NPCG v7 persists resident goal policy for the renderer-free core as well as the

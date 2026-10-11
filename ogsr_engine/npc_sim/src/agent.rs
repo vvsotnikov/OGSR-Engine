@@ -206,7 +206,7 @@ impl Agent {
         };
         let source = match request {
             ActivityRequest::Fetch(i) => Some(i),
-            ActivityRequest::ReturnHome | ActivityRequest::Camp => None,
+            ActivityRequest::ReturnHome => None,
         };
         let locations = source.map(|i| {
             let s = self.knowledge.sources()[i];
@@ -335,12 +335,9 @@ impl Agent {
             if self
                 .goal
                 .reconsider(&report, inventory_changed, o, self.home)
-                || (self.goal.is_resident()
-                    && ((self.selected.is_some() && self.goal.satisfied())
-                        || (camp
-                            && !self.goal.satisfied()
-                            && o.current.spatially_valid()
-                            && self.knowledge.nearest_available(o.current).is_some())))
+                || self
+                    .goal
+                    .preempts(self.selected.is_some(), o.current, &self.knowledge)
             {
                 self.activity = None;
                 self.selected = None;
@@ -349,15 +346,14 @@ impl Agent {
             }
         }
         if let Some(request) = self.goal.select(o.current, &self.knowledge) {
-            if self.start_activity(request, o.interrupted)
-                && matches!(request, ActivityRequest::ReturnHome | ActivityRequest::Camp)
+            if self.start_activity(request, o.interrupted) && request == ActivityRequest::ReturnHome
             {
                 let mut initial = o;
                 initial.elapsed_ms = 0;
                 initial.path_blocked = false;
                 initial.pickup_pending = false;
                 let activity = self.activity.as_mut().unwrap();
-                if request == ActivityRequest::Camp {
+                if self.goal.is_resident() {
                     activity.advance_home(initial);
                 } else {
                     activity.advance(initial, self.goal.satisfied());
