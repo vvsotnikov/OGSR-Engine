@@ -226,8 +226,9 @@ void CNpcSimulation::enroll_campaign(CAI_Stalker& client)
     auto camp = smart_cast<CSE_ALifeSmartZone*>(objects().object(npc->m_smart_terrain_id, true));
     if (!camp || !m_campaign->section_exist(camp->name_replace()) || !navigable_here(*camp)) return;
     auto check = m_campaign_checks.find(npc);
-    if (check != m_campaign_checks.end() && s32(Device.dwTimeGlobal - check->second) < 0) return;
-    m_campaign_checks[npc] = Device.dwTimeGlobal + 5000;
+    if (check != m_campaign_checks.end() && s32(Device.dwTimeGlobal - check->second.next) < 0) return;
+    auto& pending = m_campaign_checks[npc];
+    pending.next = Device.dwTimeGlobal + 5000;
     luabind::functor<bool> eligible, handoff;
     if (!ai().script_engine().functor("npc_sim_bridge.campaign_eligible", eligible) || !eligible(npc->ID, camp->ID) ||
         !ai().script_engine().functor("npc_sim_bridge.campaign_handoff", handoff)) return;
@@ -236,7 +237,14 @@ void CNpcSimulation::enroll_campaign(CAI_Stalker& client)
     const auto home = navigation_location(*npc);
     const float radius = READ_IF_EXISTS(m_campaign, r_float, camp->name_replace(), "home_radius", 0.f);
     const Fvector point = Fvector().set(home.position[0], home.position[1], home.position[2]);
-    if (!_valid(radius) || radius <= 0.f || point.distance_to(camp->o_Position) > radius) return;
+    if (!_valid(radius) || radius <= 0.f) return;
+    if (point.distance_to(camp->o_Position) > radius)
+    {
+        if (!pending.radius_reported)
+            Msg("[npc campaign] reject npc=%u reason=home_radius distance=%.2f radius=%.2f", npc->ID, point.distance_to(camp->o_Position), radius);
+        pending.radius_reported = true;
+        return;
+    }
     std::unique_ptr<NpcAgent, decltype(&npc_agent_destroy)> plan(npc_agent_create_goal(m_next_identity, &home), npc_agent_destroy);
     if (!plan) return;
     if (!handoff(npc->ID, camp->ID)) return;

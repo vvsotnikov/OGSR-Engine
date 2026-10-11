@@ -22,3 +22,9 @@ resident; protection is removed for the death/replacement test. Other native
 combat scenarios cover sustained fighting and corpse search interruptions.
 The player is moved away from the camp to keep greeting behavior from masking
 movement. Save IDs are fixture bindings, not persistent simulation identities.
+
+The replacement is teleported outside the admission radius and held there until
+it is otherwise eligible across a retry. The runner requires a native radius
+rejection for that same NPC. The fixture then moves it inside and checks its
+stored planner home. This isolates the admission boundary; it does not claim
+that every legacy patrol naturally crosses that boundary.

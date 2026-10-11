@@ -137,6 +137,8 @@ try {
             'offline_ownership_preserved','offline_reload_preserved','returned_with_same_residents','outside_radius_rejected','real_respawner_replacement_enrolled')) {
             if ($log -notmatch "\[npc campaign fixture\] $milestone") { throw "Missing campaign milestone: $milestone" }
         }
+        $outside = [regex]::Match($log, '\[npc campaign fixture\] outside_radius_rejected npc=(\d+)')
+        if (!$outside.Success -or $log -notmatch "\[npc campaign\] reject npc=$($outside.Groups[1].Value) reason=home_radius ") { throw 'Missing native radius rejection for the replacement' }
         if ($log -notmatch '\[npc trip\].*interrupted=1' -or $log -notmatch '\[npc trip\] restore identity=') { throw 'Missing campaign interruption or restoration' }
     }
     $meta.status = 'npc-completed'

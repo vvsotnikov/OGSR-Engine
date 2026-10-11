@@ -214,7 +214,7 @@ return function(cfg)
             local replacement=assert(newcomer(camp),"Respawner rejected a vacant camp")
             assert(replacement:smart_terrain_id()==camp.id,"Death did not release camp capacity")
             for i,id in ipairs(npcs) do if id==winner then npcs[i]=replacement.id end end
-            winner=replacement.id;stage=6
+            winner=replacement.id;stage=6; since=now
             for _, direction in ipairs({vector():set(1,0,0), vector():set(-1,0,0), vector():set(0,0,1), vector():set(0,0,-1)}) do
                 local node = level.vertex_in_direction(camp.m_level_vertex_id, direction, radius + 15)
                 local point = level.vertex_position(node)
@@ -234,10 +234,16 @@ return function(cfg)
                 if not client then return end
                 -- Hold this real job candidate outside across an eligibility retry.
                 client:set_npc_position(outside, true)
-                if not npc_sim_bridge.campaign_eligible(winner, camp_id) then return end
+                if not npc_sim_bridge.campaign_eligible(winner, camp_id) then
+                    outside_since = nil
+                    local st = db.storage[winner] or {}
+                    assert(now - since < 30000, string.format("Outside candidate not eligible: begun=%s gulag=%s logic=%s active=%s",
+                        tostring(camp.gulag.Object_begin_job[winner]), tostring(st.gulag_name), tostring(st.section_logic), tostring(st.active_section)))
+                    return
+                end
                 if not outside_since then outside_since = now end
                 if now - outside_since < 6000 then return end
-                log1("[npc campaign fixture] outside_radius_rejected")
+                log1("[npc campaign fixture] outside_radius_rejected npc=" .. winner)
                 client:set_npc_position(level.vertex_position(camp.m_level_vertex_id), true)
                 outside_complete = true
                 return
