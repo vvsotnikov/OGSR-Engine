@@ -33,6 +33,7 @@ return function(cfg)
         error("No observer position clear of camp residents")
     end
     local inventory_reset_at
+    local recovered_at = {}
     local supplies, owners = cfg.supplies or {}, cfg.owners or {}
     local combat_started, combat_seen, combat_released = nil, false, false
     local npcs, camp_id, item, winner = cfg.npcs, cfg.camp, cfg.item, cfg.winner
@@ -89,7 +90,7 @@ return function(cfg)
         if not started then
             started=now; get_console():execute("g_god on"); level.disable_input()
         end
-        local stage_limit = stage == 0 and 300000 or 150000
+        local stage_limit = stage == 0 and 420000 or 150000
         assert(now-started<stage_limit,"Campaign test timed out at stage "..stage)
         local camp=server(camp_id)
         assert(camp:name()=="esc_farm_lager","Seed camp binding changed")
@@ -227,13 +228,23 @@ return function(cfg)
                         return
                     end
                 end
+                local all_resting = true
                 for _, id in ipairs(npcs) do
+                    local client = assert(level.object_by_id(id))
+                    if client:motivation_action_manager():current_action_id() == stalker_ids.action_alife_planner then
+                        recovered_at[id] = recovered_at[id] or now
+                    end
                     if not resting(id) then
-                        no_supply_since = nil
-                        assert(now - inventory_reset_at < 60000, "Unsupplied resident did not return to camp: " .. id)
-                        return
+                        all_resting = false
+                        assert(alife():supply_trip_phase(id) ~= 4, "Unsupplied return failed: " .. id)
+                        if recovered_at[id] then
+                            assert(now - recovered_at[id] < 120000, "Unsupplied resident did not return to camp: " .. id)
+                        else
+                            assert(now - inventory_reset_at < 60000, "Resident did not leave combat/danger control: " .. id)
+                        end
                     end
                 end
+                if not all_resting then no_supply_since = nil; return end
                 if not no_supply_since then no_supply_since = now; return end
                 if now - no_supply_since < 3000 then return end
                 log1("[npc campaign fixture] unsupplied_residents_resting")

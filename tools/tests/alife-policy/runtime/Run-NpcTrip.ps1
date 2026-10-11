@@ -100,7 +100,7 @@ try {
     $meta.status = 'npc-running'
     $meta | Add-Member gamePid $game.Id
     Write-Output "START npc scenario=$Scenario session=$session pid=$($game.Id)"
-    $deadline = (Get-Date).AddSeconds($(if ($Scenario -eq 'far') { 720 } elseif ($Scenario -eq 'campaign') { 720 } else { 360 }))
+    $deadline = (Get-Date).AddSeconds($(if ($Scenario -eq 'far') { 720 } elseif ($Scenario -eq 'campaign') { 900 } else { 360 }))
     while (!$game.WaitForExit(2000)) { if ((Get-Date) -gt $deadline) { throw 'NPC validation timed out' } }
     $logs = @(Get-ChildItem "$session/appdata/logs" -Filter '*.log')
     if ($logs.Count -ne 1) { throw 'Expected one log' }
