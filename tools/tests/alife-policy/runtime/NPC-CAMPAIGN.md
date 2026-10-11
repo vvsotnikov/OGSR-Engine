@@ -23,7 +23,8 @@ combat scenarios cover sustained fighting and corpse search interruptions.
 The player is moved away from the camp to keep greeting behavior from masking
 movement, including after the fighter has chased the player. Online rest requires
 A-Life planner control and physical proximity to home; a paused rest phase alone
-is not evidence that the NPC resumed. The fixture waits for resident rest, displaces one resident and requires
+is not evidence that the NPC resumed. Rest is checked with the player away;
+this scenario does not establish resting behavior during a nearby greeting. The fixture waits for resident rest, displaces one resident and requires
 a return before provoking combat and removing supplies. Real acquisitions must
 lead back to rest, which must survive online and off-map reloads. Displacement
 is an external test stimulus, not a planner destination command. Save IDs are

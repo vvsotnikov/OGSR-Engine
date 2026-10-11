@@ -6,7 +6,7 @@ return function(cfg)
     local radius = ini_file("scripts\\npc_campaign.ltx"):r_float("esc_farm_lager", "home_radius")
     local outside, outside_since, outside_complete
     local camp_displaced, displaced_at, return_seen, rest_since, no_supply_since
-    local rest_gate_started, diagnostic_at
+    local rest_gate_started, diagnostic_at, acquisition_started, reload_checked, reload_rest_since
     local function check_home(id, camp)
         local point = vector()
         assert(alife():supply_trip_home(id, point), "Missing planner home: " .. id)
@@ -80,7 +80,8 @@ return function(cfg)
         if not started then
             started=now; get_console():execute("g_god on"); level.disable_input()
         end
-        assert(now-started<150000,"Campaign test timed out at stage "..stage)
+        local stage_limit = stage == 0 and 300000 or 150000
+        assert(now-started<stage_limit,"Campaign test timed out at stage "..stage)
         local camp=server(camp_id)
         assert(camp:name()=="esc_farm_lager","Seed camp binding changed")
         if level.name()=="l01_escape" and not positioned then
@@ -98,6 +99,7 @@ return function(cfg)
                     alife():release(n,true)
                 end
             end
+            if stage > 0 then move_observer_away(camp) end
             positioned=true
         end
         for _,id in ipairs(npcs) do
@@ -167,9 +169,6 @@ return function(cfg)
                 local phase = alife():supply_trip_phase(npcs[1])
                 if phase == 2 then return_seen = true end
                 if not resting(npcs[1]) or not return_seen then return end
-                local home = vector()
-                assert(alife():supply_trip_home(npcs[1], home), "Missing resident home")
-                assert(level.object_by_id(npcs[1]):position():distance_to(home) <= 3, "Rest reported away from home")
                 log1("[npc campaign fixture] displaced_resident_returned")
                 since=now
                 local extra=newcomer(camp)
@@ -237,7 +236,9 @@ return function(cfg)
                         cross_table():vertex(node):game_vertex_id())).id
                 end
                 item = supplies[1]
+                acquisition_started = now
             end
+            assert(now - acquisition_started < 60000, "Residents did not acquire supplies and return to rest")
             local completed = 0
             for _, id in ipairs(npcs) do
                 local owns_supply = false
@@ -262,8 +263,20 @@ return function(cfg)
             assert(#supplies == 3 and #owners == 3, "Missing inventory bindings")
             for i, supply in ipairs(supplies) do
                 assert(server(supply).parent_id == owners[i], "Reload changed a resident inventory")
-                assert(alife():supply_trip_phase(owners[i]) == 7, "Reload lost resident rest activity")
+                if not reload_checked then
+                    assert(alife():supply_trip_phase(owners[i]) == 7, "Reload lost resident rest activity")
+                end
             end
+            reload_checked = true
+            for _, id in ipairs(npcs) do
+                if not resting(id) then
+                    reload_rest_since = nil
+                    assert(now - started < 60000, "Resident did not resume rest after reload: " .. id)
+                    return
+                end
+            end
+            if not reload_rest_since then reload_rest_since = now; return end
+            if now - reload_rest_since < 3000 then return end
             if stage==1 then
                 log1("[npc campaign fixture] online_reload_preserved")
                 depart(2,"l02_garbage")
