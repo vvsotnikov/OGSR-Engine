@@ -631,6 +631,16 @@ int CNpcSimulation::phase(u16 id) const
     return status.phase;
 }
 
+bool CNpcSimulation::home(u16 id, Fvector& point) const
+{
+    if (!owns(id)) return false;
+    auto npc = smart_cast<CSE_ALifeHumanAbstract*>(objects().object(id));
+    NpcLocation home{}, destination{};
+    if (!npc_agent_locations(m_entries.at(npc).plan, &home, &destination)) return false;
+    point.set(home.position[0], home.position[1], home.position[2]);
+    return true;
+}
+
 void CNpcSimulation::save(IWriter& stream) const
 {
     stream.open_chunk(planner_chunk);

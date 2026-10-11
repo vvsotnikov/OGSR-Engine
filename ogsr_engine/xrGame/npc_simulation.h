@@ -64,6 +64,7 @@ public:
     void remove(CSE_ALifeDynamicObject*);
     void died(CSE_ALifeDynamicObject*);
     int phase(u16 id) const;
+    bool home(u16 id, Fvector& point) const;
     void save(IWriter&) const;
     void load(IReader&);
 };

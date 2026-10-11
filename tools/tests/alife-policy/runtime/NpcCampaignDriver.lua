@@ -3,6 +3,13 @@
 return function(cfg)
     local stage, started, since, sent = cfg.stage or 0, nil, nil, false
     local positioned=false
+    local radius = ini_file("scripts\\npc_campaign.ltx"):r_float("esc_farm_lager", "home_radius")
+    local outside, outside_since, outside_complete
+    local function check_home(id, camp)
+        local point = vector()
+        assert(alife():supply_trip_home(id, point), "Missing planner home: " .. id)
+        assert(point:distance_to(camp.position) <= radius + 0.001, "Planner home outside configured camp radius")
+    end
     local inventory_reset_at
     local supplies, owners = cfg.supplies or {}, cfg.owners or {}
     local combat_started, combat_seen, combat_released = nil, false, false
@@ -105,6 +112,7 @@ return function(cfg)
                 for _,id in ipairs(npcs) do
                     local client=assert(level.object_by_id(id))
                     xr_logic.pstor_store(client,"campaign_fixture",42)
+                    check_home(id, camp)
                 end
                 local fighter = assert(level.object_by_id(npcs[1]))
                 fighter:set_goodwill(-10000, db.actor)
@@ -207,8 +215,35 @@ return function(cfg)
             assert(replacement:smart_terrain_id()==camp.id,"Death did not release camp capacity")
             for i,id in ipairs(npcs) do if id==winner then npcs[i]=replacement.id end end
             winner=replacement.id;stage=6
+            for _, direction in ipairs({vector():set(1,0,0), vector():set(-1,0,0), vector():set(0,0,1), vector():set(0,0,-1)}) do
+                local node = level.vertex_in_direction(camp.m_level_vertex_id, direction, radius + 15)
+                local point = level.vertex_position(node)
+                if point:distance_to(camp.position) > radius + 5 then
+                    outside = point
+                    alife():teleport_object(winner, point, node, cross_table():vertex(node):game_vertex_id())
+                    break
+                end
+            end
+            assert(outside, "No outside-radius fixture position")
         elseif stage==6 then
+            if not outside_complete then
+                assert(alife():supply_trip_phase(winner) < 0, "Outside-radius resident migrated")
+                local point = vector()
+                assert(not alife():supply_trip_home(winner, point), "Unenrolled resident has a planner home")
+                local client = level.object_by_id(winner)
+                if not client then return end
+                -- Hold this real job candidate outside across an eligibility retry.
+                client:set_npc_position(outside, true)
+                if not npc_sim_bridge.campaign_eligible(winner, camp_id) then return end
+                if not outside_since then outside_since = now end
+                if now - outside_since < 6000 then return end
+                log1("[npc campaign fixture] outside_radius_rejected")
+                client:set_npc_position(level.vertex_position(camp.m_level_vertex_id), true)
+                outside_complete = true
+                return
+            end
             if alife():supply_trip_phase(winner)<0 then return end
+            check_home(winner, camp)
             assert(server(winner):smart_terrain_id()==65535,"Replacement kept legacy job")
             log1("[npc campaign fixture] real_respawner_replacement_enrolled")
             log1("[npc fixture] complete scenario=campaign")
