@@ -223,7 +223,7 @@ impl Plan {
                     }
                 }
             }
-            Action::Inspect => unreachable!("Only Agent translates a collection into inspection"),
+            Action::Inspect | Action::Rest => unreachable!("Agent-owned action"),
             Action::Wait => {}
         }
         decision
@@ -412,6 +412,9 @@ impl Plan {
         activity
     }
 
+    pub(super) fn exhaust_command(&mut self) {
+        self.fail(FailureReason::CounterExhausted);
+    }
     pub(super) fn command(&self) -> u64 {
         self.command
     }

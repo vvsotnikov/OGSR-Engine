@@ -248,6 +248,7 @@ void CNpcSimulation::enroll_campaign(CAI_Stalker& client)
     std::unique_ptr<NpcAgent, decltype(&npc_agent_destroy)> plan(npc_agent_create_goal(m_next_identity, &home), npc_agent_destroy);
     if (!plan) return;
     if (!handoff(npc->ID, camp->ID)) return;
+    R_ASSERT(npc_agent_enable_camp(plan.get()));
     R_ASSERT2(npc->m_smart_terrain_id == u16(-1), "Campaign handoff retained a legacy job");
     Entry entry{};
     entry.npc = npc;
@@ -478,6 +479,11 @@ bool CNpcSimulation::update_online(CAI_Stalker& client, bool interrupted)
     if (interrupted) entry->online_path_command = 0;
     const auto decision = observe(*entry, client.Position(), client.ai_location().game_vertex_id(), interrupted, client.g_Alive(), path_failed, script_control(client.ID()));
     if (interrupted || !client.g_Alive()) return true; // existing immediate planner owns movement now
+    if (decision.action == 4)
+    {
+        client.movement().set_body_state(MonsterSpace::eBodyStateStand);
+        client.movement().set_mental_state(MonsterSpace::eMentalStateFree);
+    }
     if (decision.action == 1)
     {
         client.movement().set_movement_type(MonsterSpace::eMovementTypeWalk);
@@ -754,6 +760,7 @@ void CNpcSimulation::load(IReader& source)
         Entry entry{};
         entry.npc = npc;
         entry.camp = camp;
+        if (camp.size()) R_ASSERT(npc_agent_enable_camp(plan));
         entry.supplies = std::move(supplies);
         entry.plan = plan;
         entry.binder_data = std::move(binder_data);

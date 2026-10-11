@@ -647,7 +647,7 @@ fn legacy_v4(bytes: &[u8]) -> Vec<u8> {
     for source in bytes[64..64 + count * 68].chunks_exact(68) {
         old.extend_from_slice(&source[..60]);
     }
-    old.extend_from_slice(&bytes[64 + count * 68..]);
+    old.extend_from_slice(&bytes[64 + count * 68 + 4..]);
     old
 }
 

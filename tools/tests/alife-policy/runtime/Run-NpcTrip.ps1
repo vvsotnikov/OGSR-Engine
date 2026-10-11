@@ -100,7 +100,7 @@ try {
     $meta.status = 'npc-running'
     $meta | Add-Member gamePid $game.Id
     Write-Output "START npc scenario=$Scenario session=$session pid=$($game.Id)"
-    $deadline = (Get-Date).AddSeconds($(if ($Scenario -eq 'far') { 720 } else { 360 }))
+    $deadline = (Get-Date).AddSeconds($(if ($Scenario -eq 'far') { 720 } elseif ($Scenario -eq 'campaign') { 480 } else { 360 }))
     while (!$game.WaitForExit(2000)) { if ((Get-Date) -gt $deadline) { throw 'NPC validation timed out' } }
     $logs = @(Get-ChildItem "$session/appdata/logs" -Filter '*.log')
     if ($logs.Count -ne 1) { throw 'Expected one log' }
@@ -133,7 +133,7 @@ try {
         !(Test-Path "$session/appdata/savedgames/campaign_legacy_seed.sav") -or
         !(Test-Path "$session/appdata/campaign-seed.lua"))) { throw 'Legacy campaign seed was not saved' }
     if ($Scenario -eq 'campaign') {
-        foreach ($milestone in @('legacy_migrated_capacity_preserved','combat_released','multiple_residents_returned','real_supply_acquired','online_reload_preserved',
+        foreach ($milestone in @('residents_resting','displaced_resident_returned','legacy_migrated_capacity_preserved','combat_released','multiple_residents_returned','real_supply_acquired','online_reload_preserved',
             'offline_ownership_preserved','offline_reload_preserved','returned_with_same_residents','outside_radius_rejected','real_respawner_replacement_enrolled')) {
             if ($log -notmatch "\[npc campaign fixture\] $milestone") { throw "Missing campaign milestone: $milestone" }
         }

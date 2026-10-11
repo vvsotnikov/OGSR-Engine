@@ -49,6 +49,7 @@ impl From<AgentDecision> for Output {
             Action::Wait => {}
             Action::Collect => output.action = 2,
             Action::Inspect => output.action = 3,
+            Action::Rest => output.action = 4,
             Action::Travel(location) => {
                 output.action = 1;
                 output.game_vertex = location.game_vertex;
@@ -547,4 +548,9 @@ mod tests {
             npc_agent_destroy(restored);
         }
     }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn npc_agent_enable_camp(plan: *mut Agent) -> bool {
+    unsafe { plan.as_mut() }.is_some_and(Agent::enable_camp)
 }

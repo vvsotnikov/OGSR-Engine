@@ -5,6 +5,7 @@ return function(cfg)
     local positioned=false
     local radius = ini_file("scripts\\npc_campaign.ltx"):r_float("esc_farm_lager", "home_radius")
     local outside, outside_since, outside_complete
+    local camp_displaced, return_seen, rest_since
     local function check_home(id, camp)
         local point = vector()
         assert(alife():supply_trip_home(id, point), "Missing planner home: " .. id)
@@ -103,6 +104,26 @@ return function(cfg)
         end
         if stage==0 then
             if not since then
+                if not camp_displaced then
+                    for _, id in ipairs(npcs) do
+                        if alife():supply_trip_phase(id) ~= 7 then return end
+                    end
+                    if not rest_since then rest_since = now; return end
+                    if now - rest_since < 3000 then return end
+                    log1("[npc campaign fixture] residents_resting")
+                    local client = assert(level.object_by_id(npcs[1]))
+                    local node = level.vertex_in_direction(client:level_vertex_id(), client:direction(), 12)
+                    local p = level.vertex_position(node)
+                    local home = vector()
+                    assert(alife():supply_trip_home(npcs[1], home) and p:distance_to(home) > 5, "Invalid camp displacement")
+                    client:set_npc_position(p, true)
+                    camp_displaced = true
+                    return
+                end
+                local phase = alife():supply_trip_phase(npcs[1])
+                if phase == 2 then return_seen = true end
+                if phase ~= 7 or not return_seen then return end
+                log1("[npc campaign fixture] displaced_resident_returned")
                 since=now
                 local extra=newcomer(camp)
                 if extra then
@@ -165,7 +186,7 @@ return function(cfg)
                 for _, supply in ipairs(supplies) do
                     if server(supply).parent_id == id then owns_supply = true end
                 end
-                if owns_supply and alife():supply_trip_phase(id) == 3 then completed = completed + 1 end
+                if owns_supply and alife():supply_trip_phase(id) == 7 then completed = completed + 1 end
             end
             if completed == #npcs then
                 for i, supply in ipairs(supplies) do owners[i] = server(supply).parent_id end
@@ -183,7 +204,7 @@ return function(cfg)
             assert(#supplies == 3 and #owners == 3, "Missing inventory bindings")
             for i, supply in ipairs(supplies) do
                 assert(server(supply).parent_id == owners[i], "Reload changed a resident inventory")
-                assert(alife():supply_trip_phase(owners[i]) == 3, "Reload changed a completed resident goal")
+                assert(alife():supply_trip_phase(owners[i]) == 7, "Reload lost resident rest activity")
             end
             if stage==1 then
                 log1("[npc campaign fixture] online_reload_preserved")
@@ -200,6 +221,7 @@ return function(cfg)
             for _,id in ipairs(npcs) do
                 assert(not server(id).online and not level.object_by_id(id),"Resident remained on previous map")
                 server(id):brain():update(true)
+                assert(alife():supply_trip_phase(id) == 7, "Offline resident lost rest activity")
                 assert(server(id):smart_terrain_id()==65535,"Forced legacy update reclaimed resident")
             end
             if now-started<3000 then return end
