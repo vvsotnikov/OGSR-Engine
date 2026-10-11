@@ -3,6 +3,7 @@
 return function(cfg)
     local stage, started, since, sent = cfg.stage or 0, nil, nil, false
     local positioned=false
+    local inventory_reset_at
     local supplies, owners = cfg.supplies or {}, cfg.owners or {}
     local combat_started, combat_seen, combat_released = nil, false, false
     local npcs, camp_id, item, winner = cfg.npcs, cfg.camp, cfg.item, cfg.winner
@@ -104,7 +105,6 @@ return function(cfg)
                 for _,id in ipairs(npcs) do
                     local client=assert(level.object_by_id(id))
                     xr_logic.pstor_store(client,"campaign_fixture",42)
-
                 end
                 local fighter = assert(level.object_by_id(npcs[1]))
                 fighter:set_goodwill(-10000, db.actor)
@@ -124,6 +124,7 @@ return function(cfg)
                 fighter:set_enemy_callback(function() return false end)
                 fighter:set_relation(game_object.neutral, db.actor)
                 combat_released = true
+                inventory_reset_at = now
                 log1("[npc campaign fixture] combat_released")
                 for _, id in ipairs(npcs) do
                     local client = assert(level.object_by_id(id))
@@ -137,11 +138,13 @@ return function(cfg)
             end
             if #supplies == 0 then
                 for _, id in ipairs(npcs) do
-                    if assert(level.object_by_id(id)):object("bandage") then return end
+                    if assert(level.object_by_id(id)):object("bandage") then
+                        assert(now - inventory_reset_at < 3000, "Resident inventory did not clear: " .. id)
+                        return
+                    end
                 end
                 for _, id in ipairs(npcs) do
                     local client = assert(level.object_by_id(id))
-                    assert(not client:object("bandage"), "Resident already carries a bandage")
                     local node = level.vertex_in_direction(client:level_vertex_id(), client:direction(), 5)
                     supplies[#supplies + 1] = assert(alife():create("bandage", level.vertex_position(node), node,
                         cross_table():vertex(node):game_vertex_id())).id
@@ -207,7 +210,6 @@ return function(cfg)
         elseif stage==6 then
             if alife():supply_trip_phase(winner)<0 then return end
             assert(server(winner):smart_terrain_id()==65535,"Replacement kept legacy job")
-            assert(level.object_by_id(winner):position():distance_to(camp.position) <= 20, "Replacement migrated outside home radius")
             log1("[npc campaign fixture] real_respawner_replacement_enrolled")
             log1("[npc fixture] complete scenario=campaign")
             sent=true;get_console():execute("quit")

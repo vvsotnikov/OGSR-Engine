@@ -40,7 +40,10 @@ the gulag object, restores squad/group and clears the native smart-terrain ID;
 
 Migration currently removes the old camp animations/patrols. A supplied resident
 has no new social routine. Each goal keeps the resident's own handoff position
-as home only inside the configured `home_radius`; approach travel remains a legacy job until then. It does not send the entire camp to its centre. Profile lists gate new
+as home only inside the configured `home_radius`; approach travel remains a
+legacy job until then. A job that never enters that radius remains legacy: mixed
+legacy/planner occupancy is supported, not evidence that every job was migrated.
+It does not send the entire camp to its centre. Profile lists gate new
 admission, not existing saved ownership; removing a profile does not silently
 cancel its goal. Removing the whole camp section opts its saved residents out,
 as removing a dedicated planner section does.
