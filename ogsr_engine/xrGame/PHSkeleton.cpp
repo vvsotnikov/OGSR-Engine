@@ -96,10 +96,31 @@ bool CPHSkeleton::Spawn(CSE_Abstract* D)
             if (k)
             {
                 k->LL_SetBoneRoot(po->saved_bones.root_bone);
+                // Shell construction filters collision geometry and fractures by
+                // visible bones; hidden bone transforms become zero during animation.
+                k->LL_SetBonesVisible(po->saved_bones.bones_mask);
             }
         }
 
         SpawnInitPhysics(D);
+        static const bool reload_probe = strstr(Core.Params, "-physics_reload_probe") != nullptr;
+        if (reload_probe && k && obj->PPhysicsShell())
+        {
+            auto* shell = obj->PPhysicsShell();
+            u16 hidden = 0;
+            bool valid = true;
+            for (u16 bone = 0; bone < k->LL_BoneCount(); ++bone)
+                if (!po->saved_bones.bones_mask.is(bone))
+                {
+                    ++hidden;
+                    valid = valid && shell->get_GeomByID(bone) == nullptr;
+                }
+            for (u16 element = 0; element < shell->get_ElementsNumber(); ++element)
+                valid = valid && po->saved_bones.bones_mask.is(shell->get_ElementByStoreOrder(element)->m_SelfID);
+            if (hidden)
+                Msg("[physics reload] %s object=%u hidden=%u elements=%u", valid ? "partial_shell" : "FAILED hidden_shell",
+                    obj->ID(), hidden, shell->get_ElementsNumber());
+        }
         RestoreNetState(po);
         if (obj->PPhysicsShell() && obj->PPhysicsShell()->isFullActive())
             obj->PPhysicsShell()->GetGlobalTransformDynamic(&obj->XFORM());
@@ -128,8 +149,6 @@ bool CPHSkeleton::Spawn(CSE_Abstract* D)
                     obj->PPhysicsShell()->SetIgnoreSmall();
                 }
             }
-
-            k->LL_SetBonesVisible(po->saved_bones.bones_mask);
         }
     }
     return false;
