@@ -172,3 +172,28 @@ fn combat_time_is_not_charged_to_the_resumed_home_path() {
     assert_eq!(d.action, Action::Travel(point(0.)));
     assert_eq!(d.reason, FailureReason::None);
 }
+
+#[test]
+fn a_return_observes_lost_position_and_resets_progress_after_combat() {
+    let mut a = resident();
+    a.step(observation(30.), 1);
+    let mut stalled = observation(30.);
+    stalled.elapsed_ms = 59_000;
+    assert_eq!(a.step(stalled, 1).decision.phase, Phase::Returning);
+    let mut combat = stalled;
+    combat.interrupted = true;
+    a.step(combat, 1);
+    a = reload(&a);
+    let mut resumed = observation(30.);
+    resumed.elapsed_ms = 2000;
+    assert_eq!(a.step(resumed, 1).decision.phase, Phase::Returning);
+    assert_eq!(a.step(resumed, 1).decision.phase, Phase::Returning);
+    let mut unknown = observation(30.);
+    unknown.current.position[0] = f32::NAN;
+    unknown.elapsed_ms = 300_000;
+    assert_eq!(a.step(unknown, 1).decision.action, Action::Wait);
+    assert_eq!(
+        a.step(unknown, 1).decision.reason,
+        FailureReason::PositionUnknown
+    );
+}

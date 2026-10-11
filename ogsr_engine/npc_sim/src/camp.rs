@@ -42,20 +42,14 @@ impl Camp {
     pub fn step(&mut self, o: Observation, elapsed: u32) -> Decision {
         self.interrupted = o.interrupted;
         self.position_known = o.current.spatially_valid();
-        if o.interrupted {
-            return self.decision();
-        }
         self.retry_ms = self.retry_ms.saturating_sub(elapsed);
-        if !o.current.spatially_valid() {
-            let mut d = self.decision();
-            d.action = Action::Wait;
-            return d;
-        }
         let old = self.travel.decision();
-        if (old.phase == Phase::Complete && !o.current.near(self.home(), 3.0))
-            || (old.phase == Phase::Failed
-                && self.retry_ms == 0
-                && old.reason != FailureReason::CounterExhausted)
+        if !o.interrupted
+            && self.position_known
+            && ((old.phase == Phase::Complete && !o.current.near(self.home(), 3.0))
+                || (old.phase == Phase::Failed
+                    && self.retry_ms == 0
+                    && old.reason != FailureReason::CounterExhausted))
         {
             if let Some(command) = old.command.checked_add(1) {
                 self.travel = Plan::start(self.identity(), command, self.home(), None, false);
