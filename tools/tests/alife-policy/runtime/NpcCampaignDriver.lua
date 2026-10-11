@@ -242,7 +242,7 @@ return function(cfg)
                     return
                 end
                 if not outside_since then outside_since = now end
-                if now - outside_since < 6000 then return end
+                if now - outside_since < 11000 then return end
                 log1("[npc campaign fixture] outside_radius_rejected npc=" .. winner)
                 client:set_npc_position(level.vertex_position(camp.m_level_vertex_id), true)
                 outside_complete = true
