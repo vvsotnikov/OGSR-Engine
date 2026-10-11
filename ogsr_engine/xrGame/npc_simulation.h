@@ -9,6 +9,7 @@ class CGameObject;
 class CALifeSimulatorBase;
 class CALifeObjectRegistry;
 class CScriptBinderObject;
+class CSE_ALifeSmartZone;
 
 // Engine bindings are transient pointers owned by the ALife object registry.
 // Rust owns intentions; engine IDs are used only to bind a consistent save.
@@ -19,6 +20,7 @@ class CNpcSimulation
         CSE_ALifeHumanAbstract* npc{};
         xr_vector<CSE_ALifeDynamicObject*> supplies;
         NpcAgent* plan{};
+        shared_str camp;
         xr_vector<u8> binder_data;
         u16 binder_version = 0;
         bool binder_pending_activation = false;
@@ -32,6 +34,7 @@ class CNpcSimulation
     CALifeSimulatorBase& m_alife;
     xr_map<CSE_ALifeHumanAbstract*, Entry> m_entries;
     u64 m_next_identity = 1;
+    CInifile* m_campaign;
 
     NpcDecision observe(Entry&, const Fvector&, u32 game_vertex, bool interrupted, bool alive, bool failed, NpcScriptControl);
     void collect(Entry&, CAI_Stalker* client, const NpcDecision&);
@@ -40,11 +43,13 @@ class CNpcSimulation
     const CALifeObjectRegistry& objects() const;
 
 public:
-    explicit CNpcSimulation(CALifeSimulatorBase& alife) : m_alife(alife) {}
+    explicit CNpcSimulation(CALifeSimulatorBase& alife);
     ~CNpcSimulation();
     static CNpcSimulation* active();
     static bool configured(LPCSTR section);
     bool enroll(u16 npc, u16 supply, bool medical_goal = false);
+    void enroll_campaign(CAI_Stalker&);
+    bool camp_has_room(const CSE_ALifeSmartZone&) const;
     bool remember(u16 npc, u16 supply);
     void see_item(CAI_Stalker& observer, const CGameObject& item);
     bool owns(CSE_ALifeMonsterAbstract*) const;

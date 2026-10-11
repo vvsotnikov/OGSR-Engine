@@ -74,6 +74,22 @@ try {
     $corpseResume = & "$PSScriptRoot/Run-NpcTrip.ps1" -InstallRoot $root -Package bin_fixture -Scenario corpse-resume -ResumeSession $corpse -PrepareOnly
     if ((Get-Content "$corpseResume/appdata/savedgames/npc_trip_pending.sav" -Raw).Trim() -ne 'corpse' -or
         (Get-FileHash "$corpseResume/appdata/npc-trip-ids.lua").Hash -ne (Get-FileHash "$corpse/appdata/npc-trip-ids.lua").Hash) { throw 'Corpse resume lost saved bindings' }
+    $campaignSeed = & "$PSScriptRoot/Run-NpcTrip.ps1" -InstallRoot $root -Package bin_fixture -Scenario campaign-seed -PrepareOnly
+    if ((Get-Content "$campaignSeed/runtime/gamedata/config/scripts/npc_campaign.ltx" -Raw).Contains('[esc_farm_lager]') -or
+        (Get-FileHash "$campaignSeed/appdata/RegularDriver.lua").Hash -ne (Get-FileHash "$PSScriptRoot/NpcCampaignSeedDriver.lua").Hash) { throw 'Seed preparation did not disable migration' }
+    $rejected = $false
+    try { & "$PSScriptRoot/Run-NpcTrip.ps1" -InstallRoot $root -Package bin_fixture -Scenario campaign -CampaignSeedSession $campaignSeed -PrepareOnly | Out-Null } catch { $rejected = $true }
+    if (!$rejected) { throw 'Accepted unexecuted campaign seed' }
+    $seedMeta = Get-Content "$campaignSeed/session.json" -Raw | ConvertFrom-Json
+    $seedMeta.status = 'npc-completed'
+    $seedMeta | ConvertTo-Json | Set-Content "$campaignSeed/session.json"
+    Set-Content "$campaignSeed/appdata/savedgames/campaign_legacy_seed.sav" 'legacy camp'
+    Set-Content "$campaignSeed/appdata/campaign-seed.lua" 'return {camp=1,npcs={2,3,4}}'
+    $campaign = & "$PSScriptRoot/Run-NpcTrip.ps1" -InstallRoot $root -Package bin_fixture -Scenario campaign -CampaignSeedSession $campaignSeed -PrepareOnly
+    if ((Get-FileHash "$campaign/appdata/npc-campaign-state.lua").Hash -ne (Get-FileHash "$campaignSeed/appdata/campaign-seed.lua").Hash -or
+        !(Get-Content "$campaign/runtime/gamedata/config/scripts/npc_campaign.ltx" -Raw).Contains('[esc_farm_lager]') -or
+        (Get-FileHash "$campaign/appdata/RegularDriver.lua").Hash -ne (Get-FileHash "$PSScriptRoot/NpcCampaignDriver.lua").Hash -or
+        (Get-Content "$campaign/session.json" -Raw | ConvertFrom-Json).arguments -match '-npc_sim_test') { throw 'Campaign fixture lost real seed, migration configuration or ordinary APIs' }
     $after = @($paths | ForEach-Object { (Get-FileHash "$root/$_").Hash })
     if (($before -join ',') -ne ($after -join ',')) { throw 'Original inputs modified' }
 } finally {

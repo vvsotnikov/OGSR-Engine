@@ -110,9 +110,17 @@ NpcLocation navigation_location(const CSE_ALifeDynamicObject& object)
 }
 }
 
+CNpcSimulation::CNpcSimulation(CALifeSimulatorBase& alife) : m_alife(alife)
+{
+    string_path path;
+    FS.update_path(path, "$game_config$", "scripts\\npc_campaign.ltx");
+    m_campaign = xr_new<CInifile>(path);
+}
+
 CNpcSimulation::~CNpcSimulation()
 {
     for (auto& [_, entry] : m_entries) npc_agent_destroy(entry.plan);
+    xr_delete(m_campaign);
 }
 
 const CALifeObjectRegistry& CNpcSimulation::objects() const
@@ -196,6 +204,44 @@ bool CNpcSimulation::enroll(u16 npc_id, u16 supply_id, bool medical_goal)
     if (!medical_goal) entry.supplies.push_back(supply);
     m_entries.emplace(npc, std::move(entry));
     return true;
+}
+
+bool CNpcSimulation::camp_has_room(const CSE_ALifeSmartZone& camp) const
+{
+    if (!m_campaign->section_exist(camp.name_replace())) return true;
+    u32 residents = 0;
+    for (const auto& [_, entry] : m_entries)
+        if (entry.npc->fHealth > 0 && entry.camp == camp.name_replace()) ++residents;
+    if (!residents) return true;
+    luabind::functor<u32> available;
+    return ai().script_engine().functor("npc_sim_bridge.camp_available", available) && available(camp.ID) > residents;
+}
+
+void CNpcSimulation::enroll_campaign(CAI_Stalker& client)
+{
+    if (!client.g_Alive() || client.GetScriptControl() || owns(client.ID()) || m_next_identity == u64(-1)) return;
+    auto npc = smart_cast<CSE_ALifeHumanAbstract*>(objects().object(client.ID(), true));
+    if (!npc || npc->m_story_id != ALife::_STORY_ID(-1) || npc->m_group_id != u16(-1) || npc->m_smart_terrain_id == u16(-1)) return;
+    auto camp = smart_cast<CSE_ALifeSmartZone*>(objects().object(npc->m_smart_terrain_id, true));
+    if (!camp || !m_campaign->section_exist(camp->name_replace()) || !navigable_here(*camp)) return;
+    luabind::functor<bool> eligible, handoff;
+    if (!ai().script_engine().functor("npc_sim_bridge.campaign_eligible", eligible) || !eligible(npc->ID, camp->ID) ||
+        !ai().script_engine().functor("npc_sim_bridge.campaign_handoff", handoff)) return;
+    const auto home = navigation_location(*camp);
+    NpcAgent* plan = npc_agent_create_goal(m_next_identity, &home);
+    if (!plan) return;
+    if (!handoff(npc->ID, camp->ID))
+    {
+        npc_agent_destroy(plan);
+        return;
+    }
+    Entry entry{};
+    entry.npc = npc;
+    entry.plan = plan;
+    entry.camp = camp->name_replace();
+    m_entries.emplace(npc, std::move(entry));
+    Msg("[npc campaign] enroll identity=%llu npc=%u camp=%s", m_next_identity, npc->ID, camp->name_replace());
+    ++m_next_identity;
 }
 
 bool CNpcSimulation::remember(u16 npc_id, u16 supply_id)
@@ -579,7 +625,7 @@ int CNpcSimulation::phase(u16 id) const
 void CNpcSimulation::save(IWriter& stream) const
 {
     stream.open_chunk(planner_chunk);
-    stream.w_u32(3);
+    stream.w_u32(4);
     stream.w_u64(m_next_identity);
     stream.w_u32(u32(m_entries.size()));
     xr_map<u64, const Entry*> ordered;
@@ -593,6 +639,7 @@ void CNpcSimulation::save(IWriter& stream) const
     {
         const Entry& entry = *value;
         stream.w_u16(entry.npc->ID);
+        stream.w_stringZ(entry.camp.size() ? *entry.camp : "");
         stream.w_u16(u16(entry.supplies.size()));
         for (auto supply : entry.supplies) stream.w_u16(supply ? supply->ID : u16(-1));
         const auto size = npc_agent_save(entry.plan, nullptr, 0);
@@ -611,10 +658,10 @@ void CNpcSimulation::load(IReader& source)
 {
     R_ASSERT(m_entries.empty());
     IReader* chunk = source.open_chunk(planner_chunk);
-    if (!chunk) return; // Existing saves enroll nobody.
+    if (!chunk) return; // Campaign migration runs at ordinary client activation.
     R_ASSERT(chunk->length() >= 16);
     const u32 version = chunk->r_u32();
-    R_ASSERT2(version == 1 || version == 2 || version == 3, "Unsupported NPC planner save");
+    R_ASSERT2(version >= 1 && version <= 4, "Unsupported NPC planner save");
     m_next_identity = chunk->r_u64();
     const u32 count = chunk->r_u32();
     R_ASSERT(count <= objects().objects().size() && m_next_identity != 0);
@@ -623,6 +670,8 @@ void CNpcSimulation::load(IReader& source)
     {
         R_ASSERT(chunk->elapsed() >= 8);
         auto npc = smart_cast<CSE_ALifeHumanAbstract*>(objects().object(chunk->r_u16(), true));
+        shared_str camp;
+        if (version >= 4) chunk->r_stringZ(camp);
         const u16 source_count = version == 1 ? 1 : chunk->r_u16();
         R_ASSERT(source_count <= 256 && chunk->elapsed() >= source_count * 2u + 4u);
         xr_vector<CSE_ALifeDynamicObject*> supplies;
@@ -669,7 +718,7 @@ void CNpcSimulation::load(IReader& source)
         NpcDecision status{};
         R_ASSERT(npc_agent_status(plan, &status));
         R_ASSERT(status.identity < m_next_identity && identities.insert(status.identity).second);
-        if (!configured(npc->name()))
+        if (!configured(npc->name()) && (!camp.size() || !m_campaign->section_exist(*camp)))
         {
             Msg("[npc trip] discarded identity=%llu npc=%u: planner opt-in removed", status.identity, npc->ID);
             npc_agent_destroy(plan);
@@ -677,6 +726,7 @@ void CNpcSimulation::load(IReader& source)
         }
         Entry entry{};
         entry.npc = npc;
+        entry.camp = camp;
         entry.supplies = std::move(supplies);
         entry.plan = plan;
         entry.binder_data = std::move(binder_data);

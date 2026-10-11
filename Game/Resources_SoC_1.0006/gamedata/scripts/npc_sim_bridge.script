@@ -5,3 +5,50 @@ function script_control(id)
     if st.active_section and st.active_section ~= "nil" then return 2 end
     return 1 -- meet/combat/state transitions alone do not claim persistent activity
 end
+
+local campaign_ini
+local function campaign_config()
+    if not campaign_ini then campaign_ini = ini_file("scripts\\npc_campaign.ltx") end
+    return campaign_ini
+end
+
+function camp_available(id)
+    local camp = alife():object(id)
+    if not camp then return 0 end
+    camp:initialize_if_needed()
+    return math.max(0, camp.gulag.capacity_non_exclusive - camp.gulag.population_non_exclusive)
+end
+
+function campaign_eligible(id, camp_id)
+    local npc, camp = alife():object(id), alife():object(camp_id)
+    local st = db.storage[id]
+    if not npc or not camp or not st or not st.ini or npc:smart_terrain_id() ~= camp_id then return false end
+    local config = campaign_config()
+    if not config:line_exist(camp:name(), "profiles") or npc:community() ~= "stalker" then return false end
+    local allowed = false
+    for profile in string.gmatch(config:r_string(camp:name(), "profiles"), "[^,%s]+") do
+        if npc:profile_name() == profile then allowed = true end
+    end
+    if not allowed or npc:spawn_ini():section_exist("logic") then return false end
+    local member = camp.npc_info and camp.npc_info[id]
+    if not member or member.exclusive or not camp.gulag.Object_begin_job[id] then return false end
+    local job = camp.gulag:getJob(id)
+    -- Only the camp's ordinary job may be released. A quest takeover is not
+    -- permission to clear that script, even for an otherwise eligible NPC.
+    return job and st.gulag_name == camp:name() and st.section_logic == job.section
+        and st.ini:line_exist(job.section, "active")
+        and st.active_section == st.ini:r_string(job.section, "active")
+end
+
+function campaign_handoff(id, camp_id)
+    if not campaign_eligible(id, camp_id) then return false end
+    local npc, camp, client = alife():object(id), alife():object(camp_id), level.object_by_id(id)
+    if not client then return false end
+    -- This releases the real job, restrictions, population accounting and
+    -- squad/group changes before installing ordinary planner-compatible logic.
+    camp:unregister_npc(npc)
+    local ini = campaign_config()
+    xr_logic.configure_schemes(client, ini, "scripts\\npc_campaign.ltx", modules.stype_stalker, "logic", nil)
+    xr_logic.activate_by_section(client, ini, "nil", false)
+    return true
+end

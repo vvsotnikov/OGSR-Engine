@@ -20,12 +20,19 @@ job deliberately retains control, even when it has nothing to do. Temporary
 reactions end at the representation boundary; they do not claim persistent
 script ownership.
 
-Opt-in still requires a dedicated section and excludes story/group/smart-terrain
-assignments. The shipped smart-terrain registration goes through the native
-brain selector, which excludes planner sections before enrollment. Its Lua
-spawn-time gulag setup reads that same native ID; it does not independently
-assign a job. Custom scripts must respect that ownership boundary. Only enrolled NPCs retain
-binder snapshots.
+Dedicated planner sections bypass smart-terrain assignment from spawn. Campaign
+migration instead waits for an allowlisted ordinary camp job to start, then
+unregisters it through the existing camp API before installing idle binder logic.
+Story/group assignments, exclusive jobs, spawn-specific logic and a different
+active script section are not eligible. Profile and camp allowlists are both
+required; sharing an NPC section alone is not permission to migrate it.
+
+Migrated residents retain their home-camp reservation independently of legacy job
+membership, including while off-map. Dead residents no longer consume capacity.
+Legacy respawners still select and register a job before accepting a new spawn;
+handoff happens after client activation so that acceptance is not bypassed.
+Loaded planner ownership must suppress legacy job selection before the simulator
+becomes globally active. Only enrolled NPCs retain binder snapshots.
 The separate NPC save chunk retains that Lua payload without retaining native
 client memory, conditions or inventory-owner state, which can become stale while
 offline. It is consumed before binder net_spawn, where the saved scheme is
@@ -39,7 +46,7 @@ snapshot must survive; unlike an online save copy, it cannot have gone stale
 through later client updates. This distinction is transient, not a save field.
 Capturing ownership during save must not advance goal time or issue actions.
 Old binderless saves carry a marker so the newly enabled binder initializes
-without parsing missing Lua data. This is not a migration of campaign jobs.
+without parsing missing Lua data. Campaign migration uses the separate ordinary-job handoff described above.
 
 Server positions are not authoritative for online item physics. Navigation must
 use a reachable point, while pickup knowledge and reach must use the physical

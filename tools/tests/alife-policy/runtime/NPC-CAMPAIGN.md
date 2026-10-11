@@ -1,0 +1,24 @@
+# Campaign ownership handoff
+
+The campaign scenario loads a save containing three ordinary Cordon farm jobs;
+it does not call planner enrollment or inject remembered supply locations. The
+seed scenario disables migration only in its isolated config so it can produce
+that input using the current engine. It requires the local Bar baseline seed.
+
+```powershell
+./Run-NpcTrip.ps1 -InstallRoot $install -Package $package -Scenario campaign-seed
+# Use the completed session path printed by the runner as $completedSeed.
+./Run-NpcTrip.ps1 -InstallRoot $install -Package $package -Scenario campaign -CampaignSeedSession $completedSeed
+```
+
+The fixture grants the farm's campaign prerequisite and fills empty slots using
+ordinary spawn APIs. Replacement tests use the real respawner's acceptance and
+tracking, temporarily moving its origin to the farm to avoid cross-map travel.
+Neither changes the shipped activation condition or spawn locations.
+
+Ambient enemies are removed nearby and residents are protected while checking
+persistence. An explicit hostile-player stimulus tests combat on a migrated
+resident; protection is removed for the death/replacement test. Other native
+combat scenarios cover sustained fighting and corpse search interruptions.
+The player is moved away from the camp to keep greeting behavior from masking
+movement. Save IDs are fixture bindings, not persistent simulation identities.
