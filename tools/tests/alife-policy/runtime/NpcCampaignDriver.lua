@@ -5,12 +5,32 @@ return function(cfg)
     local positioned=false
     local radius = ini_file("scripts\\npc_campaign.ltx"):r_float("esc_farm_lager", "home_radius")
     local outside, outside_since, outside_complete
-    local camp_displaced, return_seen, rest_since, no_supply_since
+    local camp_displaced, displaced_at, return_seen, rest_since, no_supply_since
     local rest_gate_started, diagnostic_at
     local function check_home(id, camp)
         local point = vector()
         assert(alife():supply_trip_home(id, point), "Missing planner home: " .. id)
         assert(point:distance_to(camp.position) <= radius + 0.001, "Planner home outside configured camp radius")
+    end
+    local function resting(id)
+        local client = level.object_by_id(id)
+        local home = vector()
+        return client and alife():supply_trip_phase(id) == 7
+            and client:motivation_action_manager():current_action_id() == stalker_ids.action_alife_planner
+            and alife():supply_trip_home(id, home) and client:position():distance_to(home) <= 3
+    end
+    local function move_observer_away(camp)
+        for _, direction in ipairs({vector():set(-1,0,0),vector():set(1,0,0),vector():set(0,0,1),vector():set(0,0,-1)}) do
+            local node = level.vertex_in_direction(camp.m_level_vertex_id, direction, 80)
+            local p = level.vertex_position(node)
+            local clear = p:distance_to(camp.position) > 40
+            for _, id in ipairs(cfg.npcs) do
+                local client = level.object_by_id(id)
+                if client and client:position():distance_to(p) < 30 then clear = false end
+            end
+            if clear then db.actor:set_actor_position(vector():set(p.x,p.y+1.1,p.z)); return end
+        end
+        error("No observer position clear of camp residents")
     end
     local inventory_reset_at
     local supplies, owners = cfg.supplies or {}, cfg.owners or {}
@@ -119,7 +139,7 @@ return function(cfg)
                 if not camp_displaced then
                     if not rest_gate_started then rest_gate_started = now end
                     for _, id in ipairs(npcs) do
-                        if alife():supply_trip_phase(id) ~= 7 then
+                        if not resting(id) then
                             rest_since = nil
                             assert(now - rest_gate_started < 60000, "Resident did not settle at home: " .. id .. " phase=" .. alife():supply_trip_phase(id))
                             return
@@ -140,11 +160,13 @@ return function(cfg)
                     assert(destination, "No reachable camp displacement point")
                     client:set_npc_position(destination, true)
                     camp_displaced = true
+                    displaced_at = now
                     return
                 end
+                assert(now - displaced_at < 60000, "Displaced resident did not return to rest")
                 local phase = alife():supply_trip_phase(npcs[1])
                 if phase == 2 then return_seen = true end
-                if phase ~= 7 or not return_seen then return end
+                if not resting(npcs[1]) or not return_seen then return end
                 local home = vector()
                 assert(alife():supply_trip_home(npcs[1], home), "Missing resident home")
                 assert(level.object_by_id(npcs[1]):position():distance_to(home) <= 3, "Rest reported away from home")
@@ -178,6 +200,7 @@ return function(cfg)
                 fighter:set_enemy_callback(function() return false end)
                 fighter:set_relation(game_object.neutral, db.actor)
                 combat_released = true
+                move_observer_away(camp)
                 inventory_reset_at = now
                 log1("[npc campaign fixture] combat_released")
                 for _, id in ipairs(npcs) do
@@ -198,7 +221,7 @@ return function(cfg)
                     end
                 end
                 for _, id in ipairs(npcs) do
-                    if alife():supply_trip_phase(id) ~= 7 then
+                    if not resting(id) then
                         no_supply_since = nil
                         assert(now - inventory_reset_at < 60000, "Unsupplied resident did not return to camp: " .. id)
                         return
@@ -221,7 +244,7 @@ return function(cfg)
                 for _, supply in ipairs(supplies) do
                     if server(supply).parent_id == id then owns_supply = true end
                 end
-                if owns_supply and alife():supply_trip_phase(id) == 7 then completed = completed + 1 end
+                if owns_supply and resting(id) then completed = completed + 1 end
             end
             if completed == #npcs then
                 for i, supply in ipairs(supplies) do owners[i] = server(supply).parent_id end
