@@ -762,6 +762,7 @@ void CNpcSimulation::load(IReader& source)
         entry.camp = camp;
         if (camp.size()) R_ASSERT(npc_agent_enable_camp(plan));
         else R_ASSERT2(!npc_agent_is_resident(plan), "Resident planner has no native camp affiliation");
+        R_ASSERT(npc_agent_status(plan, &status)); // Camp upgrade can change Complete to Resting.
         entry.supplies = std::move(supplies);
         entry.plan = plan;
         entry.binder_data = std::move(binder_data);

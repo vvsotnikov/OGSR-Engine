@@ -87,6 +87,9 @@ impl Goal {
         {
             self.return_retry_ms = Self::RETURN_RETRY_MS;
         }
+        // A resident fetch is preempted once its acquired bandage satisfies the goal:
+        // cargo ownership and bandage count come from the same inventory snapshot.
+        // Starting any new activity clears this timer, so fetch failures do not inherit it.
         if self.is_resident() && failed && self.return_retry_ms != 0 {
             return false;
         }
